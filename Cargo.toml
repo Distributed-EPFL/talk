@@ -13,4 +13,4 @@ snafu = { version = "~0.6" }
 
 rand = { version = "0.7" }
 blake3 = { version = "1.0.0" }
-ed25519-dalek = { version = "1.0.1", features = [ "serde" ] }
+ed25519-dalek = { version = "1.0.1", features = [ "serde", "batch" ] }

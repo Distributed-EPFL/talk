@@ -47,16 +47,56 @@ impl KeyPair {
 }
 
 impl PublicKey {
-    pub fn verify_raw<T>(
+    pub fn verify_raw<M>(
         &self,
-        message: &T,
+        message: &M,
         signature: &Signature,
     ) -> Result<(), SignError>
     where
-        T: Serialize,
+        M: Serialize,
     {
         let message = bincode::serialize(message).context(SerializeFailed)?;
         self.0.verify(&message, &signature.0).context(VerifyFailed)
+    }
+
+    pub fn batch_verify_raw<'m, PI, MI, M, SI>(
+        public_keys: PI,
+        messages: MI,
+        signatures: SI,
+    ) -> Result<(), SignError>
+    where
+        PI: IntoIterator<Item = PublicKey>,
+        MI: IntoIterator<Item = &'m M>,
+        M: 'm + Serialize,
+        SI: IntoIterator<Item = Signature>,
+    {
+        let public_keys = public_keys
+            .into_iter()
+            .map(|public_key| public_key.0)
+            .collect::<Vec<_>>();
+
+        let messages = messages
+            .into_iter()
+            .map(|message| bincode::serialize(&message))
+            .collect::<Result<Vec<_>, _>>()
+            .context(SerializeFailed)?;
+
+        let messages = messages
+            .iter()
+            .map(|message| &message[..])
+            .collect::<Vec<_>>();
+
+        let signatures = signatures
+            .into_iter()
+            .map(|signature| signature.0)
+            .collect::<Vec<_>>();
+
+        ed25519_dalek::verify_batch(
+            &messages[..],
+            &signatures[..],
+            &public_keys[..],
+        )
+        .context(VerifyFailed)
     }
 }
 
