@@ -13,7 +13,7 @@ pub struct Hash(#[serde(with = "SerdeBlakeHash")] BlakeHash);
 
 pub struct Hasher(BlakeHasher);
 
-pub const SIZE: usize = blake3::OUT_LEN;
+pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 
 impl Hasher {
     pub fn new() -> Self {
@@ -48,14 +48,14 @@ where
     Ok(hasher.finalize())
 }
 
-impl From<[u8; SIZE]> for Hash {
-    fn from(hash: [u8; SIZE]) -> Self {
+impl From<[u8; HASH_LENGTH]> for Hash {
+    fn from(hash: [u8; HASH_LENGTH]) -> Self {
         Hash(BlakeHash::from(hash))
     }
 }
 
-impl Into<[u8; SIZE]> for Hash {
-    fn into(self) -> [u8; SIZE] {
+impl Into<[u8; HASH_LENGTH]> for Hash {
+    fn into(self) -> [u8; HASH_LENGTH] {
         self.0.into()
     }
 }
@@ -74,7 +74,7 @@ impl Debug for Hash {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "BlakeHash")]
-struct SerdeBlakeHash(#[serde(getter = "BlakeHash::as_bytes")] [u8; SIZE]);
+struct SerdeBlakeHash(#[serde(getter = "BlakeHash::as_bytes")] [u8; HASH_LENGTH]);
 
 impl Into<BlakeHash> for SerdeBlakeHash {
     fn into(self) -> BlakeHash {
