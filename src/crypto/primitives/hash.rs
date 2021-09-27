@@ -1,6 +1,6 @@
 use blake3::{Hash as BlakeHash, Hasher as BlakeHasher};
 
-use crate::crypto::primitives::errors::{hash::SerializeError, HashError};
+use crate::crypto::primitives::errors::{hash::SerializeFailed, HashError};
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ impl Hasher {
     where
         M: Serialize,
     {
-        let message = bincode::serialize(message).context(SerializeError)?;
+        let message = bincode::serialize(message).context(SerializeFailed)?;
         self.update_raw(&message);
 
         Ok(())

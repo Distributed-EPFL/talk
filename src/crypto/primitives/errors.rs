@@ -11,6 +11,6 @@ pub(crate) mod hash {
     #[snafu(visibility(pub(crate)))]
     pub enum HashError {
         #[snafu(display("failed to serialize data: {}", source))]
-        SerializeError { source: BincodeError },
+        SerializeFailed { source: BincodeError },
     }
 }
