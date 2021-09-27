@@ -34,3 +34,12 @@ impl Hasher {
         Hash(self.0.finalize())
     }
 }
+
+pub fn hash<M>(message: &M) -> Result<Hash, HasherError>
+where
+    M: Serialize,
+{
+    let mut hasher = Hasher::new();
+    hasher.update(message)?;
+    Ok(hasher.finalize())
+}
