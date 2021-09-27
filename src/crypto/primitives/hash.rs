@@ -1,6 +1,6 @@
 use blake3::{Hash as BlakeHash, Hasher as BlakeHasher};
 
-use crate::crypto::primitives::errors::{HasherError, SerializeError};
+use crate::crypto::primitives::errors::{hash::SerializeError, HashError};
 
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +20,7 @@ impl Hasher {
         Self(BlakeHasher::new())
     }
 
-    pub fn update<M>(&mut self, message: &M) -> Result<(), HasherError>
+    pub fn update<M>(&mut self, message: &M) -> Result<(), HashError>
     where
         M: Serialize,
     {
@@ -39,7 +39,7 @@ impl Hasher {
     }
 }
 
-pub fn hash<M>(message: &M) -> Result<Hash, HasherError>
+pub fn hash<M>(message: &M) -> Result<Hash, HashError>
 where
     M: Serialize,
 {
