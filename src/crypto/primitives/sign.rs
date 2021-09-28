@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use snafu::ResultExt;
 
+use std::fmt::{Debug, Error as FmtError, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
@@ -107,6 +108,32 @@ impl PublicKey {
 impl Signature {
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
         self.0.to_bytes()
+    }
+}
+
+impl Debug for PublicKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+        let bytes = self
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{:02x?}", byte))
+            .collect::<Vec<_>>()
+            .join("");
+
+        write!(f, "PublicKey({})", bytes)
+    }
+}
+
+impl Debug for Signature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+        let bytes = self
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{:02x?}", byte))
+            .collect::<Vec<_>>()
+            .join("");
+
+        write!(f, "Signature({})", bytes)
     }
 }
 

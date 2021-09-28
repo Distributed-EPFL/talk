@@ -18,6 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use snafu::ResultExt;
 
+use std::fmt::{Debug, Error as FmtError, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub const KEYPAIR_LENGTH: usize = 128;
@@ -117,6 +118,32 @@ impl Signature {
     }
 }
 
+impl Debug for PublicKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+        let bytes = self
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{:02x?}", byte))
+            .collect::<Vec<_>>()
+            .join("");
+
+        write!(f, "PublicKey({})", bytes)
+    }
+}
+
+impl Debug for Signature {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+        let bytes = self
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{:02x?}", byte))
+            .collect::<Vec<_>>()
+            .join("");
+
+        write!(f, "Signature({})", bytes)
+    }
+}
+
 impl Hash for PublicKey {
     fn hash<H>(&self, state: &mut H)
     where
@@ -150,14 +177,13 @@ impl<'de> Deserialize<'de> for PublicKey {
         D: Deserializer<'de>,
     {
         use serde::de::{Error, Visitor};
-        use std::fmt::{Formatter, Result as FmtResult};
 
         struct ByteVisitor;
 
         impl<'de> Visitor<'de> for ByteVisitor {
             type Value = BlstPublicKey;
 
-            fn expecting(&self, f: &mut Formatter) -> FmtResult {
+            fn expecting(&self, f: &mut Formatter) -> Result<(), FmtError> {
                 f.write_str("byte representation of a bls public key")
             }
 
@@ -190,14 +216,13 @@ impl<'de> Deserialize<'de> for Signature {
         D: Deserializer<'de>,
     {
         use serde::de::{Error, Visitor};
-        use std::fmt::{Formatter, Result as FmtResult};
 
         struct ByteVisitor;
 
         impl<'de> Visitor<'de> for ByteVisitor {
             type Value = BlstSignature;
 
-            fn expecting(&self, f: &mut Formatter) -> FmtResult {
+            fn expecting(&self, f: &mut Formatter) -> Result<(), FmtError> {
                 f.write_str("byte representation of a bls public key")
             }
 

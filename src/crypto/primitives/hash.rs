@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use snafu::ResultExt;
 
-use std::fmt::{Debug, Display, Error as FmtError, Formatter};
+use std::fmt::{Debug, Error as FmtError, Formatter};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Hash(#[serde(with = "SerdeBlakeHash")] BlakeHash);
@@ -19,7 +19,7 @@ impl Hash {
     pub fn from_bytes(bytes: [u8; HASH_LENGTH]) -> Self {
         Hash(BlakeHash::from(bytes))
     }
-    
+
     pub fn to_bytes(&self) -> [u8; HASH_LENGTH] {
         *self.0.as_bytes()
     }
@@ -58,15 +58,16 @@ where
     Ok(hasher.finalize())
 }
 
-impl Display for Hash {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        write!(f, "{:?}", self.0)
+        let bytes = self
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{:02x?}", byte))
+            .collect::<Vec<_>>()
+            .join("");
+
+        write!(f, "Hash({})", bytes)
     }
 }
 
