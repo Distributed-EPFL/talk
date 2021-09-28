@@ -43,10 +43,14 @@ pub(crate) mod multi {
     #[derive(Debug, Snafu)]
     #[snafu(visibility(pub(crate)))]
     pub enum MultiError {
+        #[snafu(display("malformed public key: {}", source))]
+        MalformedPublicKey { source: BlstError },
         #[snafu(display("failed to serialize data: {}", source))]
         SerializeFailed { source: BincodeError },
         #[snafu(display("failed to verify signature: {}", source))]
         VerifyFailed { source: BlstError },
+        #[snafu(display("malformed signature: {}", source))]
+        MalformedSignature { source: BlstError },
         #[snafu(display("failed to aggregate signatures: {}", source))]
         AggregateFailed { source: BlstError },
     }

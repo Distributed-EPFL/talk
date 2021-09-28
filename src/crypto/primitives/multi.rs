@@ -1,14 +1,17 @@
-use crate::crypto::primitives::{
-    adapters::BlstErrorAdapter,
-    errors::{
-        multi::{AggregateFailed, BlstError, SerializeFailed, VerifyFailed},
-        MultiError,
-    },
-};
-
 use blst::min_sig::{
     AggregateSignature as BlstAggregateSignature, PublicKey as BlstPublicKey,
     SecretKey as BlstSecretKey, Signature as BlstSignature,
+};
+
+use crate::crypto::primitives::{
+    adapters::BlstErrorAdapter,
+    errors::{
+        multi::{
+            AggregateFailed, BlstError, MalformedPublicKey, MalformedSignature,
+            SerializeFailed, VerifyFailed,
+        },
+        MultiError,
+    },
 };
 
 use rand::rngs::OsRng;
@@ -64,6 +67,16 @@ impl KeyPair {
 }
 
 impl PublicKey {
+    pub fn from_bytes(
+        bytes: [u8; PUBLIC_KEY_LENGTH],
+    ) -> Result<Self, MultiError> {
+        let public_key = BlstPublicKey::from_bytes(&bytes)
+            .map_err(Into::into)
+            .context(MalformedPublicKey)?;
+
+        Ok(PublicKey(public_key))
+    }
+
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         self.0.to_bytes()
     }
@@ -93,6 +106,15 @@ impl PublicKey {
 }
 
 impl Signature {
+    pub fn from_bytes(
+        bytes: [u8; SIGNATURE_LENGTH],
+    ) -> Result<Self, MultiError> {
+        let signature = BlstSignature::from_bytes(&bytes)
+            .map_err(Into::into)
+            .context(MalformedSignature)?;
+
+        Ok(Signature(signature))
+    }
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
         self.0.to_bytes()
     }
