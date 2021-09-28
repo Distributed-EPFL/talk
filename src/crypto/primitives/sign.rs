@@ -185,3 +185,41 @@ impl Hash for Signature {
         self.0.to_bytes().hash(state)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn correct() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        keypair.public().verify_raw(&message, &signature).unwrap();
+    }
+
+    #[test]
+    fn compromise_message() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        let message: u32 = 1235;
+
+        assert!(keypair.public().verify_raw(&message, &signature).is_err());
+    }
+
+    #[test]
+    fn compromise_signature() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        let mut signature = bincode::serialize(&signature).unwrap();
+        signature[4] = signature[4].wrapping_add(1);
+        let signature = bincode::deserialize(&signature).unwrap();
+
+        assert!(keypair.public().verify_raw(&message, &signature).is_err());
+    }
+}

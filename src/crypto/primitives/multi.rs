@@ -279,3 +279,145 @@ impl<'de> Deserialize<'de> for Signature {
         Ok(Self(deserializer.deserialize_bytes(ByteVisitor)?))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn single_correct() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        PublicKey::verify_raw([&keypair.public()], &message, &signature)
+            .unwrap();
+    }
+
+    #[test]
+    fn single_compromise_message() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        let message: u32 = 1235;
+
+        assert!(PublicKey::verify_raw(
+            [&keypair.public()],
+            &message,
+            &signature
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn single_compromise_signature() {
+        let keypair = KeyPair::random();
+        let message: u32 = 1234;
+        let signature = keypair.sign_raw(&message).unwrap();
+
+        let mut signature = bincode::serialize(&signature).unwrap();
+        signature[10] = signature[10].wrapping_add(1);
+        let signature = bincode::deserialize(&signature);
+
+        if let Ok(signature) = signature {
+            // Sometimes at random, deserializing a tampered signature results itself in an `Err`
+            assert!(PublicKey::verify_raw(
+                [&keypair.public()],
+                &message,
+                &signature
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn multiple_correct() {
+        let alice = KeyPair::random();
+        let bob = KeyPair::random();
+        let carl = KeyPair::random();
+
+        let message: u32 = 1234;
+
+        let alice_signature = alice.sign_raw(&message).unwrap();
+        let bob_signature = bob.sign_raw(&message).unwrap();
+        let carl_signature = carl.sign_raw(&message).unwrap();
+
+        let signature = Signature::aggregate([
+            alice_signature,
+            bob_signature,
+            carl_signature,
+        ])
+        .unwrap();
+
+        PublicKey::verify_raw(
+            [&alice.public(), &bob.public(), &carl.public()],
+            &message,
+            &signature,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn multiple_compromise_message() {
+        let alice = KeyPair::random();
+        let bob = KeyPair::random();
+        let carl = KeyPair::random();
+
+        let message: u32 = 1234;
+
+        let alice_signature = alice.sign_raw(&message).unwrap();
+        let bob_signature = bob.sign_raw(&message).unwrap();
+        let carl_signature = carl.sign_raw(&message).unwrap();
+
+        let signature = Signature::aggregate([
+            alice_signature,
+            bob_signature,
+            carl_signature,
+        ])
+        .unwrap();
+
+        let message: u32 = 1235;
+
+        assert!(PublicKey::verify_raw(
+            [&alice.public(), &bob.public(), &carl.public()],
+            &message,
+            &signature,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn multiple_compromise_signature() {
+        let alice = KeyPair::random();
+        let bob = KeyPair::random();
+        let carl = KeyPair::random();
+
+        let message: u32 = 1234;
+
+        let alice_signature = alice.sign_raw(&message).unwrap();
+        let bob_signature = bob.sign_raw(&message).unwrap();
+        let carl_signature = carl.sign_raw(&message).unwrap();
+
+        let signature = Signature::aggregate([
+            alice_signature,
+            bob_signature,
+            carl_signature,
+        ])
+        .unwrap();
+
+        let mut signature = bincode::serialize(&signature).unwrap();
+        signature[10] = signature[10].wrapping_add(1);
+        let signature = bincode::deserialize(&signature);
+
+        if let Ok(signature) = signature {
+            // Sometimes at random, deserializing a tampered signature results itself in an `Err`
+            assert!(PublicKey::verify_raw(
+                [&alice.public(), &bob.public(), &carl.public()],
+                &message,
+                &signature,
+            )
+            .is_err());
+        }
+    }
+}
