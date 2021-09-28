@@ -1,5 +1,5 @@
 use crate::crypto::primitives::errors::{
-    sign::{SerializeFailed, VerifyFailed},
+    sign::{MalformedPublicKey, SerializeFailed, VerifyFailed},
     SignError,
 };
 
@@ -48,6 +48,15 @@ impl KeyPair {
 }
 
 impl PublicKey {
+    pub fn from_bytes(
+        bytes: [u8; PUBLIC_KEY_LENGTH],
+    ) -> Result<Self, SignError> {
+        let public_key =
+            EdPublicKey::from_bytes(&bytes).context(MalformedPublicKey)?;
+
+        Ok(PublicKey(public_key))
+    }
+
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         self.0.to_bytes()
     }
@@ -106,6 +115,10 @@ impl PublicKey {
 }
 
 impl Signature {
+    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Self {
+        Signature(bytes.into())
+    }
+
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
         self.0.to_bytes()
     }
