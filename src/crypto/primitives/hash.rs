@@ -67,7 +67,11 @@ impl Debug for Hash {
             .collect::<Vec<_>>()
             .join("");
 
-        write!(f, "Hash({})", bytes)
+        if f.alternate() {
+            write!(f, "Hash({} ... {})", &bytes[..8], &bytes[bytes.len() - 8..])
+        } else {
+            write!(f, "Hash({})", bytes)
+        }
     }
 }
 

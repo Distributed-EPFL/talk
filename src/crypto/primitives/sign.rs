@@ -120,7 +120,16 @@ impl Debug for PublicKey {
             .collect::<Vec<_>>()
             .join("");
 
-        write!(f, "PublicKey({})", bytes)
+        if f.alternate() {
+            write!(
+                f,
+                "PublicKey({} ... {})",
+                &bytes[..8],
+                &bytes[bytes.len() - 8..]
+            )
+        } else {
+            write!(f, "PublicKey({})", bytes)
+        }
     }
 }
 
@@ -133,7 +142,16 @@ impl Debug for Signature {
             .collect::<Vec<_>>()
             .join("");
 
-        write!(f, "Signature({})", bytes)
+        if f.alternate() {
+            write!(
+                f,
+                "Signature({} ... {})",
+                &bytes[..8],
+                &bytes[bytes.len() - 8..]
+            )
+        } else {
+            write!(f, "Signature({})", bytes)
+        }
     }
 }
 
