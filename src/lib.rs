@@ -1,2 +1,2 @@
 #[allow(dead_code)]
-mod crypto;
+pub mod crypto;

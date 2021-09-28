@@ -1,6 +1,6 @@
 mod adapters;
-mod hash;
-mod multi;
-mod sign;
 
 pub mod errors;
+pub mod hash;
+pub mod multi;
+pub mod sign;

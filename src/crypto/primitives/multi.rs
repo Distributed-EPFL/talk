@@ -81,6 +81,42 @@ impl PublicKey {
         self.0.to_bytes()
     }
 
+    /// Verifies the `Signature` of a message against a set of `PublicKey`s.
+    ///
+    /// Verification succeeds if and only (i) for every PublicKey, the message
+    /// is signed using its matching PrivateKey and (ii) the `Signature` is the
+    /// aggregate of (and only of) those individual signatures.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, an `AggregateFailed`
+    /// error variant will be returned. If the verification fails for
+    /// any reason, `VerifyFailed` will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::multi::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    /// let bob = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    /// let bob_signature = bob.sign_raw(&message).unwrap();
+    ///
+    /// let signature = Signature::aggregate([
+    ///     alice_signature,
+    ///     bob_signature,
+    /// ])
+    /// .unwrap();
+    ///
+    /// PublicKey::verify_raw(
+    ///     [alice.public(), bob.public()],
+    ///     &message,
+    ///     signature
+    /// ).unwrap();
+    /// ```
     pub fn verify_raw<P, M>(
         signers: P,
         message: &M,
@@ -121,6 +157,34 @@ impl Signature {
         self.0.to_bytes()
     }
 
+    /// Aggregates a set of `Signature`s into a single `Signature`
+    ///
+    /// # Errors
+    ///
+    /// If the aggregation fails for any reason, an `AggregateFailed`
+    /// error variant will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::multi::{Signature, KeyPair};
+    ///
+    /// let alice = KeyPair::random();
+    /// let bob = KeyPair::random();
+    /// let carl = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    /// let bob_signature = bob.sign_raw(&message).unwrap();
+    /// let carl_signature = carl.sign_raw(&message).unwrap();
+    ///
+    /// let signature = Signature::aggregate([
+    ///     alice_signature,
+    ///     bob_signature,
+    ///     carl_signature,
+    /// ])
+    /// .unwrap();
+    /// ```
     pub fn aggregate<I>(signatures: I) -> Result<Self, MultiError>
     where
         I: IntoIterator<Item = Signature>,
