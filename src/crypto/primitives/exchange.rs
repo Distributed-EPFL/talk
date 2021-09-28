@@ -19,6 +19,12 @@ pub struct PublicKey(XPublicKey);
 
 pub struct SharedKey(XSharedSecret);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Role {
+    Even,
+    Odd,
+}
+
 pub const PUBLIC_KEY_LENGTH: usize = 32;
 pub const SHARED_KEY_LENGTH: usize = 32;
 
@@ -34,8 +40,20 @@ impl KeyPair {
         PublicKey(self.public)
     }
 
-    pub fn exchange(self, remote: PublicKey) -> SharedKey {
-        SharedKey(self.secret.diffie_hellman(&remote.0))
+    pub fn exchange(self, remote: PublicKey) -> (SharedKey, Role) {
+        let shared_key = SharedKey(self.secret.diffie_hellman(&remote.0));
+
+        // If `self.public.to_bytes() == remote.to_bytes()`, then a 
+        // remote host maliciously echoed `self.public`, and will not
+        // be able to decrypt or authenticate messages. In any case,
+        // communication is compromised and potentially leaked.
+        let role = if self.public.to_bytes() > remote.to_bytes() {
+            Role::Even
+        } else {
+            Role::Odd
+        };
+
+        (shared_key, role)
     }
 }
 
@@ -91,10 +109,11 @@ mod tests {
         let alice_public = alice_keypair.public();
         let bob_public = bob_keypair.public();
 
-        let alice_shared = alice_keypair.exchange(bob_public);
-        let bob_shared = bob_keypair.exchange(alice_public);
+        let (alice_shared, alice_role) = alice_keypair.exchange(bob_public);
+        let (bob_shared, bob_role) = bob_keypair.exchange(alice_public);
 
         assert_eq!(alice_shared.to_bytes(), bob_shared.to_bytes());
+        assert_ne!(alice_role, bob_role);
     }
 
     #[test]
@@ -113,8 +132,8 @@ mod tests {
         bob_public[3] = bob_public[3].wrapping_add(1);
         let bob_public = PublicKey::from_bytes(bob_public);
 
-        let alice_shared = alice_keypair.exchange(bob_public);
-        let bob_shared = bob_keypair.exchange(alice_public);
+        let (alice_shared, _) = alice_keypair.exchange(bob_public);
+        let (bob_shared, _) = bob_keypair.exchange(alice_public);
 
         assert_ne!(alice_shared.to_bytes(), bob_shared.to_bytes());
     }
@@ -127,8 +146,8 @@ mod tests {
 
         let eve_public = eve_keypair.public();
 
-        let alice_shared = alice_keypair.exchange(eve_public);
-        let bob_shared = bob_keypair.exchange(eve_public);
+        let (alice_shared, _) = alice_keypair.exchange(eve_public);
+        let (bob_shared, _) = bob_keypair.exchange(eve_public);
 
         assert_ne!(alice_shared.to_bytes(), bob_shared.to_bytes());
     }
