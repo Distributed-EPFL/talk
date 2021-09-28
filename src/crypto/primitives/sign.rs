@@ -47,6 +47,10 @@ impl KeyPair {
 }
 
 impl PublicKey {
+    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
+        self.0.to_bytes()
+    }
+
     pub fn verify_raw<M>(
         &self,
         message: &M,
@@ -97,6 +101,12 @@ impl PublicKey {
             &public_keys[..],
         )
         .context(VerifyFailed)
+    }
+}
+
+impl Signature {
+    pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
+        self.0.to_bytes()
     }
 }
 

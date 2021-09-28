@@ -15,6 +15,12 @@ pub struct Hasher(BlakeHasher);
 
 pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 
+impl Hash {
+    pub fn to_bytes(&self) -> [u8; HASH_LENGTH] {
+        *self.0.as_bytes()
+    }
+}
+
 impl Hasher {
     pub fn new() -> Self {
         Self(BlakeHasher::new())
