@@ -16,6 +16,10 @@ pub struct Hasher(BlakeHasher);
 pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 
 impl Hash {
+    pub fn from_bytes(bytes: [u8; HASH_LENGTH]) -> Self {
+        Hash(BlakeHash::from(bytes))
+    }
+    
     pub fn to_bytes(&self) -> [u8; HASH_LENGTH] {
         *self.0.as_bytes()
     }
@@ -52,18 +56,6 @@ where
     let mut hasher = Hasher::new();
     hasher.update(message)?;
     Ok(hasher.finalize())
-}
-
-impl From<[u8; HASH_LENGTH]> for Hash {
-    fn from(hash: [u8; HASH_LENGTH]) -> Self {
-        Hash(BlakeHash::from(hash))
-    }
-}
-
-impl Into<[u8; HASH_LENGTH]> for Hash {
-    fn into(self) -> [u8; HASH_LENGTH] {
-        self.0.into()
-    }
 }
 
 impl Display for Hash {
