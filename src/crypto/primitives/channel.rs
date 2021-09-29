@@ -143,3 +143,35 @@ pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
 
     (sender, receiver)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::crypto::primitives::exchange::KeyPair;
+
+    #[test]
+    fn correct() {
+        let alice_keypair = KeyPair::random();
+        let bob_keypair = KeyPair::random();
+
+        let alice_public_key = alice_keypair.public();
+        let bob_public_key = bob_keypair.public();
+
+        let (alice_shared_key, alice_role) = alice_keypair.exchange(bob_public_key);
+        let (bob_shared_key, bob_role) = bob_keypair.exchange(alice_public_key);
+
+        let (mut alice_sender, mut alice_receiver) = channel(alice_shared_key, alice_role);
+        let (mut bob_sender, mut bob_receiver) = channel(bob_shared_key, bob_role);
+
+        for message in 0..128u32 {
+            let ciphertext = alice_sender.encrypt(&message).unwrap();
+            let plaintext: u32 = bob_receiver.decrypt(&ciphertext[..]).unwrap();
+            assert_eq!(plaintext, message);
+
+            let ciphertext = bob_sender.encrypt(&message).unwrap();
+            let plaintext: u32 = alice_receiver.decrypt(&ciphertext[..]).unwrap();
+            assert_eq!(plaintext, message);
+        }
+    }
+}
