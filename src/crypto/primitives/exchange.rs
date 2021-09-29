@@ -20,9 +20,10 @@ pub struct PublicKey(XPublicKey);
 pub struct SharedKey(XSharedSecret);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum Role {
-    Even,
-    Odd,
+    Even = 0,
+    Odd = 1,
 }
 
 pub const PUBLIC_KEY_LENGTH: usize = 32;
@@ -43,7 +44,7 @@ impl KeyPair {
     pub fn exchange(self, remote: PublicKey) -> (SharedKey, Role) {
         let shared_key = SharedKey(self.secret.diffie_hellman(&remote.0));
 
-        // If `self.public.to_bytes() == remote.to_bytes()`, then a 
+        // If `self.public.to_bytes() == remote.to_bytes()`, then a
         // remote host maliciously echoed `self.public`, and will not
         // be able to decrypt or authenticate messages. In any case,
         // communication is compromised and potentially leaked.

@@ -9,6 +9,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 type BincodeError = Box<bincode::ErrorKind>;
 
+pub use channel::ChannelError;
 pub use hash::HashError;
 pub use multi::MultiError;
 pub use sign::SignError;
@@ -85,5 +86,20 @@ pub(crate) mod multi {
 
             write!(f, "{}", s)
         }
+    }
+}
+
+pub(crate) mod channel {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum ChannelError {
+        #[snafu(display("failed to serialize data: {}", source))]
+        SerializeFailed { source: BincodeError },
+        #[snafu(display("failed to deserialize data: {}", source))]
+        DeserializeFailed { source: BincodeError },
+        #[snafu(display("failed to decrypt message"))]
+        DecryptFailed,
     }
 }
