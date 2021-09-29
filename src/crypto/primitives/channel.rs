@@ -1,14 +1,17 @@
 use chacha20poly1305::aead::{
     Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace,
+    NewAead as ChaChaNewAead,
 };
-use chacha20poly1305::{ChaCha20Poly1305, Nonce as ChaChaNonce};
+use chacha20poly1305::{
+    ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
+};
 
 use crate::crypto::primitives::{
     errors::{
         channel::{DeserializeFailed, SerializeFailed},
         ChannelError,
     },
-    exchange::Role,
+    exchange::{Role, SharedKey},
 };
 
 use serde::{Deserialize, Serialize};
@@ -22,9 +25,16 @@ const NONCE_LENGTH: usize = 12;
 pub struct Sender(State);
 pub struct Receiver(State);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
+enum Lane {
+    Low = 0,
+    High = 1,
+}
+
 struct State {
     cipher: ChaCha20Poly1305,
-    role: Role,
+    lane: Lane,
     nonce: u128,
 }
 
@@ -103,9 +113,33 @@ impl State {
             .try_into()
             .unwrap();
 
-        nonce[0] = self.role as u8;
+        nonce[0] = self.lane as u8;
         self.nonce += 1;
 
         *ChaChaNonce::from_slice(&nonce)
     }
+}
+
+pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
+    let key = key.to_bytes();
+    let key = ChaChaKey::from_slice(&key);
+
+    let (sender_lane, receiver_lane) = match role {
+        Role::Even => (Lane::High, Lane::Low),
+        Role::Odd => (Lane::Low, Lane::High),
+    };
+
+    let sender = Sender(State {
+        cipher: ChaCha20Poly1305::new(key),
+        lane: sender_lane,
+        nonce: 0,
+    });
+
+    let receiver = Receiver(State {
+        cipher: ChaCha20Poly1305::new(key),
+        lane: receiver_lane,
+        nonce: 0,
+    });
+
+    (sender, receiver)
 }
