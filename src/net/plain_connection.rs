@@ -3,8 +3,9 @@ use crate::net::{
         plain_connection::{
             DeserializeFailed, ReadFailed, SerializeFailed, WriteFailed,
         },
-        PlainConnectionError,
+        PlainConnectionError, SecureConnectionError,
     },
+    secure_connection::SecureConnection,
     Socket,
 };
 
@@ -74,6 +75,12 @@ impl PlainConnection {
             .context(ReadFailed)?;
 
         bincode::deserialize(&self.buffer).context(DeserializeFailed)
+    }
+
+    pub async fn secure(
+        self,
+    ) -> Result<SecureConnection, SecureConnectionError> {
+        todo!()
     }
 
     async fn send_size(
