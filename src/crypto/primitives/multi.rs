@@ -56,6 +56,29 @@ impl KeyPair {
         PublicKey(self.public)
     }
 
+    /// Signs a message using this `KeyPair`.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, a `SerializeFailed`
+    /// error variant will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::multi::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    /// let bob = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    ///
+    /// assert!(alice_signature.verify_raw(
+    ///     [alice.public()],
+    ///     &message
+    /// ).is_ok());
+    /// ```
     pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, MultiError>
     where
         T: Serialize,
@@ -79,66 +102,6 @@ impl PublicKey {
 
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         self.0.to_bytes()
-    }
-
-    /// Verifies the `Signature` of a message against a set of `PublicKey`s.
-    ///
-    /// Verification succeeds if and only (i) for every PublicKey, the message
-    /// is signed using its matching PrivateKey and (ii) the `Signature` is the
-    /// aggregate of (and only of) those individual signatures.
-    ///
-    /// # Errors
-    ///
-    /// If the serialization of the message fails, an `AggregateFailed`
-    /// error variant will be returned. If the verification fails for
-    /// any reason, `VerifyFailed` will be returned.
-    ///
-    /// # Examples
-    /// ```
-    /// use talk::crypto::primitives::multi::{Signature, KeyPair, PublicKey};
-    ///
-    /// let alice = KeyPair::random();
-    /// let bob = KeyPair::random();
-    ///
-    /// let message: u32 = 1234;
-    ///
-    /// let alice_signature = alice.sign_raw(&message).unwrap();
-    /// let bob_signature = bob.sign_raw(&message).unwrap();
-    ///
-    /// let signature = Signature::aggregate([
-    ///     alice_signature,
-    ///     bob_signature,
-    /// ])
-    /// .unwrap();
-    ///
-    /// PublicKey::verify_raw(
-    ///     [alice.public(), bob.public()],
-    ///     &message,
-    ///     signature
-    /// ).unwrap();
-    /// ```
-    pub fn verify_raw<P, M>(
-        signers: P,
-        message: &M,
-        signature: Signature,
-    ) -> Result<(), MultiError>
-    where
-        P: IntoIterator<Item = PublicKey>,
-        M: Serialize,
-    {
-        let signers = signers
-            .into_iter()
-            .map(|signer| signer.0)
-            .collect::<Vec<_>>();
-
-        let signers = signers.iter().collect::<Vec<_>>();
-        let message = bincode::serialize(message).context(SerializeFailed)?;
-
-        signature
-            .0
-            .fast_aggregate_verify(true, &message[..], BLST_DST, &signers[..])
-            .into_result()
-            .context(VerifyFailed)
     }
 }
 
@@ -182,8 +145,9 @@ impl Signature {
     ///     alice_signature,
     ///     bob_signature,
     ///     carl_signature,
-    /// ])
-    /// .unwrap();
+    /// ]);
+    ///
+    /// assert!(signature.is_ok());
     /// ```
     pub fn aggregate<I>(signatures: I) -> Result<Self, MultiError>
     where
@@ -203,6 +167,64 @@ impl Signature {
 
         let signature = signature.to_signature();
         Ok(Signature(signature))
+    }
+
+    /// Verifies the `Signature` of a message against a set of `PublicKey`s.
+    ///
+    /// Verification succeeds if and only (i) for every PublicKey, the message
+    /// is signed using its matching PrivateKey and (ii) the `Signature` is the
+    /// aggregate of (and only of) those individual signatures.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, a `SerializeFailed`
+    /// error variant will be returned. If the verification fails for
+    /// any reason, `VerifyFailed` will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::multi::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    /// let bob = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    /// let bob_signature = bob.sign_raw(&message).unwrap();
+    ///
+    /// let signature = Signature::aggregate([
+    ///     alice_signature,
+    ///     bob_signature,
+    /// ])
+    /// .unwrap();
+    ///
+    /// assert!(signature.verify_raw(
+    ///     [alice.public(), bob.public()],
+    ///     &message,
+    /// ).is_ok());
+    /// ```
+    pub fn verify_raw<P, M>(
+        &self,
+        signers: P,
+        message: &M,
+    ) -> Result<(), MultiError>
+    where
+        P: IntoIterator<Item = PublicKey>,
+        M: Serialize,
+    {
+        let signers = signers
+            .into_iter()
+            .map(|signer| signer.0)
+            .collect::<Vec<_>>();
+
+        let signers = signers.iter().collect::<Vec<_>>();
+        let message = bincode::serialize(message).context(SerializeFailed)?;
+
+        self.0
+            .fast_aggregate_verify(true, &message[..], BLST_DST, &signers[..])
+            .into_result()
+            .context(VerifyFailed)
     }
 }
 
@@ -356,7 +378,7 @@ mod tests {
         let message: u32 = 1234;
         let signature = keypair.sign_raw(&message).unwrap();
 
-        PublicKey::verify_raw([keypair.public()], &message, signature).unwrap();
+        signature.verify_raw([keypair.public()], &message).unwrap();
     }
 
     #[test]
@@ -367,10 +389,7 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(
-            PublicKey::verify_raw([keypair.public()], &message, signature)
-                .is_err()
-        );
+        assert!(signature.verify_raw([keypair.public()], &message).is_err());
     }
 
     #[test]
@@ -381,16 +400,13 @@ mod tests {
 
         let mut signature = bincode::serialize(&signature).unwrap();
         signature[10] = signature[10].wrapping_add(1);
-        let signature = bincode::deserialize(&signature);
+        let signature: Result<Signature, _> = bincode::deserialize(&signature);
 
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
-            assert!(PublicKey::verify_raw(
-                [keypair.public()],
-                &message,
-                signature
-            )
-            .is_err());
+            assert!(signature
+                .verify_raw([keypair.public()], &message,)
+                .is_err());
         }
     }
 
@@ -413,12 +429,9 @@ mod tests {
         ])
         .unwrap();
 
-        PublicKey::verify_raw(
-            [alice.public(), bob.public(), carl.public()],
-            &message,
-            signature,
-        )
-        .unwrap();
+        signature
+            .verify_raw([alice.public(), bob.public(), carl.public()], &message)
+            .unwrap();
     }
 
     #[test]
@@ -442,12 +455,14 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(PublicKey::verify_raw(
-            [alice.public(), bob.public(), carl.public()],
-            &message,
-            signature,
-        )
-        .is_err());
+        assert!(
+            signature
+                .verify_raw(
+                    [alice.public(), bob.public(), carl.public()],
+                    &message,
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -471,16 +486,16 @@ mod tests {
 
         let mut signature = bincode::serialize(&signature).unwrap();
         signature[10] = signature[10].wrapping_add(1);
-        let signature = bincode::deserialize(&signature);
+        let signature: Result<Signature, _> = bincode::deserialize(&signature);
 
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
-            assert!(PublicKey::verify_raw(
-                [alice.public(), bob.public(), carl.public()],
-                &message,
-                signature,
-            )
-            .is_err());
+            assert!(signature
+                .verify_raw(
+                    [alice.public(), bob.public(), carl.public()],
+                    &message,
+                )
+                .is_err());
         }
     }
 }

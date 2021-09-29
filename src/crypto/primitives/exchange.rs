@@ -9,6 +9,9 @@ use x25519_dalek::{
     SharedSecret as XSharedSecret,
 };
 
+pub const PUBLIC_KEY_LENGTH: usize = 32;
+pub const SHARED_KEY_LENGTH: usize = 32;
+
 pub struct KeyPair {
     public: XPublicKey,
     secret: XEphemeralSecret,
@@ -25,9 +28,6 @@ pub enum Role {
     Even = 0,
     Odd = 1,
 }
-
-pub const PUBLIC_KEY_LENGTH: usize = 32;
-pub const SHARED_KEY_LENGTH: usize = 32;
 
 impl KeyPair {
     pub fn random() -> Self {

@@ -27,16 +27,46 @@ pub struct PublicKey(EdPublicKey);
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signature(EdSignature);
 
+/// An ed25519 keypair.
+/// 
+/// This keypair can be used directly to sign messages via
+/// [`KeyPair::sign_raw`]. The emmitted [`Signature`]s can be
+/// verified against its [`PublicKey`] (see the respective
+/// documentation for details)
 impl KeyPair {
+    /// Generates a random `KeyPair` to be used for signing.
     pub fn random() -> Self {
         let keypair = EdKeyPair::generate(&mut OsRng);
         KeyPair(keypair)
     }
 
+    /// Returns this `KeyPair`'s `PublicKey`.
     pub fn public(&self) -> PublicKey {
         PublicKey(self.0.public)
     }
 
+    /// Signs a message using this `KeyPair`.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, a `SerializeFailed`
+    /// error variant will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::sign::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    ///
+    /// assert!(alice_signature.verify_raw(
+    ///     alice.public(),
+    ///     &message,
+    /// ).is_ok());
+    /// ```
     pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, SignError>
     where
         T: Serialize,
@@ -47,6 +77,10 @@ impl KeyPair {
     }
 }
 
+/// An ed25519 public key.
+/// 
+/// Used to validate a signature on a message. See the documentation
+/// for [`Signature`] for details.
 impl PublicKey {
     pub fn from_bytes(
         bytes: [u8; PUBLIC_KEY_LENGTH],
@@ -60,19 +94,86 @@ impl PublicKey {
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         self.0.to_bytes()
     }
+}
 
+/// An ed25519 signature of a message.
+impl Signature {
+    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Self {
+        Signature(bytes.into())
+    }
+
+    pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
+        self.0.to_bytes()
+    }
+
+    /// Verifies the `Signature` of a message against a `PublicKey`.
+    ///
+    /// Verification succeeds if and only signature was produced by
+    /// signing the message using the PublicKey's matching PrivateKey.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, a `SerializeFailed`
+    /// error variant will be returned. If the verification fails for
+    /// any reason, `VerifyFailed` will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::sign::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    ///
+    /// assert!(alice_signature.verify_raw(
+    ///     alice.public(),
+    ///     &message,
+    /// ).is_ok());
+    /// ```
     pub fn verify_raw<M>(
         &self,
+        public_key: PublicKey,
         message: &M,
-        signature: &Signature,
     ) -> Result<(), SignError>
     where
         M: Serialize,
     {
         let message = bincode::serialize(message).context(SerializeFailed)?;
-        self.0.verify(&message, &signature.0).context(VerifyFailed)
+        public_key.0.verify(&message, &self.0).context(VerifyFailed)
     }
 
+    /// Efficiently verifies a batch of `Signature`s on messages against the
+    /// given `PublicKey`s.
+    ///
+    /// The result is equivalent to individually verifying
+    /// (i.e., by sing `Signature::verify_raw`) each triplet of `PublicKey`,
+    /// message and `Signature` obtained from the iterators in the same order.
+    /// Verification succeeds if and only if it succeeds for every individual
+    /// triplet.
+    ///
+    /// # Errors
+    ///
+    /// If the serialization of the message fails, a `SerializeFailed`
+    /// error variant will be returned. If the verification fails for
+    /// any reason, `VerifyFailed` will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// use talk::crypto::primitives::sign::{Signature, KeyPair, PublicKey};
+    ///
+    /// let alice = KeyPair::random();
+    ///
+    /// let message: u32 = 1234;
+    ///
+    /// let alice_signature = alice.sign_raw(&message).unwrap();
+    ///
+    /// assert!(alice_signature.verify_raw(
+    ///     alice.public(),
+    ///     &message,
+    /// ).is_ok());
+    /// ```
     pub fn batch_verify_raw<'m, PI, MI, M, SI>(
         public_keys: PI,
         messages: MI,
@@ -111,16 +212,6 @@ impl PublicKey {
             &public_keys[..],
         )
         .context(VerifyFailed)
-    }
-}
-
-impl Signature {
-    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Self {
-        Signature(bytes.into())
-    }
-
-    pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0.to_bytes()
     }
 }
 
@@ -196,7 +287,7 @@ mod tests {
         let message: u32 = 1234;
         let signature = keypair.sign_raw(&message).unwrap();
 
-        keypair.public().verify_raw(&message, &signature).unwrap();
+        signature.verify_raw(keypair.public(), &message).unwrap();
     }
 
     #[test]
@@ -207,7 +298,7 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(keypair.public().verify_raw(&message, &signature).is_err());
+        assert!(signature.verify_raw(keypair.public(), &message).is_err());
     }
 
     #[test]
@@ -218,8 +309,8 @@ mod tests {
 
         let mut signature = bincode::serialize(&signature).unwrap();
         signature[4] = signature[4].wrapping_add(1);
-        let signature = bincode::deserialize(&signature).unwrap();
+        let signature: Signature = bincode::deserialize(&signature).unwrap();
 
-        assert!(keypair.public().verify_raw(&message, &signature).is_err());
+        assert!(signature.verify_raw(keypair.public(), &message).is_err());
     }
 }
