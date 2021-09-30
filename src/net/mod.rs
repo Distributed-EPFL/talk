@@ -14,4 +14,7 @@ pub mod sockets;
 pub use plain_connection::PlainConnection;
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
+pub use secure_connection::SecureConnection;
+pub use secure_receiver::SecureReceiver;
+pub use secure_sender::SecureSender;
 pub use socket::Socket;

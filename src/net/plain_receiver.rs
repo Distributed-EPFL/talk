@@ -1,9 +1,12 @@
-use crate::net::{
-    errors::{
-        plain_connection::{DeserializeFailed, ReadFailed},
-        PlainConnectionError,
+use crate::{
+    crypto::primitives::channel::Receiver as ChannelReceiver,
+    net::{
+        errors::{
+            plain_connection::{DeserializeFailed, ReadFailed},
+            PlainConnectionError,
+        },
+        SecureReceiver, Socket,
     },
-    Socket,
 };
 
 use serde::Deserialize;
@@ -55,5 +58,12 @@ impl PlainReceiver {
             .context(ReadFailed)?;
 
         Ok(u32::from_le_bytes(size) as usize)
+    }
+
+    pub(in crate::net) fn secure(
+        self,
+        channel_receiver: ChannelReceiver,
+    ) -> SecureReceiver {
+        SecureReceiver::new(self.read_half, self.buffer, channel_receiver)
     }
 }

@@ -56,8 +56,6 @@ impl Sender {
     where
         M: Serialize,
     {
-        buffer.clear();
-
         bincode::serialize_into(buffer as &mut Vec<u8>, message)
             .context(SerializeFailed)?;
 
