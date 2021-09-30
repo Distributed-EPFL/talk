@@ -107,6 +107,10 @@ impl SecureConnection {
     {
         self.receiver.receive().await
     }
+
+    pub fn split(self) -> (SecureSender, SecureReceiver) {
+        (self.sender, self.receiver)
+    }
 }
 
 impl Statement for IdentityChallenge {
