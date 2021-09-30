@@ -1,8 +1,10 @@
 use crate::crypto::Scope;
 
-pub trait Statement {
+use serde::Serialize;
+
+pub trait Statement: Serialize {
     const SCOPE: Scope = Scope::user();
 
-    type Header;
+    type Header: Serialize;
     const HEADER: Self::Header;
 }
