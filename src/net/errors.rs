@@ -1,4 +1,4 @@
-use crate::crypto::primitives::errors::ChannelError;
+use crate::crypto::primitives::errors::{ChannelError, SignError};
 
 use snafu::Snafu;
 
@@ -34,8 +34,13 @@ pub(crate) mod secure_connection {
     #[derive(Debug, Snafu)]
     #[snafu(visibility(pub(crate)))]
     pub enum SecureConnectionError {
-        #[snafu(display("Failed to secure the connection: {:?}", source))]
+        #[snafu(display("failed to secure the connection: {:?}", source))]
         SecureFailed { source: PlainConnectionError },
+        #[snafu(display(
+            "failed to authenticate the connection: {:?}",
+            source
+        ))]
+        AuthenticationFailed { source: SignError },
         #[snafu(display("failed to encrypt message: {}", source))]
         EncryptFailed { source: ChannelError },
         #[snafu(display("failed to decrypt message: {}", source))]

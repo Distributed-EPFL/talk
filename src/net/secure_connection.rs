@@ -1,11 +1,17 @@
 use crate::{
-    crypto::primitives::{
-        channel,
-        exchange::{KeyPair, PublicKey as ExchangePublicKey},
-        sign::PublicKey as SignPublicKey,
+    crypto::{
+        primitives::{
+            channel,
+            exchange::{KeyPair, PublicKey},
+            sign::Signature,
+        },
+        KeyCard, KeyChain, Scope, Statement, TalkHeader,
     },
     net::{
-        errors::{secure_connection::SecureFailed, SecureConnectionError},
+        errors::{
+            secure_connection::{AuthenticationFailed, SecureFailed},
+            SecureConnectionError,
+        },
         PlainConnection, SecureReceiver, SecureSender,
     },
 };
@@ -17,8 +23,16 @@ use snafu::ResultExt;
 pub struct SecureConnection {
     sender: SecureSender,
     receiver: SecureReceiver,
-    remote_key: ExchangePublicKey,
+    keys: Keys,
 }
+
+struct Keys {
+    local: PublicKey,
+    remote: PublicKey,
+}
+
+#[derive(Serialize)]
+struct IdentityChallenge(PublicKey);
 
 impl SecureConnection {
     pub(in crate::net) async fn new(
@@ -27,13 +41,11 @@ impl SecureConnection {
         // Run Diffie-Helman
 
         let keypair = KeyPair::random();
+        let local_key = keypair.public();
 
-        connection
-            .send(&keypair.public())
-            .await
-            .context(SecureFailed)?;
+        connection.send(&local_key).await.context(SecureFailed)?;
 
-        let remote_key: ExchangePublicKey =
+        let remote_key: PublicKey =
             connection.receive().await.context(SecureFailed)?;
 
         let (shared_key, role) = keypair.exchange(remote_key);
@@ -50,14 +62,33 @@ impl SecureConnection {
         Ok(Self {
             sender: plain_sender.secure(channel_sender),
             receiver: plain_receiver.secure(channel_receiver),
-            remote_key: remote_key,
+            keys: Keys {
+                local: local_key,
+                remote: remote_key,
+            },
         })
     }
 
     pub async fn authenticate(
         &mut self,
-    ) -> Result<SignPublicKey, SecureConnectionError> {
-        todo!()
+        keychain: &KeyChain,
+    ) -> Result<KeyCard, SecureConnectionError> {
+        let challenge = IdentityChallenge(self.keys.remote);
+        let proof = keychain.sign(&challenge).unwrap();
+
+        self.send(&keychain.keycard()).await?;
+        self.send(&proof).await?;
+
+        let keycard: KeyCard = self.receive().await?;
+        let proof: Signature = self.receive().await?;
+
+        let challenge = IdentityChallenge(self.keys.local);
+
+        proof
+            .verify(&keycard, &challenge)
+            .context(AuthenticationFailed)?;
+
+        Ok(keycard)
     }
 
     pub async fn send<M>(
@@ -76,4 +107,10 @@ impl SecureConnection {
     {
         self.receiver.receive().await
     }
+}
+
+impl Statement for IdentityChallenge {
+    const SCOPE: Scope = Scope::talk();
+    type Header = TalkHeader;
+    const HEADER: TalkHeader = TalkHeader::SecureConnectionIdentityChallenge;
 }

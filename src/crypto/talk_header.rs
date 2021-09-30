@@ -4,4 +4,5 @@ use serde::{Deserialize, Serialize};
 #[repr(i8)]
 pub(crate) enum TalkHeader {
     KeyCardPublicKeys = 0,
+    SecureConnectionIdentityChallenge = 1,
 }
