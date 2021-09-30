@@ -1,21 +1,32 @@
-use crate::net::{errors::SecureConnectionError, Socket};
+use crate::crypto::primitives::channel::{Receiver, Sender};
+use crate::net::{errors::SecureConnectionError, PlainConnection};
 
 use serde::{Deserialize, Serialize};
 
 pub struct SecureConnection {
-    socket: Box<dyn Socket>,
-    buffer: Vec<u8>,
+    channel_out: Sender,
+    channel_in: Receiver,
 }
 
 impl SecureConnection {
-    pub async fn send<M>(_message: &M) -> Result<(), SecureConnectionError>
+    async fn new(mut _connection: PlainConnection) -> Self {
+        todo!();
+    }
+
+    pub async fn send<M>(
+        &mut self,
+        _message: &M,
+    ) -> Result<(), SecureConnectionError>
     where
         M: Serialize,
     {
         todo!();
     }
 
-    pub async fn receive<M>(_message: &M) -> Result<M, SecureConnectionError>
+    pub async fn receive<M>(
+        &mut self,
+        _message: &M,
+    ) -> Result<M, SecureConnectionError>
     where
         M: for<'de> Deserialize<'de>,
     {
