@@ -114,3 +114,149 @@ impl Statement for IdentityChallenge {
     type Header = TalkHeader;
     const HEADER: TalkHeader = TalkHeader::SecureConnectionIdentityChallenge;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::net::SocketAddr;
+
+    use tokio::net::{TcpListener, TcpStream};
+
+    async fn new_listener() -> (TcpListener, SocketAddr) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+
+        (listener, address)
+    }
+
+    #[tokio::test]
+    async fn secure() {
+        let (bob_listener, bob_address) = new_listener().await;
+
+        let bob_task = tokio::spawn(async move {
+            let bob_connection: PlainConnection =
+                bob_listener.accept().await.unwrap().0.into();
+
+            bob_connection.secure().await.unwrap();
+        });
+
+        let alice_connection: PlainConnection =
+            TcpStream::connect(bob_address).await.unwrap().into();
+
+        alice_connection.secure().await.unwrap();
+
+        bob_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn authenticate() {
+        let alice_keychain = KeyChain::random();
+        let bob_keychain = KeyChain::random();
+
+        let alice_keycard = alice_keychain.keycard();
+        let bob_keycard = bob_keychain.keycard();
+
+        let (bob_listener, bob_address) = new_listener().await;
+
+        let bob_task = tokio::spawn(async move {
+            let bob_connection: PlainConnection =
+                bob_listener.accept().await.unwrap().0.into();
+
+            let mut bob_connection = bob_connection.secure().await.unwrap();
+
+            let remote_keycard =
+                bob_connection.authenticate(&bob_keychain).await.unwrap();
+
+            assert_eq!(remote_keycard, alice_keycard);
+        });
+
+        let alice_connection: PlainConnection =
+            TcpStream::connect(bob_address).await.unwrap().into();
+
+        let mut alice_connection = alice_connection.secure().await.unwrap();
+
+        let remote_keycard = alice_connection
+            .authenticate(&alice_keychain)
+            .await
+            .unwrap();
+
+        assert_eq!(remote_keycard, bob_keycard);
+
+        bob_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn single_send() {
+        const MESSAGE: &str = "Hello Bob, this is Alice!";
+
+        let alice_keychain = KeyChain::random();
+        let bob_keychain = KeyChain::random();
+
+        let (bob_listener, bob_address) = new_listener().await;
+
+        let bob_task = tokio::spawn(async move {
+            let bob_connection: PlainConnection =
+                bob_listener.accept().await.unwrap().0.into();
+
+            let mut bob_connection = bob_connection.secure().await.unwrap();
+
+            bob_connection.authenticate(&bob_keychain).await.unwrap();
+            let message: String = bob_connection.receive().await.unwrap();
+
+            assert_eq!(message, MESSAGE);
+        });
+
+        let alice_connection: PlainConnection =
+            TcpStream::connect(bob_address).await.unwrap().into();
+
+        let mut alice_connection = alice_connection.secure().await.unwrap();
+
+        alice_connection
+            .authenticate(&alice_keychain)
+            .await
+            .unwrap();
+
+        alice_connection.send(&String::from(MESSAGE)).await.unwrap();
+
+        bob_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multiple_send() {
+        let alice_keychain = KeyChain::random();
+        let bob_keychain = KeyChain::random();
+
+        let (bob_listener, bob_address) = new_listener().await;
+
+        let bob_task = tokio::spawn(async move {
+            let bob_connection: PlainConnection =
+                bob_listener.accept().await.unwrap().0.into();
+
+            let mut bob_connection = bob_connection.secure().await.unwrap();
+
+            bob_connection.authenticate(&bob_keychain).await.unwrap();
+
+            for expected in 0..32 {
+                let message: u32 = bob_connection.receive().await.unwrap();
+                assert_eq!(message, expected);
+            }
+        });
+
+        let alice_connection: PlainConnection =
+            TcpStream::connect(bob_address).await.unwrap().into();
+
+        let mut alice_connection = alice_connection.secure().await.unwrap();
+
+        alice_connection
+            .authenticate(&alice_keychain)
+            .await
+            .unwrap();
+
+        for message in 0..32u32 {
+            alice_connection.send(&message).await.unwrap();
+        }
+
+        bob_task.await.unwrap();
+    }
+}
