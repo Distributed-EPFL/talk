@@ -1,25 +1,14 @@
 use crate::net::{
-    errors::{
-        plain_connection::{
-            DeserializeFailed, ReadFailed, SerializeFailed, WriteFailed,
-        },
-        PlainConnectionError, SecureConnectionError,
-    },
-    secure_connection::SecureConnection,
-    Socket,
+    errors::PlainConnectionError, PlainReceiver, PlainSender, Socket,
 };
 
 use serde::{Deserialize, Serialize};
 
-use snafu::ResultExt;
-
-use std::mem;
-
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io;
 
 pub struct PlainConnection {
-    socket: Box<dyn Socket>,
-    buffer: Vec<u8>,
+    sender: PlainSender,
+    receiver: PlainReceiver,
 }
 
 impl PlainConnection {
@@ -27,16 +16,26 @@ impl PlainConnection {
     where
         S: 'static + Socket,
     {
-        PlainConnection {
-            socket: Box::new(socket),
-            buffer: Vec::new(),
-        }
+        PlainConnection::from_boxed(Box::new(socket))
     }
 
     pub(in crate::net) fn from_boxed(socket: Box<dyn Socket>) -> Self {
-        PlainConnection {
-            socket,
-            buffer: Vec::new(),
+        let (read_half, write_half) = io::split(socket);
+
+        let sender = PlainSender::new(write_half);
+        let receiver = PlainReceiver::new(read_half);
+
+        PlainConnection { sender, receiver }
+    }
+
+    pub fn join(
+        sender: PlainSender,
+        receiver: PlainReceiver,
+    ) -> Result<Self, PlainConnectionError> {
+        if receiver.read_half().is_pair_of(sender.send_half()) {
+            Ok(Self { sender, receiver })
+        } else {
+            Err(PlainConnectionError::MismatchedHalves)
         }
     }
 
@@ -47,62 +46,18 @@ impl PlainConnection {
     where
         M: Serialize,
     {
-        self.buffer.clear();
-
-        bincode::serialize_into(&mut self.buffer, &message)
-            .context(SerializeFailed)?;
-
-        self.send_size(self.buffer.len()).await?;
-
-        self.socket
-            .write_all(&self.buffer[..])
-            .await
-            .context(WriteFailed)?;
-
-        Ok(())
+        self.sender.send(message).await
     }
 
     pub async fn receive<M>(&mut self) -> Result<M, PlainConnectionError>
     where
         M: for<'de> Deserialize<'de>,
     {
-        let size = self.receive_size().await?;
-        self.buffer.resize(size, 0);
-
-        self.socket
-            .read_exact(&mut self.buffer[..])
-            .await
-            .context(ReadFailed)?;
-
-        bincode::deserialize(&self.buffer).context(DeserializeFailed)
+        self.receiver.receive::<M>().await
     }
 
-    pub async fn secure(
-        self,
-    ) -> Result<SecureConnection, SecureConnectionError> {
-        todo!()
-    }
-
-    async fn send_size(
-        &mut self,
-        size: usize,
-    ) -> Result<(), PlainConnectionError> {
-        let size = (size as u32).to_le_bytes();
-
-        self.socket.write_all(&size).await.context(WriteFailed)?;
-
-        Ok(())
-    }
-
-    async fn receive_size(&mut self) -> Result<usize, PlainConnectionError> {
-        let mut size = [0; mem::size_of::<u32>()];
-
-        self.socket
-            .read_exact(&mut size[..])
-            .await
-            .context(ReadFailed)?;
-
-        Ok(u32::from_le_bytes(size) as usize)
+    pub fn split(self) -> (PlainSender, PlainReceiver) {
+        (self.sender, self.receiver)
     }
 }
 

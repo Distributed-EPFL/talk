@@ -13,6 +13,8 @@ pub(crate) mod plain_connection {
     #[derive(Debug, Snafu)]
     #[snafu(visibility(pub(crate)))]
     pub enum PlainConnectionError {
+        #[snafu(display("mismatched halves"))]
+        MismatchedHalves,
         #[snafu(display("failed to serialize data: {}", source))]
         SerializeFailed { source: BincodeError },
         #[snafu(display("failed to deserialize data: {}", source))]
