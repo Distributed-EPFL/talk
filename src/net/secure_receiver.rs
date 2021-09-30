@@ -2,11 +2,10 @@ use crate::{
     crypto::primitives::channel::Receiver as ChannelReceiver,
     net::{
         errors::{
-            plain_connection::SerializeFailed,
             secure_connection::{DecryptFailed, ReadFailed},
-            PlainConnectionError, SecureConnectionError,
+            SecureConnectionError,
         },
-        PlainReceiver, Socket,
+        Socket,
     },
 };
 
