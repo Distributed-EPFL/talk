@@ -28,7 +28,7 @@ pub struct PublicKey(EdPublicKey);
 pub struct Signature(EdSignature);
 
 /// An ed25519 keypair.
-/// 
+///
 /// This keypair can be used directly to sign messages via
 /// [`KeyPair::sign_raw`]. The emmitted [`Signature`]s can be
 /// verified against its [`PublicKey`] (see the respective
@@ -78,7 +78,7 @@ impl KeyPair {
 }
 
 /// An ed25519 public key.
-/// 
+///
 /// Used to validate a signature on a message. See the documentation
 /// for [`Signature`] for details.
 impl PublicKey {
