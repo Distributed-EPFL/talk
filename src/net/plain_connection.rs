@@ -1,5 +1,6 @@
 use crate::net::{
-    errors::PlainConnectionError, PlainReceiver, PlainSender, Socket,
+    errors::{PlainConnectionError, SecureConnectionError},
+    PlainReceiver, PlainSender, SecureConnection, Socket,
 };
 
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,12 @@ impl PlainConnection {
 
     pub fn split(self) -> (PlainSender, PlainReceiver) {
         (self.sender, self.receiver)
+    }
+
+    pub async fn secure(
+        self,
+    ) -> Result<SecureConnection, SecureConnectionError> {
+        SecureConnection::new(self).await
     }
 }
 
