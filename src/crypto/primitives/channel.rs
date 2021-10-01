@@ -291,4 +291,52 @@ mod tests {
 
         assert_eq!(plaintext, 34u32);
     }
+
+    #[test]
+    fn authenticate_correct() {
+        let (
+            (mut alice_sender, mut alice_receiver),
+            (mut bob_sender, mut bob_receiver),
+        ) = setup();
+
+        for message in 0..128u32 {
+            let ciphertext = alice_sender.authenticate(&message).unwrap();
+            let plaintext: u32 =
+                bob_receiver.authenticate(&ciphertext[..]).unwrap();
+
+            assert_eq!(plaintext, message);
+
+            let ciphertext = bob_sender.authenticate(&message).unwrap();
+            let plaintext: u32 =
+                alice_receiver.authenticate(&ciphertext[..]).unwrap();
+
+            assert_eq!(plaintext, message);
+        }
+    }
+
+    #[test]
+    fn authenticate_compromise() {
+        let ((mut alice_sender, _), (_, mut bob_receiver)) = setup();
+
+        let mut ciphertext = alice_sender.authenticate(&33u32).unwrap();
+        ciphertext[3] = ciphertext[3].wrapping_add(1);
+
+        assert!(bob_receiver.authenticate::<u32>(&ciphertext[..]).is_err());
+    }
+
+    #[test]
+    fn authenticate_compromise_then_correct() {
+        let ((mut alice_sender, _), (_, mut bob_receiver)) = setup();
+
+        let mut ciphertext = alice_sender.authenticate(&33u32).unwrap();
+        ciphertext[3] = ciphertext[3].wrapping_add(1);
+
+        let _ = bob_receiver.authenticate::<u32>(&ciphertext[..]);
+
+        let ciphertext = alice_sender.authenticate(&34u32).unwrap();
+        let plaintext: u32 =
+            bob_receiver.authenticate(&ciphertext[..]).unwrap();
+
+        assert_eq!(plaintext, 34u32);
+    }
 }
