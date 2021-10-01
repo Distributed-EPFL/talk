@@ -47,8 +47,8 @@ impl Sender {
     where
         M: Serialize,
     {
-        let mut buffer = Vec::new();
-        self.encrypt_into(message, &mut buffer)?;
+        let mut buffer = Vec::new(); // Create a `buffer` to encrypt into
+        self.encrypt_into(message, &mut buffer)?; // Encrypt `message` into `buffer`
         Ok(buffer)
     }
 
@@ -61,9 +61,9 @@ impl Sender {
         M: Serialize,
     {
         bincode::serialize_into(buffer as &mut Vec<u8>, message)
-            .context(SerializeFailed)?;
+            .context(SerializeFailed)?; // Serialize `message` into `buffer`
 
-        let nonce = self.0.nonce();
+        let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
             .cipher
@@ -72,7 +72,7 @@ impl Sender {
                 &[],
                 buffer as &mut Vec<u8>,
             )
-            .unwrap();
+            .unwrap(); // Encrypt `buffer` in place
 
         Ok(())
     }
@@ -84,8 +84,8 @@ impl Sender {
     where
         M: Serialize,
     {
-        let mut buffer = Vec::new();
-        self.authenticate_into(message, &mut buffer)?;
+        let mut buffer = Vec::new(); // Create a `buffer` to authenticate into
+        self.authenticate_into(message, &mut buffer)?; // Authenticate `message` into `buffer`
         Ok(buffer)
     }
 
@@ -98,82 +98,90 @@ impl Sender {
         M: Serialize,
     {
         bincode::serialize_into(buffer as &mut Vec<u8>, message)
-            .context(SerializeFailed)?;
+            .context(SerializeFailed)?; // Serialize `message` into `buffer`
 
-        let nonce = self.0.nonce();
+        let nonce = self.0.nonce(); // Generate a new `nonce`
 
-        self.0.hasher.reset();
-        self.0.hasher.update(&nonce);
-        self.0.hasher.update(&buffer);
+        self.0.hasher.reset(); // Compute the keyed hash..
+        self.0.hasher.update(&nonce); // .. of `nonce`..
+        self.0.hasher.update(&buffer); // .. and `buffer`..
 
-        let tag = self.0.hasher.finalize();
-        buffer.extend_from_slice(tag.as_bytes());
+        let tag = self.0.hasher.finalize(); // .. to obtain `tag`
+
+        buffer.extend_from_slice(tag.as_bytes()); // Append `tag` to `buffer`
 
         Ok(())
     }
 }
 
 impl Receiver {
-    pub fn decrypt<M>(&mut self, message: &[u8]) -> Result<M, ChannelError>
+    pub fn decrypt<M>(&mut self, ciphertext: &[u8]) -> Result<M, ChannelError>
     where
         M: for<'de> Deserialize<'de>,
     {
-        let nonce = self.0.nonce();
+        let nonce = self.0.nonce(); // Generate a new `nonce`
 
         let message = self
             .0
             .cipher
-            .decrypt(&ChaChaNonce::from_slice(&nonce), message)
-            .map_err(|_| ChannelError::DecryptFailed)?;
+            .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
+            .map_err(|_| ChannelError::DecryptFailed)?; // Decrypt `ciphertext` to obtain `message`
 
-        bincode::deserialize(&message).context(DeserializeFailed)
+        bincode::deserialize(&message).context(DeserializeFailed) // Deserialize `message`
     }
 
     pub fn decrypt_in_place<M>(
         &mut self,
-        message: &mut Vec<u8>,
+        ciphertext: &mut Vec<u8>,
     ) -> Result<M, ChannelError>
     where
         M: for<'de> Deserialize<'de>,
     {
-        let nonce = self.0.nonce();
+        let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
             .cipher
             .decrypt_in_place(
                 &ChaChaNonce::from_slice(&nonce),
                 &[],
-                message as &mut Vec<u8>,
+                ciphertext as &mut Vec<u8>,
             )
-            .map_err(|_| ChannelError::DecryptFailed)?;
+            .map_err(|_| ChannelError::DecryptFailed)?; // Decrypt `ciphertext` in place
 
-        bincode::deserialize(message).context(DeserializeFailed)
+        let plaintext = ciphertext; // `ciphertext` is now `plaintext`
+        bincode::deserialize(plaintext).context(DeserializeFailed) // Deserialize `plaintext`
     }
 
-    pub fn authenticate<M>(&mut self, message: &[u8]) -> Result<M, ChannelError>
+    pub fn authenticate<M>(
+        &mut self,
+        ciphertext: &[u8],
+    ) -> Result<M, ChannelError>
     where
         M: for<'de> Deserialize<'de>,
     {
-        let nonce = self.0.nonce();
+        let nonce = self.0.nonce(); // Generate a new `nonce`
 
-        if message.len() < HASH_LENGTH {
-            AuthenticateFailed.fail()
+        if ciphertext.len() < HASH_LENGTH {
+            // If `ciphertext` is shorter than `HASH_LENGTH`..
+            AuthenticateFailed.fail() // .. then it cannot contain an authentication tag
         } else {
-            let (message, tag) = message.split_at(message.len() - HASH_LENGTH);
+            let (message, tag) =
+                ciphertext.split_at(ciphertext.len() - HASH_LENGTH); // Split `ciphertext` into `message` and `tag` (`tag` is always second and `HASH_LENGTH` long)
 
             let tag: [u8; HASH_LENGTH] = tag.try_into().unwrap(); // This is guaranteed to work because `message.len() >= HASH_LENGTH`
-            let tag: Hash = tag.into();
+            let tag: Hash = tag.into(); // Wrap `tag` into a `Hash`
 
-            self.0.hasher.reset();
-            self.0.hasher.update(&nonce);
-            self.0.hasher.update(message);
+            self.0.hasher.reset(); // Compute the keyed hash..
+            self.0.hasher.update(&nonce); // of `nonce`..
+            self.0.hasher.update(message); // .. and `buffer`..
 
-            let digest = self.0.hasher.finalize();
+            let digest = self.0.hasher.finalize(); // .. to obtain `digest`
 
+            // IMPORTANT: The following equality MUST be computed between `Hash`es to ensure constant-time comparison!
             if tag == digest {
-                bincode::deserialize(message).context(DeserializeFailed)
+                bincode::deserialize(message).context(DeserializeFailed) // If `tag` is correct, deserialize `message`..
             } else {
-                AuthenticateFailed.fail()
+                AuthenticateFailed.fail() // .. otherwise, authentication failed
             }
         }
     }
@@ -184,10 +192,12 @@ impl State {
         let mut nonce: [u8; NONCE_LENGTH] = self.nonce.to_be_bytes()
             [16 - NONCE_LENGTH..]
             .try_into()
-            .unwrap();
+            .unwrap(); // Initialize `nonce` to the `NONCE_LENGTH` least significant bytes of `self.nonce` (in Little Endian representation)
 
-        nonce[0] = self.lane as u8;
-        self.nonce += 1;
+        nonce[0] = self.lane as u8; // Set the first byte of `nonce` to the representation of `self.lane`
+                                    // As a result of this, `nonce` can effectively span over 2^(11 * 8) ~ 3E26 messages
+
+        self.nonce += 1; // Increment `self.nonce`
 
         nonce
     }
@@ -199,6 +209,7 @@ pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
     let cipher_key = ChaChaKey::from_slice(&key);
     let hasher_key = key;
 
+    // Corresponding ends of opposite roles must match
     let (sender_lane, receiver_lane) = match role {
         Role::Even => (Lane::High, Lane::Low),
         Role::Odd => (Lane::Low, Lane::High),
