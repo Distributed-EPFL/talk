@@ -31,18 +31,29 @@ pub enum ClientError {
     AddressUnknown,
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-pub enum ListenError {
-    #[snafu(display("`listen` interrupted: {}", source))]
-    ListenInterrupted { source: FuseError },
+pub use listen::ListenError;
+pub use serve::ServeError;
+
+pub(crate) mod listen {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum ListenError {
+        #[snafu(display("`listen` interrupted: {}", source))]
+        ListenInterrupted { source: FuseError },
+    }
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
-pub enum ServeError {
-    #[snafu(display("`serve` interrupted: {}", source))]
-    ServeInterrupted { source: FuseError },
-    #[snafu(display("connection error: {}", source))]
-    ConnectionError { source: PlainConnectionError },
+pub(crate) mod serve {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum ServeError {
+        #[snafu(display("`serve` interrupted: {}", source))]
+        ServeInterrupted { source: FuseError },
+        #[snafu(display("connection error: {}", source))]
+        ConnectionError { source: PlainConnectionError },
+    }
 }
