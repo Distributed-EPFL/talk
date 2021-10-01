@@ -5,6 +5,8 @@ use crate::{
 
 use snafu::Snafu;
 
+use std::io::Error as StdIoError;
+
 use tokio::io::Error as TokioIoError;
 
 #[derive(Debug, Snafu)]
@@ -31,6 +33,7 @@ pub enum ClientError {
     AddressUnknown,
 }
 
+pub use attempt::AttemptError;
 pub use listen::ListenError;
 pub use serve::ServeError;
 
@@ -53,6 +56,19 @@ pub(crate) mod serve {
     pub enum ServeError {
         #[snafu(display("`serve` interrupted: {}", source))]
         ServeInterrupted { source: FuseError },
+        #[snafu(display("connection error: {}", source))]
+        ConnectionError { source: PlainConnectionError },
+    }
+}
+
+pub(crate) mod attempt {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum AttemptError {
+        #[snafu(display("`connect` failed: {}", source))]
+        ConnectFailed { source: StdIoError },
         #[snafu(display("connection error: {}", source))]
         ConnectionError { source: PlainConnectionError },
     }

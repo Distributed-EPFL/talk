@@ -1,3 +1,4 @@
+mod client;
 mod client_settings;
 mod request;
 mod response;
@@ -10,6 +11,7 @@ pub mod errors;
 use request::Request;
 use response::Response;
 
+pub use client::Client;
 pub use client_settings::ClientSettings;
 pub use server::Server;
 pub use server_settings::ServerSettings;
