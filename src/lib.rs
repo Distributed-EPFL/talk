@@ -6,3 +6,6 @@ pub mod net;
 
 #[allow(dead_code)]
 pub mod sync;
+
+#[allow(dead_code)]
+pub mod time;
