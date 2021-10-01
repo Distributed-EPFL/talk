@@ -17,19 +17,19 @@ use tokio::io::{AsyncWriteExt, WriteHalf};
 
 pub struct SecureSender {
     write_half: WriteHalf<Box<dyn Socket>>,
-    buffer: Vec<u8>,
+    unit: Vec<u8>,
     channel_sender: ChannelSender,
 }
 
 impl SecureSender {
     pub(in crate::net) fn new(
         write_half: WriteHalf<Box<dyn Socket>>,
-        buffer: Vec<u8>,
+        unit: Vec<u8>,
         channel_sender: ChannelSender,
     ) -> Self {
         Self {
             write_half,
-            buffer,
+            unit,
             channel_sender,
         }
     }
@@ -42,10 +42,10 @@ impl SecureSender {
         M: Serialize,
     {
         self.channel_sender
-            .encrypt_into(message, &mut self.buffer)
+            .encrypt_into(message, &mut self.unit)
             .context(EncryptFailed)?;
 
-        self.flush_buffer().await
+        self.flush_unit().await
     }
 
     pub async fn send_plain<M>(
@@ -56,21 +56,21 @@ impl SecureSender {
         M: Serialize,
     {
         self.channel_sender
-            .authenticate_into(message, &mut self.buffer)
+            .authenticate_into(message, &mut self.unit)
             .context(EncryptFailed)?;
 
-        self.flush_buffer().await
+        self.flush_unit().await
     }
 
-    async fn flush_buffer(&mut self) -> Result<(), SecureConnectionError> {
-        self.send_size(self.buffer.len()).await?;
+    async fn flush_unit(&mut self) -> Result<(), SecureConnectionError> {
+        self.send_size(self.unit.len()).await?;
 
         self.write_half
-            .write_all(&self.buffer)
+            .write_all(&self.unit)
             .await
             .context(WriteFailed)?;
 
-        self.buffer.clear();
+        self.unit.clear();
 
         Ok(())
     }

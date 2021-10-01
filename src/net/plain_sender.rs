@@ -17,14 +17,14 @@ use tokio::io::{AsyncWriteExt, WriteHalf};
 
 pub struct PlainSender {
     write_half: WriteHalf<Box<dyn Socket>>,
-    buffer: Vec<u8>,
+    unit: Vec<u8>,
 }
 
 impl PlainSender {
     pub(in crate::net) fn new(send_half: WriteHalf<Box<dyn Socket>>) -> Self {
         PlainSender {
             write_half: send_half,
-            buffer: Vec::new(),
+            unit: Vec::new(),
         }
     }
 
@@ -39,21 +39,21 @@ impl PlainSender {
     where
         M: Serialize,
     {
-        bincode::serialize_into(&mut self.buffer, &message)
+        bincode::serialize_into(&mut self.unit, &message)
             .context(SerializeFailed)?;
 
-        self.flush_buffer().await
+        self.flush_unit().await
     }
 
-    async fn flush_buffer(&mut self) -> Result<(), PlainConnectionError> {
-        self.send_size(self.buffer.len()).await?;
+    async fn flush_unit(&mut self) -> Result<(), PlainConnectionError> {
+        self.send_size(self.unit.len()).await?;
 
         self.write_half
-            .write_all(&self.buffer)
+            .write_all(&self.unit)
             .await
             .context(WriteFailed)?;
 
-        self.buffer.clear();
+        self.unit.clear();
 
         Ok(())
     }
@@ -76,6 +76,6 @@ impl PlainSender {
         self,
         channel_sender: ChannelSender,
     ) -> SecureSender {
-        SecureSender::new(self.write_half, self.buffer, channel_sender)
+        SecureSender::new(self.write_half, self.unit, channel_sender)
     }
 }
