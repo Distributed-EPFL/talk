@@ -101,5 +101,7 @@ pub(crate) mod channel {
         DeserializeFailed { source: BincodeError },
         #[snafu(display("failed to decrypt message"))]
         DecryptFailed,
+        #[snafu(display("failed to authenticate message"))]
+        AuthenticateFailed,
     }
 }

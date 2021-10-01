@@ -1,3 +1,5 @@
+use blake3::{Hash, Hasher};
+
 use chacha20poly1305::aead::{
     Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace,
     NewAead as ChaChaNewAead,
@@ -8,10 +10,11 @@ use chacha20poly1305::{
 
 use crate::crypto::primitives::{
     errors::{
-        channel::{DeserializeFailed, SerializeFailed},
+        channel::{AuthenticateFailed, DeserializeFailed, SerializeFailed},
         ChannelError,
     },
     exchange::{Role, SharedKey},
+    hash::HASH_LENGTH,
 };
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +37,7 @@ enum Lane {
 
 struct State {
     cipher: ChaCha20Poly1305,
+    hasher: Hasher,
     lane: Lane,
     nonce: u128,
 }
@@ -69,6 +73,41 @@ impl Sender {
                 buffer as &mut Vec<u8>,
             )
             .unwrap();
+
+        Ok(())
+    }
+
+    pub fn authenticate<M>(
+        &mut self,
+        message: &M,
+    ) -> Result<Vec<u8>, ChannelError>
+    where
+        M: Serialize,
+    {
+        let mut buffer = Vec::new();
+        self.authenticate_into(message, &mut buffer)?;
+        Ok(buffer)
+    }
+
+    pub fn authenticate_into<M>(
+        &mut self,
+        message: &M,
+        buffer: &mut Vec<u8>,
+    ) -> Result<(), ChannelError>
+    where
+        M: Serialize,
+    {
+        bincode::serialize_into(buffer as &mut Vec<u8>, message)
+            .context(SerializeFailed)?;
+
+        let nonce = self.0.nonce();
+
+        self.0.hasher.reset();
+        self.0.hasher.update(&nonce);
+        self.0.hasher.update(&buffer);
+
+        let tag = self.0.hasher.finalize();
+        buffer.extend_from_slice(tag.as_bytes());
 
         Ok(())
     }
@@ -110,6 +149,34 @@ impl Receiver {
 
         bincode::deserialize(message).context(DeserializeFailed)
     }
+
+    pub fn authenticate<M>(&mut self, message: &[u8]) -> Result<M, ChannelError>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        let nonce = self.0.nonce();
+
+        if message.len() < HASH_LENGTH {
+            AuthenticateFailed.fail()
+        } else {
+            let (message, tag) = message.split_at(message.len() - HASH_LENGTH);
+
+            let tag: [u8; HASH_LENGTH] = tag.try_into().unwrap(); // This is guaranteed to work because `message.len() >= HASH_LENGTH`
+            let tag: Hash = tag.into();
+
+            self.0.hasher.reset();
+            self.0.hasher.update(&nonce);
+            self.0.hasher.update(message);
+
+            let digest = self.0.hasher.finalize();
+
+            if tag == digest {
+                bincode::deserialize(message).context(DeserializeFailed)
+            } else {
+                AuthenticateFailed.fail()
+            }
+        }
+    }
 }
 
 impl State {
@@ -128,7 +195,9 @@ impl State {
 
 pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
     let key = key.to_bytes();
-    let key = ChaChaKey::from_slice(&key);
+
+    let cipher_key = ChaChaKey::from_slice(&key);
+    let hasher_key = key;
 
     let (sender_lane, receiver_lane) = match role {
         Role::Even => (Lane::High, Lane::Low),
@@ -136,13 +205,15 @@ pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
     };
 
     let sender = Sender(State {
-        cipher: ChaCha20Poly1305::new(key),
+        cipher: ChaCha20Poly1305::new(cipher_key),
+        hasher: Hasher::new_keyed(&hasher_key),
         lane: sender_lane,
         nonce: 0,
     });
 
     let receiver = Receiver(State {
-        cipher: ChaCha20Poly1305::new(key),
+        cipher: ChaCha20Poly1305::new(cipher_key),
+        hasher: Hasher::new_keyed(&hasher_key),
         lane: receiver_lane,
         nonce: 0,
     });
