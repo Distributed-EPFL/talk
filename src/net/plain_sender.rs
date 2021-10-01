@@ -39,8 +39,6 @@ impl PlainSender {
     where
         M: Serialize,
     {
-        self.buffer.clear();
-
         bincode::serialize_into(&mut self.buffer, &message)
             .context(SerializeFailed)?;
 
@@ -50,6 +48,8 @@ impl PlainSender {
             .write_all(&self.buffer[..])
             .await
             .context(WriteFailed)?;
+
+        self.buffer.clear();
 
         Ok(())
     }
