@@ -10,6 +10,7 @@ mod socket;
 
 pub mod errors;
 pub mod sockets;
+pub mod traits;
 
 pub use connector::Connector;
 pub use listener::Listener;
