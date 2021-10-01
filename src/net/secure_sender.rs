@@ -57,6 +57,29 @@ impl SecureSender {
         Ok(())
     }
 
+    pub async fn send_plain<M>(
+        &mut self,
+        message: &M,
+    ) -> Result<(), SecureConnectionError>
+    where
+        M: Serialize,
+    {
+        self.buffer.clear();
+
+        self.channel_sender
+            .authenticate_into(message, &mut self.buffer)
+            .context(EncryptFailed)?;
+
+        self.send_size(self.buffer.len()).await?;
+
+        self.write_half
+            .write_all(&self.buffer[..])
+            .await
+            .context(WriteFailed)?;
+
+        Ok(())
+    }
+
     async fn send_size(
         &mut self,
         size: usize,
