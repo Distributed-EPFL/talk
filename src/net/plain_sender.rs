@@ -42,10 +42,14 @@ impl PlainSender {
         bincode::serialize_into(&mut self.buffer, &message)
             .context(SerializeFailed)?;
 
+        self.flush_buffer().await
+    }
+
+    async fn flush_buffer(&mut self) -> Result<(), PlainConnectionError> {
         self.send_size(self.buffer.len()).await?;
 
         self.write_half
-            .write_all(&self.buffer[..])
+            .write_all(&self.buffer)
             .await
             .context(WriteFailed)?;
 
