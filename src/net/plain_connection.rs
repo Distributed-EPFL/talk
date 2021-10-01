@@ -33,7 +33,7 @@ impl PlainConnection {
         sender: PlainSender,
         receiver: PlainReceiver,
     ) -> Result<Self, PlainConnectionError> {
-        if receiver.read_half().is_pair_of(sender.send_half()) {
+        if receiver.read_half().is_pair_of(sender.write_half()) {
             Ok(Self { sender, receiver })
         } else {
             Err(PlainConnectionError::MismatchedHalves)

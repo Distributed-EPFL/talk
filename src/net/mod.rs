@@ -7,10 +7,13 @@ mod secure_connection;
 mod secure_receiver;
 mod secure_sender;
 mod socket;
+mod unit_sender;
 
 pub mod errors;
 pub mod sockets;
 pub mod traits;
+
+use unit_sender::UnitSender;
 
 pub use connector::Connector;
 pub use listener::Listener;

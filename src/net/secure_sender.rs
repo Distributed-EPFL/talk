@@ -5,7 +5,7 @@ use crate::{
             secure_connection::{EncryptFailed, WriteFailed},
             SecureConnectionError,
         },
-        Socket,
+        UnitSender,
     },
 };
 
@@ -13,23 +13,18 @@ use serde::Serialize;
 
 use snafu::ResultExt;
 
-use tokio::io::{AsyncWriteExt, WriteHalf};
-
 pub struct SecureSender {
-    write_half: WriteHalf<Box<dyn Socket>>,
-    unit: Vec<u8>,
+    unit_sender: UnitSender,
     channel_sender: ChannelSender,
 }
 
 impl SecureSender {
     pub(in crate::net) fn new(
-        write_half: WriteHalf<Box<dyn Socket>>,
-        unit: Vec<u8>,
+        unit_sender: UnitSender,
         channel_sender: ChannelSender,
     ) -> Self {
         Self {
-            write_half,
-            unit,
+            unit_sender,
             channel_sender,
         }
     }
@@ -42,10 +37,10 @@ impl SecureSender {
         M: Serialize,
     {
         self.channel_sender
-            .encrypt_into(message, &mut self.unit)
+            .encrypt_into(message, self.unit_sender.as_vec())
             .context(EncryptFailed)?;
 
-        self.flush_unit().await
+        self.unit_sender.flush().await.context(WriteFailed)
     }
 
     pub async fn send_plain<M>(
@@ -56,36 +51,9 @@ impl SecureSender {
         M: Serialize,
     {
         self.channel_sender
-            .authenticate_into(message, &mut self.unit)
+            .authenticate_into(message, self.unit_sender.as_vec())
             .context(EncryptFailed)?;
 
-        self.flush_unit().await
-    }
-
-    async fn flush_unit(&mut self) -> Result<(), SecureConnectionError> {
-        self.send_size(self.unit.len()).await?;
-
-        self.write_half
-            .write_all(&self.unit)
-            .await
-            .context(WriteFailed)?;
-
-        self.unit.clear();
-
-        Ok(())
-    }
-
-    async fn send_size(
-        &mut self,
-        size: usize,
-    ) -> Result<(), SecureConnectionError> {
-        let size = (size as u32).to_le_bytes();
-
-        self.write_half
-            .write_all(&size)
-            .await
-            .context(WriteFailed)?;
-
-        Ok(())
+        self.unit_sender.flush().await.context(WriteFailed)
     }
 }
