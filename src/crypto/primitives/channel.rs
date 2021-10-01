@@ -63,7 +63,11 @@ impl Sender {
 
         self.0
             .cipher
-            .encrypt_in_place(&nonce, &[], buffer as &mut Vec<u8>)
+            .encrypt_in_place(
+                &ChaChaNonce::from_slice(&nonce),
+                &[],
+                buffer as &mut Vec<u8>,
+            )
             .unwrap();
 
         Ok(())
@@ -80,7 +84,7 @@ impl Receiver {
         let message = self
             .0
             .cipher
-            .decrypt(&nonce, message)
+            .decrypt(&ChaChaNonce::from_slice(&nonce), message)
             .map_err(|_| ChannelError::DecryptFailed)?;
 
         bincode::deserialize(&message).context(DeserializeFailed)
@@ -97,7 +101,11 @@ impl Receiver {
 
         self.0
             .cipher
-            .decrypt_in_place(&nonce, &[], message as &mut Vec<u8>)
+            .decrypt_in_place(
+                &ChaChaNonce::from_slice(&nonce),
+                &[],
+                message as &mut Vec<u8>,
+            )
             .map_err(|_| ChannelError::DecryptFailed)?;
 
         bincode::deserialize(message).context(DeserializeFailed)
@@ -105,7 +113,7 @@ impl Receiver {
 }
 
 impl State {
-    fn nonce(&mut self) -> ChaChaNonce {
+    fn nonce(&mut self) -> [u8; NONCE_LENGTH] {
         let mut nonce: [u8; NONCE_LENGTH] = self.nonce.to_be_bytes()
             [16 - NONCE_LENGTH..]
             .try_into()
@@ -114,7 +122,7 @@ impl State {
         nonce[0] = self.lane as u8;
         self.nonce += 1;
 
-        *ChaChaNonce::from_slice(&nonce)
+        nonce
     }
 }
 
@@ -148,8 +156,7 @@ mod tests {
 
     use crate::crypto::primitives::exchange::KeyPair;
 
-    #[test]
-    fn correct() {
+    fn setup() -> ((Sender, Receiver), (Sender, Receiver)) {
         let alice_keypair = KeyPair::random();
         let bob_keypair = KeyPair::random();
 
@@ -158,22 +165,59 @@ mod tests {
 
         let (alice_shared_key, alice_role) =
             alice_keypair.exchange(bob_public_key);
+
         let (bob_shared_key, bob_role) = bob_keypair.exchange(alice_public_key);
 
-        let (mut alice_sender, mut alice_receiver) =
-            channel(alice_shared_key, alice_role);
-        let (mut bob_sender, mut bob_receiver) =
-            channel(bob_shared_key, bob_role);
+        let alice_channel = channel(alice_shared_key, alice_role);
+
+        let bob_channel = channel(bob_shared_key, bob_role);
+
+        (alice_channel, bob_channel)
+    }
+
+    #[test]
+    fn encrypt_correct() {
+        let (
+            (mut alice_sender, mut alice_receiver),
+            (mut bob_sender, mut bob_receiver),
+        ) = setup();
 
         for message in 0..128u32 {
             let ciphertext = alice_sender.encrypt(&message).unwrap();
             let plaintext: u32 = bob_receiver.decrypt(&ciphertext[..]).unwrap();
+
             assert_eq!(plaintext, message);
 
             let ciphertext = bob_sender.encrypt(&message).unwrap();
             let plaintext: u32 =
                 alice_receiver.decrypt(&ciphertext[..]).unwrap();
+
             assert_eq!(plaintext, message);
         }
+    }
+
+    #[test]
+    fn encrypt_compromise() {
+        let ((mut alice_sender, _), (_, mut bob_receiver)) = setup();
+
+        let mut ciphertext = alice_sender.encrypt(&33u32).unwrap();
+        ciphertext[3] = ciphertext[3].wrapping_add(1);
+
+        assert!(bob_receiver.decrypt::<u32>(&ciphertext[..]).is_err());
+    }
+
+    #[test]
+    fn encrypt_compromise_then_correct() {
+        let ((mut alice_sender, _), (_, mut bob_receiver)) = setup();
+
+        let mut ciphertext = alice_sender.encrypt(&33u32).unwrap();
+        ciphertext[3] = ciphertext[3].wrapping_add(1);
+
+        let _ = bob_receiver.decrypt::<u32>(&ciphertext[..]);
+
+        let ciphertext = alice_sender.encrypt(&34u32).unwrap();
+        let plaintext: u32 = bob_receiver.decrypt(&ciphertext[..]).unwrap();
+
+        assert_eq!(plaintext, 34u32);
     }
 }
