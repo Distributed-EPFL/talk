@@ -19,19 +19,19 @@ use tokio::io::{AsyncReadExt, ReadHalf};
 
 pub struct SecureReceiver {
     read_half: ReadHalf<Box<dyn Socket>>,
-    buffer: Vec<u8>,
+    unit: Vec<u8>,
     channel_receiver: ChannelReceiver,
 }
 
 impl SecureReceiver {
     pub(in crate::net) fn new(
         read_half: ReadHalf<Box<dyn Socket>>,
-        buffer: Vec<u8>,
+        unit: Vec<u8>,
         channel_receiver: ChannelReceiver,
     ) -> Self {
         Self {
             read_half,
-            buffer,
+            unit,
             channel_receiver,
         }
     }
@@ -40,16 +40,10 @@ impl SecureReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        let size = self.receive_size().await?;
-        self.buffer.resize(size, 0);
-
-        self.read_half
-            .read_exact(&mut self.buffer[..])
-            .await
-            .context(ReadFailed)?;
+        self.receive_unit().await?;
 
         self.channel_receiver
-            .decrypt_in_place(&mut self.buffer)
+            .decrypt_in_place(&mut self.unit)
             .context(DecryptFailed)
     }
 
@@ -57,17 +51,23 @@ impl SecureReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
+        self.receive_unit().await?;
+
+        self.channel_receiver
+            .authenticate(&self.unit)
+            .context(DecryptFailed)
+    }
+
+    async fn receive_unit(&mut self) -> Result<(), SecureConnectionError> {
         let size = self.receive_size().await?;
-        self.buffer.resize(size, 0);
+        self.unit.resize(size, 0);
 
         self.read_half
-            .read_exact(&mut self.buffer[..])
+            .read_exact(&mut self.unit[..])
             .await
             .context(ReadFailed)?;
 
-        self.channel_receiver
-            .authenticate(&self.buffer)
-            .context(DecryptFailed)
+        Ok(())
     }
 
     async fn receive_size(&mut self) -> Result<usize, SecureConnectionError> {

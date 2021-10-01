@@ -19,14 +19,14 @@ use tokio::io::{AsyncReadExt, ReadHalf};
 
 pub struct PlainReceiver {
     read_half: ReadHalf<Box<dyn Socket>>,
-    buffer: Vec<u8>,
+    unit: Vec<u8>,
 }
 
 impl PlainReceiver {
     pub(in crate::net) fn new(read_half: ReadHalf<Box<dyn Socket>>) -> Self {
         PlainReceiver {
             read_half,
-            buffer: Vec::new(),
+            unit: Vec::new(),
         }
     }
 
@@ -38,15 +38,20 @@ impl PlainReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
+        self.receive_unit().await?;
+        bincode::deserialize(&self.unit).context(DeserializeFailed)
+    }
+
+    async fn receive_unit(&mut self) -> Result<(), PlainConnectionError> {
         let size = self.receive_size().await?;
-        self.buffer.resize(size, 0);
+        self.unit.resize(size, 0);
 
         self.read_half
-            .read_exact(&mut self.buffer[..])
+            .read_exact(&mut self.unit[..])
             .await
             .context(ReadFailed)?;
 
-        bincode::deserialize(&self.buffer).context(DeserializeFailed)
+        Ok(())
     }
 
     async fn receive_size(&mut self) -> Result<usize, PlainConnectionError> {
@@ -64,6 +69,6 @@ impl PlainReceiver {
         self,
         channel_receiver: ChannelReceiver,
     ) -> SecureReceiver {
-        SecureReceiver::new(self.read_half, self.buffer, channel_receiver)
+        SecureReceiver::new(self.read_half, self.unit, channel_receiver)
     }
 }
