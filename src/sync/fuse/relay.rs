@@ -1,4 +1,4 @@
-use crate::sync::fuse::{errors::FuseBurned, FuseError};
+use crate::sync::fuse::errors::{FuseBurned, FuseError};
 
 use std::future::Future;
 
