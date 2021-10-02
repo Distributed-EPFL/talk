@@ -35,7 +35,7 @@ impl PlainReceiver {
         M: for<'de> Deserialize<'de>,
     {
         self.unit_receiver.receive().await.context(ReadFailed)?;
-        
+
         bincode::deserialize(self.unit_receiver.as_slice())
             .context(DeserializeFailed)
     }
