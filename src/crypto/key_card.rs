@@ -29,8 +29,8 @@ struct PublicKeys {
 impl KeyCard {
     pub fn from_keychain(keychain: &KeyChain) -> Self {
         let keys = PublicKeys {
-            sign: keychain.sign.public(),
-            multi: keychain.multi.public(),
+            sign: keychain.keypairs.sign.public(),
+            multi: keychain.keypairs.multi.public(),
         };
 
         let signature = keychain.sign(&keys).unwrap();
