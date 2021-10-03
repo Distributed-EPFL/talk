@@ -7,6 +7,6 @@ pub trait Listener {
     type Error;
 
     async fn accept(
-        &self,
+        &mut self,
     ) -> Result<(PublicKey, SecureConnection), Self::Error>;
 }

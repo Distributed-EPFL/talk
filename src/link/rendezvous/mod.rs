@@ -1,5 +1,7 @@
 mod client;
 mod client_settings;
+mod listener;
+mod listener_settings;
 mod request;
 mod response;
 mod server;
@@ -13,6 +15,8 @@ use response::Response;
 
 pub use client::Client;
 pub use client_settings::ClientSettings;
+pub use listener::Listener;
+pub use listener_settings::ListenerSettings;
 pub use server::Server;
 pub use server_settings::ServerSettings;
 pub use shard_id::ShardId;
