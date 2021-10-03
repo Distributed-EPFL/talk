@@ -51,8 +51,8 @@ impl Server {
         }));
 
         let fuse = Fuse::new();
-
         let relay = fuse.relay();
+
         let listener =
             TcpListener::bind(address).await.context(InitializeFailed)?;
 
