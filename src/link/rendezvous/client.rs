@@ -2,9 +2,12 @@ use crate::{
     crypto::{primitives::sign::PublicKey, KeyCard},
     link::rendezvous::{
         errors::{
-            client::{AttemptError, ConnectFailed, ConnectionError},
-            AddressUnknown, AlreadyPublished, CardUnknown, ClientError,
-            ShardFull, ShardIdInvalid, ShardIncomplete,
+            client::{
+                AddressUnknown, AlreadyPublished, AttemptError, CardUnknown,
+                ConnectFailed, ConnectionError, ShardFull, ShardIdInvalid,
+                ShardIncomplete,
+            },
+            ClientError,
         },
         ClientSettings, Request, Response, ShardId,
     },

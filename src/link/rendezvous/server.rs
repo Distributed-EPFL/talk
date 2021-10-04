@@ -3,10 +3,10 @@ use crate::{
     link::rendezvous::{
         errors::{
             server::{
-                ConnectionError, ListenError, ListenInterrupted, ServeError,
-                ServeInterrupted,
+                ConnectionError, InitializeFailed, ListenError,
+                ListenInterrupted, ServeError, ServeInterrupted,
             },
-            InitializeFailed, ServerError,
+            ServerError,
         },
         Request, Response, ServerSettings, ShardId,
     },
