@@ -2,7 +2,10 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
-    link::rendezvous::{Client, ListenerSettings},
+    link::rendezvous::{
+        errors::listener::{ListenError, ListenInterrupted},
+        Client, ListenerSettings,
+    },
     net::{
         traits::TcpConnect, Listener as NetListener, PlainConnection,
         SecureConnection,
@@ -10,6 +13,9 @@ use crate::{
     sync::fuse::{Fuse, Relay},
 };
 
+use snafu::ResultExt;
+
+use std::convert::Infallible;
 use std::net::Ipv4Addr;
 
 use tokio::net::TcpListener;
@@ -17,7 +23,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub struct Listener {
-    queue: Receiver<(PublicKey, SecureConnection)>,
+    outlet: Receiver<(PublicKey, SecureConnection)>,
     fuse: Fuse,
 }
 
@@ -42,46 +48,54 @@ impl Listener {
         let fuse = Fuse::new();
         let relay = fuse.relay();
 
-        let (sender, receiver) = mpsc::channel(32);
+        let (inlet, outlet) = mpsc::channel(settings.channel_capacity);
 
         tokio::spawn(async move {
-            Listener::listen(keychain, listener, sender, relay).await;
+            let _ = Listener::listen(keychain, listener, inlet, relay).await;
         });
 
         let client = Client::new(server, settings.client_settings);
         client.advertise_port(root, port).await;
 
-        Listener {
-            queue: receiver,
-            fuse,
-        }
+        Listener { outlet, fuse }
     }
 
     async fn listen(
         keychain: KeyChain,
         listener: TcpListener,
-        sender: Sender<(PublicKey, SecureConnection)>,
+        inlet: Sender<(PublicKey, SecureConnection)>,
         mut relay: Relay,
-    ) {
+    ) -> Result<(), ListenError> {
         loop {
-            let (stream, _) =
-                relay.map(listener.accept()).await.unwrap().unwrap();
-
-            let mut connection =
-                PlainConnection::from(stream).secure().await.unwrap();
-
-            let keycard = connection.authenticate(&keychain).await.unwrap();
-
-            let _ = sender.send((keycard.root(), connection)).await;
+            if let Ok((stream, _)) = relay
+                .map(listener.accept())
+                .await
+                .context(ListenInterrupted)?
+            {
+                if let Ok(mut connection) =
+                    PlainConnection::from(stream).secure().await
+                {
+                    if let Ok(keycard) =
+                        connection.authenticate(&keychain).await
+                    {
+                        let _ = inlet.send((keycard.root(), connection)).await;
+                    }
+                }
+            }
         }
     }
 }
 
 #[async_trait]
 impl NetListener for Listener {
-    type Error = ();
+    type Error = Infallible;
 
-    async fn accept(&mut self) -> Result<(PublicKey, SecureConnection), ()> {
-        Ok(self.queue.recv().await.unwrap())
+    async fn accept(
+        &mut self,
+    ) -> Result<(PublicKey, SecureConnection), Infallible> {
+        // `inlet` is dropped only when `fuse` burns: if `outlet.recv()`
+        // returned `None`, it would mean that the `Listener` was dropped,
+        // which is impossible since `NetListener::accept` is being called
+        Ok(self.outlet.recv().await.unwrap())
     }
 }

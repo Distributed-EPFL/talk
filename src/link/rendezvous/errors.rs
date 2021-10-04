@@ -65,3 +65,14 @@ pub(crate) mod client {
         ConnectionError { source: PlainConnectionError },
     }
 }
+
+pub(crate) mod listener {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum ListenError {
+        #[snafu(display("`listen` interrupted: {}", source))]
+        ListenInterrupted { source: FuseError },
+    }
+}
