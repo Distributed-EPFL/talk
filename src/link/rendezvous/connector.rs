@@ -127,3 +127,46 @@ impl NetConnector for Connector {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{
+        link::rendezvous::{Listener, Server},
+        net::Listener as NetListener,
+    };
+
+    #[tokio::test]
+    async fn connect() {
+        const SERVER: &str = "127.0.0.1:1250";
+        const MESSAGE: &str = "Hello Alice, this is Bob!";
+
+        let _server = Server::new(SERVER, Default::default()).await.unwrap();
+
+        let alice_keychain = KeyChain::random();
+        let bob_keychain = KeyChain::random();
+
+        let alice_public = alice_keychain.keycard().root();
+        let bob_public = bob_keychain.keycard().root();
+
+        let mut alice_listener =
+            Listener::new(SERVER, alice_keychain, Default::default()).await;
+
+        let bob_connector =
+            Connector::new(SERVER, bob_keychain, Default::default());
+
+        let alice_task = tokio::spawn(async move {
+            let (remote, mut connection) =
+                alice_listener.accept().await.unwrap();
+
+            assert_eq!(remote, bob_public);
+            assert_eq!(connection.receive::<String>().await.unwrap(), MESSAGE);
+        });
+
+        let mut connection = bob_connector.connect(alice_public).await.unwrap();
+        connection.send(&String::from(MESSAGE)).await.unwrap();
+
+        alice_task.await.unwrap();
+    }
+}
