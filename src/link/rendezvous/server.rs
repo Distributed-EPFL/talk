@@ -2,9 +2,11 @@ use crate::{
     crypto::{primitives::sign::PublicKey, KeyCard},
     link::rendezvous::{
         errors::{
-            listen::ListenInterrupted,
-            serve::{ConnectionError, ServeInterrupted},
-            InitializeFailed, ListenError, ServeError, ServerError,
+            server::{
+                ConnectionError, ListenError, ListenInterrupted, ServeError,
+                ServeInterrupted,
+            },
+            InitializeFailed, ServerError,
         },
         Request, Response, ServerSettings, ShardId,
     },

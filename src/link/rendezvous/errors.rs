@@ -33,11 +33,7 @@ pub enum ClientError {
     AddressUnknown,
 }
 
-pub use attempt::AttemptError;
-pub use listen::ListenError;
-pub use serve::ServeError;
-
-pub(crate) mod listen {
+pub(crate) mod server {
     use super::*;
 
     #[derive(Debug, Snafu)]
@@ -46,10 +42,6 @@ pub(crate) mod listen {
         #[snafu(display("`listen` interrupted: {}", source))]
         ListenInterrupted { source: FuseError },
     }
-}
-
-pub(crate) mod serve {
-    use super::*;
 
     #[derive(Debug, Snafu)]
     #[snafu(visibility(pub(crate)))]
@@ -61,7 +53,7 @@ pub(crate) mod serve {
     }
 }
 
-pub(crate) mod attempt {
+pub(crate) mod client {
     use super::*;
 
     #[derive(Debug, Snafu)]
