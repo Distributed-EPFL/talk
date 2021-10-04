@@ -1,5 +1,7 @@
 use crate::{
-    link::rendezvous::ShardId, net::errors::PlainConnectionError,
+    crypto::primitives::sign::PublicKey,
+    link::rendezvous::ShardId,
+    net::errors::{PlainConnectionError, SecureConnectionError},
     sync::fuse::errors::FuseError,
 };
 
@@ -10,6 +12,7 @@ use std::io::Error as StdIoError;
 use tokio::io::Error as TokioIoError;
 
 pub use client::ClientError;
+pub use connector::ConnectorError;
 pub use server::ServerError;
 
 pub(crate) mod server {
@@ -77,5 +80,24 @@ pub(crate) mod listener {
     pub enum ListenError {
         #[snafu(display("`listen` interrupted: {}", source))]
         ListenInterrupted { source: FuseError },
+    }
+}
+
+pub(crate) mod connector {
+    use super::*;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility(pub(crate)))]
+    pub enum ConnectorError {
+        #[snafu(display("address unknown"))]
+        AddressUnknown,
+        #[snafu(display("connection failed: {}", source))]
+        ConnectionFailed { source: StdIoError },
+        #[snafu(display("`secure` failed: {}", source))]
+        SecureFailed { source: SecureConnectionError },
+        #[snafu(display("`authenticate` failed: {}", source))]
+        AuthenticateFailed { source: SecureConnectionError },
+        #[snafu(display("unexpected remote: {:?}", remote))]
+        UnexpectedRemote { remote: PublicKey },
     }
 }
