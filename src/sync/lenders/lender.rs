@@ -20,20 +20,36 @@ impl<Inner> Lender<Inner> {
     }
 
     pub fn take(&mut self) -> Inner {
+        let state = self.try_take();
+
+        match state {
+            Some(inner) => inner,
+            None => panic!("attempted to `Lender::take` more than once without `Lender::restore`")
+        }
+    }
+
+    pub fn try_take(&mut self) -> Option<Inner> {
         let mut state = State::Lent;
         mem::swap(&mut self.state, &mut state);
 
         match state {
-            State::Available(inner) => inner,
-            State::Lent => panic!("attempted to `Lender::take` more than once without `Lender::restore`")
+            State::Available(inner) => Some(inner),
+            State::Lent => None,
         }
     }
 
     pub fn restore(&mut self, inner: Inner) {
+        if self.try_restore(inner).is_err() {
+            panic!("attempted to `Lender::restore` more than once without `Lender::take`");
+        }
+    }
+
+    pub fn try_restore(&mut self, inner: Inner) -> Result<(), Inner> {
         if let State::Lent = self.state {
             self.state = State::Available(inner);
+            Ok(())
         } else {
-            panic!("attempted to `Lender::restore` more than once without `Lender::take`");
+            Err(inner)
         }
     }
 }
