@@ -21,7 +21,7 @@ use std::vec::Vec;
 
 pub struct Client {
     server: Box<dyn TcpConnect>,
-    pub settings: ClientSettings,
+    settings: ClientSettings,
 }
 
 impl Client {
