@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[async_trait]
-pub trait Connector {
+pub trait Connector: 'static + Send + Sync {
     async fn connect(
         &self,
         remote: PublicKey,

@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[async_trait]
-pub trait Listener {
+pub trait Listener: 'static + Send + Sync {
     async fn accept(
         &mut self,
     ) -> Result<(PublicKey, SecureConnection), DynError>;
