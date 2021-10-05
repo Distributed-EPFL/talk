@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
+    errors::DynError,
     link::rendezvous::{
         errors::{
             connector::{
@@ -112,14 +113,12 @@ impl Connector {
 
 #[async_trait]
 impl NetConnector for Connector {
-    type Error = ConnectorError;
-
     async fn connect(
         &self,
         root: PublicKey,
-    ) -> Result<SecureConnection, ConnectorError> {
+    ) -> Result<SecureConnection, DynError> {
         loop {
-            let result = self.attempt(root).await;
+            let result = self.attempt(root).await.map_err(Into::into);
 
             if result.is_ok() || !self.refresh(root).await {
                 return result;
