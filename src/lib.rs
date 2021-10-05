@@ -2,6 +2,9 @@
 pub mod crypto;
 
 #[allow(dead_code)]
+pub mod errors;
+
+#[allow(dead_code)]
 pub mod link;
 
 #[allow(dead_code)]
