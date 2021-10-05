@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
+    errors::DynError,
     link::rendezvous::{
         errors::listener::{ListenError, ListenInterrupted},
         Client, ListenerSettings,
@@ -15,7 +16,6 @@ use crate::{
 
 use snafu::ResultExt;
 
-use std::convert::Infallible;
 use std::net::Ipv4Addr;
 
 use tokio::net::TcpListener;
@@ -88,11 +88,9 @@ impl Listener {
 
 #[async_trait]
 impl NetListener for Listener {
-    type Error = Infallible;
-
     async fn accept(
         &mut self,
-    ) -> Result<(PublicKey, SecureConnection), Infallible> {
+    ) -> Result<(PublicKey, SecureConnection), DynError> {
         // `inlet` is dropped only when `fuse` burns: if `outlet.recv()`
         // returned `None`, it would mean that the `Listener` was dropped,
         // which is impossible since `NetListener::accept` is being called

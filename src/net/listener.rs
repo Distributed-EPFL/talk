@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 
-use crate::{crypto::primitives::sign::PublicKey, net::SecureConnection};
+use crate::{
+    crypto::primitives::sign::PublicKey, errors::DynError,
+    net::SecureConnection,
+};
 
 #[async_trait]
 pub trait Listener {
-    type Error;
-
     async fn accept(
         &mut self,
-    ) -> Result<(PublicKey, SecureConnection), Self::Error>;
+    ) -> Result<(PublicKey, SecureConnection), DynError>;
 }
