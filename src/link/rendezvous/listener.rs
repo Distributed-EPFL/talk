@@ -22,8 +22,10 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 
+type Outlet = Receiver<(PublicKey, SecureConnection)>;
+
 pub struct Listener {
-    outlet: Receiver<(PublicKey, SecureConnection)>,
+    outlet: Outlet,
     fuse: Fuse,
 }
 
