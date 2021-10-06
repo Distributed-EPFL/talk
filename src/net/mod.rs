@@ -14,6 +14,9 @@ pub mod errors;
 pub mod sockets;
 pub mod traits;
 
+#[cfg(test)]
+pub mod test;
+
 use unit_receiver::UnitReceiver;
 use unit_sender::UnitSender;
 
