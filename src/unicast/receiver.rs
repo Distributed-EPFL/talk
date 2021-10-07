@@ -106,7 +106,8 @@ where
             mpsc::channel::<Response>(settings.response_channel_capacity);
 
         tokio::spawn(async move {
-            let _ = Receiver::<Message>::acknowledge(sender, response_outlet).await;
+            let _ =
+                Receiver::<Message>::acknowledge(sender, response_outlet).await;
         });
 
         for sequence in 0..u32::MAX {
@@ -116,7 +117,8 @@ where
                 .context(ServeInterrupted)?
                 .context(ServeConnectionError)?;
 
-            let acknowledger = Acknowledger::new(sequence, response_inlet.clone());
+            let acknowledger =
+                Acknowledger::new(sequence, response_inlet.clone());
             let _ = message_inlet.send((remote, message, acknowledger)).await;
         }
 
