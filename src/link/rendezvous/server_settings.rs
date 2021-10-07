@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ServerSettings {
     pub shard_sizes: Vec<usize>,
 }

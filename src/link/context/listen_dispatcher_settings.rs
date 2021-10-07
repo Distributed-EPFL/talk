@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct ListenDispatcherSettings {
     pub channel_capacity: usize,
 }

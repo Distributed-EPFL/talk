@@ -1,5 +1,6 @@
 use crate::link::rendezvous::ClientSettings;
 
+#[derive(Debug, Clone)]
 pub struct ListenerSettings {
     pub client_settings: ClientSettings,
     pub channel_capacity: usize,

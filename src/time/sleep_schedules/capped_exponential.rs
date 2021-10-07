@@ -3,6 +3,7 @@ use crate::time::SleepSchedule;
 use std::cmp;
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct CappedExponential {
     base: Duration,
     growth: f64,

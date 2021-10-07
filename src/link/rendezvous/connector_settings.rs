@@ -1,6 +1,6 @@
 use crate::link::rendezvous::ClientSettings;
 
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectorSettings {
     pub client_settings: ClientSettings,
 }
