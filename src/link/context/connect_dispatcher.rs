@@ -42,6 +42,7 @@ impl ConnectDispatcher {
                 self.database.clone(),
             )
         } else {
+            drop(database);
             panic!("called `register` twice for the same `context`");
         }
     }

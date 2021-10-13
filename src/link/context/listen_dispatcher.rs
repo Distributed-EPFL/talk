@@ -56,14 +56,16 @@ impl ListenDispatcher {
         }
     }
 
-    pub fn register(&mut self, context: ContextId) -> Listener {
+    pub fn register(&self, context: ContextId) -> Listener {
         let (inlet, outlet) = mpsc::channel(self.settings.channel_capacity);
 
-        match self.database.lock().unwrap().inlets.entry(context.clone()) {
+        let mut database = self.database.lock().unwrap();
+        match database.inlets.entry(context.clone()) {
             Entry::Vacant(entry) => {
                 entry.insert(Arc::new(Mutex::new(inlet)));
             }
             Entry::Occupied(_) => {
+                drop(database);
                 panic!("called `register` twice for the same `context`")
             }
         }
