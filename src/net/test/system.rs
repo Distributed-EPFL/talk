@@ -18,6 +18,18 @@ pub(crate) struct System {
 }
 
 impl System {
+    pub(crate) fn new(
+        keys: Vec<PublicKey>,
+        connectors: Vec<TestConnector>,
+        listeners: Vec<TestListener>,
+    ) -> Self {
+        System {
+            keys,
+            connectors,
+            listeners,
+        }
+    }
+
     pub(crate) async fn setup(peers: usize) -> System {
         let keychains =
             (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
@@ -53,26 +65,12 @@ impl System {
         System::new(roots, connectors, listeners)
     }
 
-    pub(crate) fn new(
-        keys: Vec<PublicKey>,
-        connectors: Vec<TestConnector>,
-        listeners: Vec<TestListener>,
-    ) -> Self {
-        System {
-            keys,
-            connectors,
-            listeners,
-        }
-    }
-
     pub(crate) async fn connect(
         &mut self,
         peer_a: usize,
         peer_b: usize,
     ) -> ConnectionPair {
-        let remote = self.keys[peer_b].clone();
-
-        let fut_a = self.connectors[peer_a].connect(remote);
+        let fut_a = self.connectors[peer_a].connect(self.keys[peer_b]);
         let fut_b = self.listeners[peer_b].accept();
 
         let (connection_a, connection_b) = futures::join!(fut_a, fut_b);
@@ -99,58 +97,29 @@ impl System {
 mod tests {
     use super::*;
 
-    use crate::{
-        net::{Connector, Listener},
-        sync::fuse::Fuse,
-    };
-
     #[tokio::test]
     async fn example_setup() {
         let peers = 10;
 
-        let System {
-            keys,
-            connectors,
-            listeners,
-        } = System::setup(peers).await;
+        let mut system = System::setup(peers).await;
 
-        let fuse = Fuse::new();
-
-        let handles = listeners
+        let handles = system
+            .connection_matrix()
+            .await
             .into_iter()
-            .map(|mut listener| {
-                let mut relay = fuse.relay();
+            .map(|v| {
+                v.into_iter().map(|mut pair| {
+                    tokio::spawn(async move {
+                        let sent: u32 = 42;
 
-                tokio::spawn(async move {
-                    for _ in 0..peers {
-                        let (_, mut connection) = relay
-                            .map(listener.accept())
-                            .await
-                            .unwrap()
-                            .unwrap();
+                        let received: u32 = pair.transmit(&sent).await.unwrap();
 
-                        let message: u32 = connection.receive().await.unwrap();
-
-                        connection
-                            .send(&(message + peers as u32))
-                            .await
-                            .unwrap();
-                    }
+                        assert_eq!(received, sent);
+                    })
                 })
             })
+            .flatten()
             .collect::<Vec<_>>();
-
-        for sender in 0..peers {
-            for receiver in 0..peers {
-                let mut connection =
-                    connectors[sender].connect(keys[receiver]).await.unwrap();
-
-                connection.send(&(sender as u32)).await.unwrap();
-                let response: u32 = connection.receive().await.unwrap();
-
-                assert_eq!(response, (sender + peers) as u32);
-            }
-        }
 
         test::join(handles).await.unwrap();
     }

@@ -33,16 +33,19 @@ impl ConnectDispatcher {
     }
 
     pub fn register(&self, context: ContextId) -> Connector {
-        let mut database = self.database.lock().unwrap();
-
-        if database.contexts.insert(context.clone()) {
+        if self
+            .database
+            .lock()
+            .unwrap()
+            .contexts
+            .insert(context.clone())
+        {
             Connector::new(
                 context,
                 self.connector.clone(),
                 self.database.clone(),
             )
         } else {
-            drop(database);
             panic!("called `register` twice for the same `context`");
         }
     }

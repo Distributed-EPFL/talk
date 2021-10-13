@@ -49,6 +49,7 @@ impl TestListener {
         (TestListener { outlet, fuse }, address)
     }
 
+    // TODO: fix slow-loris
     async fn listen(
         keychain: KeyChain,
         listener: TcpListener,

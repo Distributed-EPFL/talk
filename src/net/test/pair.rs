@@ -1,4 +1,4 @@
-use crate::net::{SecureConnectionError, SecureConnection};
+use crate::net::{SecureConnection, SecureConnectionError};
 
 use doomstack::Top;
 

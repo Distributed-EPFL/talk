@@ -10,27 +10,6 @@ use crate::{
     },
 };
 
-pub(crate) async fn setup(peers: usize) -> System {
-    let NetSystem {
-        keys,
-        connectors,
-        listeners,
-    } = NetSystem::setup(peers).await;
-
-    let connectors = connectors
-        .into_iter()
-        .map(|connector| ConnectDispatcher::new(connector))
-        .collect();
-    let listeners = listeners
-        .into_iter()
-        .map(|listener| {
-            ListenDispatcher::new(listener, ListenDispatcherSettings::default())
-        })
-        .collect();
-
-    System::new(keys, connectors, listeners)
-}
-
 pub(crate) struct System {
     pub keys: Vec<PublicKey>,
     pub connectors: Vec<ConnectDispatcher>,
@@ -50,17 +29,41 @@ impl System {
         }
     }
 
+    pub(crate) async fn setup(peers: usize) -> System {
+        let NetSystem {
+            keys,
+            connectors,
+            listeners,
+        } = NetSystem::setup(peers).await;
+
+        let connectors = connectors
+            .into_iter()
+            .map(|connector| ConnectDispatcher::new(connector))
+            .collect();
+
+        let listeners = listeners
+            .into_iter()
+            .map(|listener| {
+                ListenDispatcher::new(
+                    listener,
+                    ListenDispatcherSettings::default(),
+                )
+            })
+            .collect();
+
+        System::new(keys, connectors, listeners)
+    }
+
     pub(crate) async fn connect(
         &mut self,
         peer_a: usize,
         peer_b: usize,
         context: ContextId,
     ) -> ConnectionPair {
-        let remote = self.keys[peer_b].clone();
         let connector = self.connectors[peer_a].register(context.clone());
         let mut listener = self.listeners[peer_b].register(context);
 
-        let fut_a = connector.connect(remote);
+        let fut_a = connector.connect(self.keys[peer_b]);
         let fut_b = listener.accept();
 
         let (connection_a, connection_b) = futures::join!(fut_a, fut_b);

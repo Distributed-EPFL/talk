@@ -5,10 +5,10 @@ mod context {
             context::{
                 ConnectDispatcher, ListenDispatcher, ListenDispatcherSettings,
             },
-            test::{self, System},
+            test::System,
         },
         net::{
-            test::{System as NetSystem, TestConnector},
+            test::{self, System as NetSystem, TestConnector},
             traits::TcpConnect,
             Connector, Listener, PlainConnection,
         },
@@ -20,7 +20,7 @@ mod context {
     #[tokio::test]
     #[should_panic(expected = "called `register` twice for the same `context`")]
     async fn connector_double_register() {
-        let System { connectors, .. } = test::setup(1).await;
+        let System { connectors, .. } = System::setup(1).await;
 
         let _connector_1 = connectors[0].register(format!("Context 1"));
         let _connector_2 = connectors[0].register(format!("Context 1"));
@@ -28,7 +28,7 @@ mod context {
 
     #[tokio::test]
     async fn connector_register_again() {
-        let System { connectors, .. } = test::setup(1).await;
+        let System { connectors, .. } = System::setup(1).await;
 
         let _connector_1 = connectors[0].register(format!("Context 1"));
         drop(_connector_1);
@@ -38,7 +38,7 @@ mod context {
     #[tokio::test]
     #[should_panic(expected = "called `register` twice for the same `context`")]
     async fn listener_double_register() {
-        let System { listeners, .. } = test::setup(1).await;
+        let System { listeners, .. } = System::setup(1).await;
 
         let _listener_1 = listeners[0].register(format!("Context 1"));
         let _listener_2 = listeners[0].register(format!("Context 1"));
@@ -46,7 +46,7 @@ mod context {
 
     #[tokio::test]
     async fn listener_register_again() {
-        let System { listeners, .. } = test::setup(1).await;
+        let System { listeners, .. } = System::setup(1).await;
 
         let listener_1 = listeners[0].register(format!("Context 1"));
         drop(listener_1);
@@ -55,7 +55,7 @@ mod context {
 
     #[tokio::test]
     async fn simple() {
-        let mut system: System = test::setup(2).await.into();
+        let mut system: System = System::setup(2).await.into();
 
         let received = system
             .connect(0, 1, format!("Context 1"))
@@ -70,11 +70,12 @@ mod context {
     async fn stress() {
         let peer = 10;
 
-        let mut system: System = test::setup(peer).await.into();
+        let mut system: System = System::setup(peer).await.into();
 
         let mut matrix =
             system.connection_matrix(format!("Universal Context")).await;
 
+        // TODO: refactor to use the join
         matrix
             .iter_mut()
             .enumerate()
