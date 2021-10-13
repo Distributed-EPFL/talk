@@ -3,21 +3,11 @@ use crate::{
     net::{Listener, SecureConnection, SecureSender},
     sync::fuse::{Fuse, Relay},
     unicast::{
-        errors::receiver::{
-            acknowledge::{
-                AcknowledgeError, ConnectionError as AcknowledgeConnectionError,
-            },
-            listen::{ListenError, ListenInterrupted},
-            serve::{
-                ConnectionError as ServeConnectionError, ServeError,
-                ServeInterrupted,
-            },
-        },
         Acknowledger, Message as UnicastMessage, ReceiverSettings, Response,
     },
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
@@ -31,6 +21,30 @@ type ResponseOutlet = TokioReceiver<Response>;
 pub struct Receiver<Message: UnicastMessage> {
     message_outlet: MessageOutlet<Message>,
     fuse: Fuse,
+}
+
+#[derive(Doom)]
+#[doom(description("<Placeholder `ReceiverError`>"))]
+pub struct ReceiverError;
+
+#[derive(Doom)]
+enum ListenError {
+    #[doom(description("`listen` interrupted"))]
+    ListenInterrupted,
+}
+
+#[derive(Doom)]
+enum ServeError {
+    #[doom(description("`serve` interrupted"))]
+    ServeInterrupted,
+    #[doom(description("Connection error"))]
+    ConnectionError,
+}
+
+#[derive(Doom)]
+enum AcknowledgeError {
+    #[doom(description("Connection error"))]
+    ConnectionError,
 }
 
 impl<Message> Receiver<Message>
@@ -63,7 +77,7 @@ where
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
         mut relay: Relay,
-    ) -> Result<(), ListenError>
+    ) -> Result<(), Top<ListenError>>
     where
         L: Listener,
     {
@@ -73,7 +87,7 @@ where
             if let Ok((remote, connection)) = relay
                 .map(listener.accept())
                 .await
-                .context(ListenInterrupted)?
+                .pot(ListenError::ListenInterrupted, here!())?
             {
                 let message_inlet = message_inlet.clone();
                 let relay = fuse.relay();
@@ -99,7 +113,7 @@ where
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
         mut relay: Relay,
-    ) -> Result<(), ServeError> {
+    ) -> Result<(), Top<ServeError>> {
         let (sender, mut receiver) = connection.split();
 
         let (response_inlet, response_outlet) =
@@ -114,8 +128,8 @@ where
             let message: Message = relay
                 .map(receiver.receive())
                 .await
-                .context(ServeInterrupted)?
-                .context(ServeConnectionError)?;
+                .pot(ServeError::ServeInterrupted, here!())?
+                .pot(ServeError::ConnectionError, here!())?;
 
             let acknowledger =
                 Acknowledger::new(sequence, response_inlet.clone());
@@ -128,14 +142,14 @@ where
     async fn acknowledge(
         mut sender: SecureSender,
         mut response_outlet: ResponseOutlet,
-    ) -> Result<(), AcknowledgeError> {
+    ) -> Result<(), Top<AcknowledgeError>> {
         loop {
             match response_outlet.recv().await {
                 Some(response) => {
                     sender
                         .send(&response)
                         .await
-                        .context(AcknowledgeConnectionError)?;
+                        .pot(AcknowledgeError::ConnectionError, here!())?;
                 }
                 None => return Ok(()),
             }
