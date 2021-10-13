@@ -1,4 +1,4 @@
-use crate::crypto::primitives::{channel::ChannelError, errors::SignError};
+use crate::crypto::primitives::{channel::ChannelError, sign::SignError};
 
 use doomstack::Top;
 
@@ -42,7 +42,7 @@ pub(crate) mod secure_connection {
             "failed to authenticate the connection: {:?}",
             source
         ))]
-        AuthenticationFailed { source: SignError },
+        AuthenticationFailed { source: Top<SignError> },
         #[snafu(display("failed to encrypt message: {}", source))]
         EncryptFailed { source: Top<ChannelError> },
         #[snafu(display("failed to decrypt message: {}", source))]

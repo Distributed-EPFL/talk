@@ -1,12 +1,13 @@
 use crate::crypto::{
     errors::{KeyCardError, MalformedKeyCard},
     primitives::{
-        errors::SignError,
         multi::{
             MultiError, PublicKey as MultiPublicKey,
             Signature as MultiSignature,
         },
-        sign::{PublicKey as SignPublicKey, Signature as SignSignature},
+        sign::{
+            PublicKey as SignPublicKey, SignError, Signature as SignSignature,
+        },
     },
     KeyChain, Scope, Statement, TalkHeader,
 };
@@ -59,7 +60,7 @@ impl SignSignature {
         &self,
         keycard: &KeyCard,
         message: &S,
-    ) -> Result<(), SignError>
+    ) -> Result<(), Top<SignError>>
     where
         S: Statement,
     {

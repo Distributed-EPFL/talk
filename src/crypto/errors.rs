@@ -1,4 +1,6 @@
-use crate::crypto::primitives::errors::sign::SignError;
+use crate::crypto::primitives::sign::SignError;
+
+use doomstack::Top;
 
 use snafu::Snafu;
 
@@ -6,5 +8,5 @@ use snafu::Snafu;
 #[snafu(visibility(pub(crate)))]
 pub enum KeyCardError {
     #[snafu(display("malformed `KeyCard`: {}", source))]
-    MalformedKeyCard { source: SignError },
+    MalformedKeyCard { source: Top<SignError> },
 }

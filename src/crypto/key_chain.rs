@@ -1,10 +1,9 @@
 use crate::crypto::{
     primitives::{
-        errors::SignError,
         multi::{
             KeyPair as MultiKeyPair, MultiError, Signature as MultiSignature,
         },
-        sign::{KeyPair as SignKeyPair, Signature as SignSignature},
+        sign::{KeyPair as SignKeyPair, SignError, Signature as SignSignature},
     },
     KeyCard, Statement,
 };
@@ -40,7 +39,7 @@ impl KeyChain {
     pub fn sign<S: Statement>(
         &self,
         message: &S,
-    ) -> Result<SignSignature, SignError> {
+    ) -> Result<SignSignature, Top<SignError>> {
         self.keypairs.sign.sign_raw(&(S::SCOPE, S::HEADER, message))
     }
 
