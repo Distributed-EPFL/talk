@@ -4,16 +4,12 @@ use crate::{
     crypto::primitives::sign::PublicKey,
     errors::DynError,
     link::context::{
-        connect_dispatcher::Database,
-        errors::connector::{
-            ConnectionError, ConnectionFailed, ContextRefused,
-        },
-        ContextId, Request, Response,
+        connect_dispatcher::Database, ContextId, Request, Response,
     },
     net::{Connector as NetConnector, SecureConnection},
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt};
 
 use std::sync::{Arc, Mutex};
 
@@ -21,6 +17,17 @@ pub struct Connector {
     context: ContextId,
     connector: Arc<dyn NetConnector>,
     database: Arc<Mutex<Database>>,
+}
+
+#[derive(Doom)]
+pub enum ConnectorError {
+    #[doom(description("Connection error"))]
+    ConnectionError,
+    #[doom(description("Failed to connect: {}", source))]
+    #[doom(wrap(connect_failed))]
+    ConnectFailed { source: DynError },
+    #[doom(description("Context refused"))]
+    ContextRefused,
 }
 
 impl Connector {
@@ -47,18 +54,25 @@ impl NetConnector for Connector {
             .connector
             .connect(remote)
             .await
-            .context(ConnectionFailed)?;
+            .map_err(ConnectorError::connect_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         connection
             .send(&Request::Context(self.context.clone()))
             .await
-            .context(ConnectionError)?;
+            .pot(ConnectorError::ConnectionError, here!())?;
 
-        match connection.receive().await.context(ConnectionError)? {
+        match connection
+            .receive()
+            .await
+            .pot(ConnectorError::ConnectionError, here!())?
+        {
             Response::ContextAccepted => Ok(connection),
-            Response::ContextRefused => {
-                ContextRefused.fail().map_err(Into::into)
-            }
+            Response::ContextRefused => ConnectorError::ContextRefused
+                .fail()
+                .spot(here!())
+                .map_err(Into::into),
         }
     }
 }

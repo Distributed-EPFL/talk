@@ -1,7 +1,6 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
     link::context::{
-        errors::listener::{ListenError, ListenInterrupted},
         ContextId, ListenDispatcherSettings, Listener, Request, Response,
     },
     net::{Listener as NetListener, SecureConnection},
@@ -12,7 +11,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use tokio::sync::mpsc::{self, Sender};
 
@@ -26,6 +25,12 @@ pub struct ListenDispatcher {
 
 pub(in crate::link::context) struct Database {
     pub inlets: HashMap<ContextId, Arc<Mutex<Inlet>>>,
+}
+
+#[derive(Doom)]
+enum ListenError {
+    #[doom(description("`listen` interrupted"))]
+    ListenInterrupted,
 }
 
 impl ListenDispatcher {
@@ -75,7 +80,7 @@ impl ListenDispatcher {
         mut listener: L,
         database: Arc<Mutex<Database>>,
         mut relay: Relay,
-    ) -> Result<(), ListenError>
+    ) -> Result<(), Top<ListenError>>
     where
         L: NetListener,
     {
@@ -83,7 +88,7 @@ impl ListenDispatcher {
             if let Ok((remote, mut connection)) = relay
                 .map(listener.accept())
                 .await
-                .context(ListenInterrupted)?
+                .pot(ListenError::ListenInterrupted, here!())?
             {
                 if let Ok(Request::Context(context)) =
                     connection.receive().await
