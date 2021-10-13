@@ -2,7 +2,6 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
-    errors::DynError,
     link::rendezvous::{Client, ListenerSettings},
     net::{
         traits::TcpConnect, Listener as NetListener, PlainConnection,
@@ -11,7 +10,7 @@ use crate::{
     sync::fuse::{Fuse, Relay},
 };
 
-use doomstack::{here, Doom, ResultExt, Top};
+use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::net::Ipv4Addr;
 
@@ -93,9 +92,7 @@ impl Listener {
 
 #[async_trait]
 impl NetListener for Listener {
-    async fn accept(
-        &mut self,
-    ) -> Result<(PublicKey, SecureConnection), DynError> {
+    async fn accept(&mut self) -> Result<(PublicKey, SecureConnection), Stack> {
         // `inlet` is dropped only when `fuse` burns: if `outlet.recv()`
         // returned `None`, it would mean that the `Listener` was dropped,
         // which is impossible since `NetListener::accept` is being called

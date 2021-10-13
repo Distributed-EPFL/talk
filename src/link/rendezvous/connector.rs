@@ -2,12 +2,11 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
-    errors::DynError,
     link::rendezvous::{Client, ConnectorSettings},
     net::{traits::TcpConnect, Connector as NetConnector, SecureConnection},
 };
 
-use doomstack::{here, Doom, ResultExt, Top};
+use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::collections::HashMap;
 use std::io;
@@ -127,7 +126,7 @@ impl NetConnector for Connector {
     async fn connect(
         &self,
         root: PublicKey,
-    ) -> Result<SecureConnection, DynError> {
+    ) -> Result<SecureConnection, Stack> {
         loop {
             let result = self.attempt(root).await.map_err(Into::into);
 
