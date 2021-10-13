@@ -1,12 +1,11 @@
 use blake3::{Hash as BlakeHash, Hasher as BlakeHasher};
 
-use crate::crypto::primitives::errors::{hash::SerializeFailed, HashError};
+use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
 
-use snafu::ResultExt;
-
-use std::fmt::{Debug, Error as FmtError, Formatter};
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 
 pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 
@@ -14,6 +13,13 @@ pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 pub struct Hash(#[serde(with = "SerdeBlakeHash")] BlakeHash);
 
 pub struct Hasher(BlakeHasher);
+
+#[derive(Doom)]
+pub enum HashError {
+    #[doom(description("Failed to serialize: {:?}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
+}
 
 impl Hash {
     pub fn from_bytes(bytes: [u8; HASH_LENGTH]) -> Self {
@@ -68,11 +74,15 @@ impl Hasher {
     ///
     /// hasher.finalize();
     /// ```
-    pub fn update<D>(&mut self, data: &D) -> Result<(), HashError>
+    pub fn update<D>(&mut self, data: &D) -> Result<(), Top<HashError>>
     where
         D: Serialize,
     {
-        let data = bincode::serialize(data).context(SerializeFailed)?;
+        let data = bincode::serialize(data)
+            .map_err(HashError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
         self.update_raw(&data);
 
         Ok(())
@@ -92,7 +102,7 @@ impl Hasher {
 }
 
 /// The default hash function.
-pub fn hash<M>(message: &M) -> Result<Hash, HashError>
+pub fn hash<M>(message: &M) -> Result<Hash, Top<HashError>>
 where
     M: Serialize,
 {
@@ -102,7 +112,7 @@ where
 }
 
 impl Debug for Hash {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
             .to_bytes()
             .iter()

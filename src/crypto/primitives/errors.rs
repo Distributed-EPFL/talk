@@ -9,20 +9,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 type BincodeError = Box<bincode::ErrorKind>;
 
-pub use hash::HashError;
 pub use multi::MultiError;
 pub use sign::SignError;
-
-pub(crate) mod hash {
-    use super::*;
-
-    #[derive(Debug, Snafu)]
-    #[snafu(visibility(pub(crate)))]
-    pub enum HashError {
-        #[snafu(display("failed to serialize data: {}", source))]
-        SerializeFailed { source: BincodeError },
-    }
-}
 
 pub(crate) mod sign {
     use super::*;
