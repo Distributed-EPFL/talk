@@ -14,7 +14,7 @@ use tokio::time;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-pub async fn setup(
+pub(crate) async fn setup(
     peers: usize,
 ) -> (Vec<PublicKey>, Vec<TestConnector>, Vec<TestListener>) {
     let keychains = (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
@@ -50,7 +50,7 @@ pub async fn setup(
     (roots, connectors, listeners)
 }
 
-pub async fn join<I, T>(handles: I)
+pub(crate) async fn join<I, T>(handles: I)
 where
     I: IntoIterator<Item = JoinHandle<T>>,
 {
