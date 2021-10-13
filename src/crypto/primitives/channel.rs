@@ -40,16 +40,16 @@ enum Lane {
 
 #[derive(Doom)]
 pub enum ChannelError {
-    #[doom(description("Failed to serialize: {:?}", source))]
-    #[doom(wrap(serialize_failed))]
-    SerializeFailed { source: bincode::Error },
+    #[doom(description("Failed to `authenticate`"))]
+    AuthenticateFailed,
+    #[doom(description("Failed to `decrypt`"))]
+    DecryptFailed,
     #[doom(description("Failed to deserialize: {:?}", source))]
     #[doom(wrap(deserialize_failed))]
     DeserializeFailed { source: bincode::Error },
-    #[doom(description("Failed to `decrypt`"))]
-    DecryptFailed,
-    #[doom(description("Failed to `authenticate`"))]
-    AuthenticateFailed,
+    #[doom(description("Failed to serialize: {:?}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
 }
 
 impl Sender {
