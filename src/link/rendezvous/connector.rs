@@ -30,9 +30,9 @@ pub enum ConnectorError {
     AddressUnknown,
     #[doom(description("Failed to `authenticate` connection"))]
     AuthenticateFailed,
-    #[doom(description("Connection failed: {}", source))]
-    #[doom(wrap(connection_failed))]
-    ConnectionFailed { source: io::Error },
+    #[doom(description("Failed to connect: {}", source))]
+    #[doom(wrap(connect_failed))]
+    ConnectFailed { source: io::Error },
     #[doom(description("Failed to `secure` connection"))]
     SecureFailed,
     #[doom(description("Unexpected remote: {:?}", remote))]
@@ -73,7 +73,7 @@ impl Connector {
         let mut connection = address
             .connect()
             .await
-            .map_err(ConnectorError::connection_failed)
+            .map_err(ConnectorError::connect_failed)
             .map_err(Doom::into_top)
             .spot(here!())?
             .secure()
