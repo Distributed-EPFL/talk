@@ -1,70 +1,97 @@
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
-    net::test::{TestConnector, TestListener},
+    net::{
+        test::{self, ConnectionPair, TestConnector, TestListener},
+        Connector, Listener,
+    },
 };
 
-use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
+use futures::stream::{FuturesOrdered, StreamExt};
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::Duration;
 
-use tokio::task::JoinHandle;
-use tokio::time;
-
-const TIMEOUT: Duration = Duration::from_secs(5);
-
-pub async fn setup(
-    peers: usize,
-) -> (Vec<PublicKey>, Vec<TestConnector>, Vec<TestListener>) {
-    let keychains = (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
-
-    let roots = keychains
-        .iter()
-        .map(|keychain| keychain.keycard().root())
-        .collect::<Vec<_>>();
-
-    let (listeners, addresses): (Vec<TestListener>, Vec<SocketAddr>) =
-        keychains
-            .iter()
-            .map(|keychain| async move {
-                TestListener::new(keychain.clone()).await
-            })
-            .collect::<FuturesOrdered<_>>()
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .unzip();
-
-    let peers: HashMap<PublicKey, SocketAddr> = roots
-        .clone()
-        .into_iter()
-        .zip(addresses.into_iter())
-        .collect();
-
-    let connectors: Vec<TestConnector> = keychains
-        .into_iter()
-        .map(|keychain| TestConnector::new(keychain, peers.clone()))
-        .collect();
-
-    (roots, connectors, listeners)
+pub(crate) struct System {
+    pub keys: Vec<PublicKey>,
+    pub connectors: Vec<TestConnector>,
+    pub listeners: Vec<TestListener>,
 }
 
-pub async fn join<I, T>(handles: I)
-where
-    I: IntoIterator<Item = JoinHandle<T>>,
-{
-    if time::timeout(
-        TIMEOUT,
-        handles
+impl System {
+    pub(crate) async fn setup(peers: usize) -> System {
+        let keychains =
+            (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
+
+        let roots = keychains
+            .iter()
+            .map(|keychain| keychain.keycard().root())
+            .collect::<Vec<_>>();
+
+        let (listeners, addresses): (Vec<TestListener>, Vec<SocketAddr>) =
+            keychains
+                .iter()
+                .map(|keychain| async move {
+                    TestListener::new(keychain.clone()).await
+                })
+                .collect::<FuturesOrdered<_>>()
+                .collect::<Vec<_>>()
+                .await
+                .into_iter()
+                .unzip();
+
+        let peers: HashMap<PublicKey, SocketAddr> = roots
+            .clone()
             .into_iter()
-            .collect::<FuturesUnordered<_>>()
-            .collect::<Vec<_>>(),
-    )
-    .await
-    .is_err()
-    {
-        panic!("`join` failed: unfinished tasks remaining");
+            .zip(addresses.into_iter())
+            .collect();
+
+        let connectors: Vec<TestConnector> = keychains
+            .into_iter()
+            .map(|keychain| TestConnector::new(keychain, peers.clone()))
+            .collect();
+
+        System::new(roots, connectors, listeners)
+    }
+
+    pub(crate) fn new(
+        keys: Vec<PublicKey>,
+        connectors: Vec<TestConnector>,
+        listeners: Vec<TestListener>,
+    ) -> Self {
+        System {
+            keys,
+            connectors,
+            listeners,
+        }
+    }
+
+    pub(crate) async fn connect(
+        &mut self,
+        peer_a: usize,
+        peer_b: usize,
+    ) -> ConnectionPair {
+        let remote = self.keys[peer_b].clone();
+
+        let fut_a = self.connectors[peer_a].connect(remote);
+        let fut_b = self.listeners[peer_b].accept();
+
+        let (connection_a, connection_b) = futures::join!(fut_a, fut_b);
+
+        ConnectionPair::new(connection_a.unwrap(), connection_b.unwrap().1)
+    }
+
+    pub(crate) async fn connection_matrix(
+        &mut self,
+    ) -> Vec<Vec<ConnectionPair>> {
+        let mut matrix = Vec::with_capacity(self.keys.len());
+        for sender in 0..self.keys.len() {
+            let mut column = Vec::with_capacity(self.keys.len());
+            for receiver in 0..self.keys.len() {
+                column.push(self.connect(sender, receiver).await);
+            }
+            matrix.push(column);
+        }
+        matrix
     }
 }
 
@@ -79,8 +106,13 @@ mod tests {
 
     #[tokio::test]
     async fn example_setup() {
-        let peers = 8;
-        let (keys, connectors, listeners) = setup(peers).await;
+        let peers = 10;
+
+        let System {
+            keys,
+            connectors,
+            listeners,
+        } = System::setup(peers).await;
 
         let fuse = Fuse::new();
 
@@ -120,6 +152,6 @@ mod tests {
             }
         }
 
-        join(handles).await;
+        test::join(handles).await.unwrap();
     }
 }

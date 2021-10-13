@@ -21,8 +21,8 @@ use snafu::ResultExt;
 use std::{collections::HashMap, net::SocketAddr};
 
 pub struct TestConnector {
-    keychain: KeyChain,
-    peers: HashMap<PublicKey, SocketAddr>,
+    pub(crate) keychain: KeyChain,
+    pub(crate) peers: HashMap<PublicKey, SocketAddr>,
 }
 
 impl TestConnector {
