@@ -1,4 +1,6 @@
-use crate::sync::fuse::errors::{FuseBurned, FuseError};
+use crate::sync::fuse::FuseError;
+
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::future::Future;
 
@@ -20,7 +22,10 @@ impl Relay {
         }
     }
 
-    pub async fn map<F>(&mut self, future: F) -> Result<F::Output, FuseError>
+    pub async fn map<F>(
+        &mut self,
+        future: F,
+    ) -> Result<F::Output, Top<FuseError>>
     where
         F: Future,
     {
@@ -28,7 +33,7 @@ impl Relay {
             biased;
 
             _ = self.switch_off() => {
-                FuseBurned.fail()
+                FuseError::FuseBurned.fail().spot(here!())
             },
             result = future => {
                 Ok(result)

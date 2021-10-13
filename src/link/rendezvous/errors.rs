@@ -2,8 +2,10 @@ use crate::{
     crypto::primitives::sign::PublicKey,
     link::rendezvous::ShardId,
     net::errors::{PlainConnectionError, SecureConnectionError},
-    sync::fuse::errors::FuseError,
+    sync::fuse::FuseError,
 };
+
+use doomstack::Top;
 
 use snafu::Snafu;
 
@@ -29,14 +31,14 @@ pub(crate) mod server {
     #[snafu(visibility(pub(crate)))]
     pub enum ListenError {
         #[snafu(display("`listen` interrupted: {}", source))]
-        ListenInterrupted { source: FuseError },
+        ListenInterrupted { source: Top<FuseError> },
     }
 
     #[derive(Debug, Snafu)]
     #[snafu(visibility(pub(crate)))]
     pub enum ServeError {
         #[snafu(display("`serve` interrupted: {}", source))]
-        ServeInterrupted { source: FuseError },
+        ServeInterrupted { source: Top<FuseError> },
         #[snafu(display("connection error: {}", source))]
         ConnectionError { source: PlainConnectionError },
     }
@@ -79,7 +81,7 @@ pub(crate) mod listener {
     #[snafu(visibility(pub(crate)))]
     pub enum ListenError {
         #[snafu(display("`listen` interrupted: {}", source))]
-        ListenInterrupted { source: FuseError },
+        ListenInterrupted { source: Top<FuseError> },
     }
 }
 

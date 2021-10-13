@@ -1,7 +1,8 @@
 use crate::{
-    errors::DynError, net::errors::SecureConnectionError,
-    sync::fuse::errors::FuseError,
+    errors::DynError, net::errors::SecureConnectionError, sync::fuse::FuseError,
 };
+
+use doomstack::Top;
 
 use snafu::Snafu;
 
@@ -29,6 +30,6 @@ pub(crate) mod listener {
     #[snafu(visibility(pub(crate)))]
     pub enum ListenError {
         #[snafu(display("`listen` interrupted: {}", source))]
-        ListenInterrupted { source: FuseError },
+        ListenInterrupted { source: Top<FuseError> },
     }
 }

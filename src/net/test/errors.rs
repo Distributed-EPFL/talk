@@ -1,7 +1,9 @@
 use crate::{
     crypto::primitives::sign::PublicKey, net::errors::SecureConnectionError,
-    sync::fuse::errors::FuseError,
+    sync::fuse::FuseError,
 };
+
+use doomstack::Top;
 
 use snafu::Snafu;
 
@@ -35,6 +37,6 @@ pub(crate) mod test_listener {
     #[snafu(visibility(pub(crate)))]
     pub enum ListenError {
         #[snafu(display("`listen` interrupted: {}", source))]
-        ListenInterrupted { source: FuseError },
+        ListenInterrupted { source: Top<FuseError> },
     }
 }
