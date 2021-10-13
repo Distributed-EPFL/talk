@@ -2,11 +2,12 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::primitives::sign::PublicKey,
-    errors::DynError,
     link::context::{listen_dispatcher::Database, ContextId},
     net::{Listener as NetListener, SecureConnection},
     sync::fuse::Fuse,
 };
+
+use doomstack::Stack;
 
 use std::sync::{Arc, Mutex};
 
@@ -39,9 +40,7 @@ impl Listener {
 
 #[async_trait]
 impl NetListener for Listener {
-    async fn accept(
-        &mut self,
-    ) -> Result<(PublicKey, SecureConnection), DynError> {
+    async fn accept(&mut self) -> Result<(PublicKey, SecureConnection), Stack> {
         // In order for `self.outlet.recv()` to return `None`, the corresponding
         // `inlet` would need to be dropped from `self.database.inlets`. This,
         // however, happens only when `Listener` is dropped, which cannot happen

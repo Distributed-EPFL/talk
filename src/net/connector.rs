@@ -1,14 +1,13 @@
 use async_trait::async_trait;
 
-use crate::{
-    crypto::primitives::sign::PublicKey, errors::DynError,
-    net::SecureConnection,
-};
+use crate::{crypto::primitives::sign::PublicKey, net::SecureConnection};
+
+use doomstack::Stack;
 
 #[async_trait]
 pub trait Connector: 'static + Send + Sync {
     async fn connect(
         &self,
         remote: PublicKey,
-    ) -> Result<SecureConnection, DynError>;
+    ) -> Result<SecureConnection, Stack>;
 }

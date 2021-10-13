@@ -2,14 +2,13 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::primitives::sign::PublicKey,
-    errors::DynError,
     link::context::{
         connect_dispatcher::Database, ContextId, Request, Response,
     },
     net::{Connector as NetConnector, SecureConnection},
 };
 
-use doomstack::{here, Doom, ResultExt};
+use doomstack::{here, Doom, ResultExt, Stack};
 
 use std::sync::{Arc, Mutex};
 
@@ -23,9 +22,8 @@ pub struct Connector {
 pub enum ConnectorError {
     #[doom(description("Connection error"))]
     ConnectionError,
-    #[doom(description("Failed to connect: {}", source))]
-    #[doom(wrap(connect_failed))]
-    ConnectFailed { source: DynError },
+    #[doom(description("Failed to connect"))]
+    ConnectFailed,
     #[doom(description("Context refused"))]
     ContextRefused,
 }
@@ -49,14 +47,12 @@ impl NetConnector for Connector {
     async fn connect(
         &self,
         remote: PublicKey,
-    ) -> Result<SecureConnection, DynError> {
+    ) -> Result<SecureConnection, Stack> {
         let mut connection = self
             .connector
             .connect(remote)
             .await
-            .map_err(ConnectorError::connect_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+            .pot(ConnectorError::ConnectFailed, here!())?;
 
         connection
             .send(&Request::Context(self.context.clone()))

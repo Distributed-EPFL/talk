@@ -2,11 +2,10 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
-    errors::DynError,
     net::{traits::TcpConnect, Connector, SecureConnection},
 };
 
-use doomstack::{here, Doom, ResultExt};
+use doomstack::{here, Doom, ResultExt, Stack};
 
 use std::collections::HashMap;
 use std::io;
@@ -46,11 +45,11 @@ impl Connector for TestConnector {
     async fn connect(
         &self,
         root: PublicKey,
-    ) -> Result<SecureConnection, DynError> {
+    ) -> Result<SecureConnection, Stack> {
         let address = self
             .peers
             .get(&root)
-            .ok_or(TestConnectorError::AddressUnknown.into_top())
+            .ok_or(TestConnectorError::AddressUnknown.into_stack())
             .spot(here!())?
             .clone();
 
