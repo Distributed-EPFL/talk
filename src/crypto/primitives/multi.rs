@@ -3,25 +3,17 @@ use blst::min_sig::{
     SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
 
-use crate::crypto::primitives::{
-    adapters::BlstErrorAdapter,
-    errors::{
-        multi::{
-            AggregateFailed, BlstError, MalformedPublicKey, MalformedSignature,
-            SerializeFailed, VerifyFailed,
-        },
-        MultiError,
-    },
-};
+use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
+
+use doomstack::{here, Doom, ResultExt, Top};
 
 use rand::rngs::OsRng;
 use rand::RngCore;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use snafu::ResultExt;
-
-use std::fmt::{Debug, Error as FmtError, Formatter};
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub const KEYPAIR_LENGTH: usize = 128;
@@ -40,6 +32,25 @@ pub struct PublicKey(BlstPublicKey);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Signature(BlstSignature);
+
+#[derive(Doom)]
+pub enum MultiError {
+    #[doom(description("Failed to `aggregate` signatures: {}", source))]
+    #[doom(wrap(aggregate_failed))]
+    AggregateFailed { source: BlstError },
+    #[doom(description("Malformed public key: {}", source))]
+    #[doom(wrap(malformed_public_key))]
+    MalformedPublicKey { source: BlstError },
+    #[doom(description("Malformed signature: {}", source))]
+    #[doom(wrap(malformed_signature))]
+    MalformedSignature { source: BlstError },
+    #[doom(description("Failed to serialize: {}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
+    #[doom(description("Failed to `verify` signature: {}", source))]
+    #[doom(wrap(verify_failed))]
+    VerifyFailed { source: BlstError },
+}
 
 impl KeyPair {
     pub fn random() -> Self {
@@ -79,11 +90,15 @@ impl KeyPair {
     ///     &message
     /// ).is_ok());
     /// ```
-    pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, MultiError>
+    pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, Top<MultiError>>
     where
         T: Serialize,
     {
-        let message = bincode::serialize(message).context(SerializeFailed)?;
+        let message = bincode::serialize(message)
+            .map_err(MultiError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
         let signature = self.secret.sign(&message, BLST_DST, &[]);
         Ok(Signature(signature))
     }
@@ -92,10 +107,12 @@ impl KeyPair {
 impl PublicKey {
     pub fn from_bytes(
         bytes: [u8; PUBLIC_KEY_LENGTH],
-    ) -> Result<Self, MultiError> {
+    ) -> Result<Self, Top<MultiError>> {
         let public_key = BlstPublicKey::from_bytes(&bytes)
-            .map_err(Into::into)
-            .context(MalformedPublicKey)?;
+            .map_err(Into::<BlstError>::into)
+            .map_err(MultiError::malformed_public_key)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         Ok(PublicKey(public_key))
     }
@@ -108,10 +125,12 @@ impl PublicKey {
 impl Signature {
     pub fn from_bytes(
         bytes: [u8; SIGNATURE_LENGTH],
-    ) -> Result<Self, MultiError> {
+    ) -> Result<Self, Top<MultiError>> {
         let signature = BlstSignature::from_bytes(&bytes)
-            .map_err(Into::into)
-            .context(MalformedSignature)?;
+            .map_err(Into::<BlstError>::into)
+            .map_err(MultiError::malformed_signature)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         Ok(Signature(signature))
     }
@@ -149,7 +168,7 @@ impl Signature {
     ///
     /// assert!(signature.is_ok());
     /// ```
-    pub fn aggregate<I>(signatures: I) -> Result<Self, MultiError>
+    pub fn aggregate<I>(signatures: I) -> Result<Self, Top<MultiError>>
     where
         I: IntoIterator<Item = Signature>,
     {
@@ -162,8 +181,10 @@ impl Signature {
 
         let signature =
             BlstAggregateSignature::aggregate(&signatures[..], true)
-                .map_err(Into::into)
-                .context(AggregateFailed)?;
+                .map_err(Into::<BlstError>::into)
+                .map_err(MultiError::aggregate_failed)
+                .map_err(Doom::into_top)
+                .spot(here!())?;
 
         let signature = signature.to_signature();
         Ok(Signature(signature))
@@ -208,7 +229,7 @@ impl Signature {
         &self,
         signers: P,
         message: &M,
-    ) -> Result<(), MultiError>
+    ) -> Result<(), Top<MultiError>>
     where
         P: IntoIterator<Item = PublicKey>,
         M: Serialize,
@@ -219,17 +240,23 @@ impl Signature {
             .collect::<Vec<_>>();
 
         let signers = signers.iter().collect::<Vec<_>>();
-        let message = bincode::serialize(message).context(SerializeFailed)?;
+
+        let message = bincode::serialize(message)
+            .map_err(MultiError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         self.0
             .fast_aggregate_verify(true, &message[..], BLST_DST, &signers[..])
             .into_result()
-            .context(VerifyFailed)
+            .map_err(MultiError::verify_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 }
 
 impl Debug for PublicKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
             .to_bytes()
             .iter()
@@ -251,7 +278,7 @@ impl Debug for PublicKey {
 }
 
 impl Debug for Signature {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
             .to_bytes()
             .iter()
@@ -311,7 +338,7 @@ impl<'de> Deserialize<'de> for PublicKey {
         impl<'de> Visitor<'de> for ByteVisitor {
             type Value = BlstPublicKey;
 
-            fn expecting(&self, f: &mut Formatter) -> Result<(), FmtError> {
+            fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("byte representation of a bls public key")
             }
 
@@ -350,7 +377,7 @@ impl<'de> Deserialize<'de> for Signature {
         impl<'de> Visitor<'de> for ByteVisitor {
             type Value = BlstSignature;
 
-            fn expecting(&self, f: &mut Formatter) -> Result<(), FmtError> {
+            fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("byte representation of a bls public key")
             }
 

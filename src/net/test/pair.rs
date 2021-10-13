@@ -1,4 +1,6 @@
-use crate::net::{errors::SecureConnectionError, SecureConnection};
+use crate::net::{SecureConnectionError, SecureConnection};
+
+use doomstack::Top;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +20,7 @@ impl ConnectionPair {
     pub(crate) async fn transmit<M>(
         &mut self,
         message: &M,
-    ) -> Result<M, SecureConnectionError>
+    ) -> Result<M, Top<SecureConnectionError>>
     where
         M: Serialize + for<'de> Deserialize<'de>,
     {

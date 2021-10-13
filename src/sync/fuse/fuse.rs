@@ -1,10 +1,18 @@
 use crate::sync::fuse::Relay;
 
+use doomstack::Doom;
+
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
 
 pub struct Fuse {
     sender: Sender<()>,
+}
+
+#[derive(Doom)]
+pub enum FuseError {
+    #[doom(description("Fuse burned"))]
+    FuseBurned,
 }
 
 impl Fuse {

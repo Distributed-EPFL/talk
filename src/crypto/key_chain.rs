@@ -1,11 +1,14 @@
 use crate::crypto::{
     primitives::{
-        errors::{MultiError, SignError},
-        multi::{KeyPair as MultiKeyPair, Signature as MultiSignature},
-        sign::{KeyPair as SignKeyPair, Signature as SignSignature},
+        multi::{
+            KeyPair as MultiKeyPair, MultiError, Signature as MultiSignature,
+        },
+        sign::{KeyPair as SignKeyPair, SignError, Signature as SignSignature},
     },
     KeyCard, Statement,
 };
+
+use doomstack::Top;
 
 use std::sync::Arc;
 
@@ -36,14 +39,14 @@ impl KeyChain {
     pub fn sign<S: Statement>(
         &self,
         message: &S,
-    ) -> Result<SignSignature, SignError> {
+    ) -> Result<SignSignature, Top<SignError>> {
         self.keypairs.sign.sign_raw(&(S::SCOPE, S::HEADER, message))
     }
 
     pub fn multisign<S: Statement>(
         &self,
         message: &S,
-    ) -> Result<MultiSignature, MultiError> {
+    ) -> Result<MultiSignature, Top<MultiError>> {
         self.keypairs
             .multi
             .sign_raw(&(S::SCOPE, S::HEADER, message))

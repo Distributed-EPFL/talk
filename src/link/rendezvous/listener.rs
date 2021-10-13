@@ -3,10 +3,7 @@ use async_trait::async_trait;
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
     errors::DynError,
-    link::rendezvous::{
-        errors::listener::{ListenError, ListenInterrupted},
-        Client, ListenerSettings,
-    },
+    link::rendezvous::{Client, ListenerSettings},
     net::{
         traits::TcpConnect, Listener as NetListener, PlainConnection,
         SecureConnection,
@@ -14,7 +11,7 @@ use crate::{
     sync::fuse::{Fuse, Relay},
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::net::Ipv4Addr;
 
@@ -27,6 +24,12 @@ type Outlet = Receiver<(PublicKey, SecureConnection)>;
 pub struct Listener {
     outlet: Outlet,
     fuse: Fuse,
+}
+
+#[derive(Doom)]
+enum ListenError {
+    #[doom(description("`listen` interrupted"))]
+    ListenInterrupted,
 }
 
 impl Listener {
@@ -67,12 +70,12 @@ impl Listener {
         listener: TcpListener,
         inlet: Sender<(PublicKey, SecureConnection)>,
         mut relay: Relay,
-    ) -> Result<(), ListenError> {
+    ) -> Result<(), Top<ListenError>> {
         loop {
             if let Ok((stream, _)) = relay
                 .map(listener.accept())
                 .await
-                .context(ListenInterrupted)?
+                .pot(ListenError::ListenInterrupted, here!())?
             {
                 if let Ok(mut connection) =
                     PlainConnection::from(stream).secure().await

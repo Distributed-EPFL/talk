@@ -10,17 +10,18 @@ mod server;
 mod server_settings;
 mod shard_id;
 
-pub mod errors;
-
 use request::Request;
 use response::Response;
 
 pub use client::Client;
+pub use client::ClientError;
 pub use client_settings::ClientSettings;
 pub use connector::Connector;
+pub use connector::ConnectorError;
 pub use connector_settings::ConnectorSettings;
 pub use listener::Listener;
 pub use listener_settings::ListenerSettings;
 pub use server::Server;
+pub use server::ServerError;
 pub use server_settings::ServerSettings;
 pub use shard_id::ShardId;

@@ -1,7 +1,4 @@
-use crate::crypto::primitives::errors::{
-    sign::{MalformedPublicKey, SerializeFailed, VerifyFailed},
-    SignError,
-};
+use doomstack::{here, Doom, ResultExt, Top};
 
 use ed25519_dalek::{
     Keypair as EdKeyPair, PublicKey as EdPublicKey, Signature as EdSignature,
@@ -12,9 +9,8 @@ use rand::rngs::OsRng;
 
 use serde::{Deserialize, Serialize};
 
-use snafu::ResultExt;
-
-use std::fmt::{Debug, Error as FmtError, Formatter};
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
@@ -26,6 +22,23 @@ pub struct PublicKey(EdPublicKey);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signature(EdSignature);
+
+#[derive(Doom)]
+pub enum SignError {
+    #[doom(description("Malformed public key: {}", source))]
+    #[doom(wrap(malformed_public_key))]
+    MalformedPublicKey {
+        source: ed25519_dalek::SignatureError,
+    },
+    #[doom(description("Failed to serialize: {}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
+    #[doom(description("Failed to `verify` signature: {}", source))]
+    #[doom(wrap(verify_failed))]
+    VerifyFailed {
+        source: ed25519_dalek::SignatureError,
+    },
+}
 
 /// An ed25519 keypair.
 ///
@@ -67,11 +80,15 @@ impl KeyPair {
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, SignError>
+    pub fn sign_raw<T>(&self, message: &T) -> Result<Signature, Top<SignError>>
     where
         T: Serialize,
     {
-        let message = bincode::serialize(message).context(SerializeFailed)?;
+        let message = bincode::serialize(message)
+            .map_err(SignError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
         let signature = self.0.sign(&message);
         Ok(Signature(signature))
     }
@@ -84,9 +101,11 @@ impl KeyPair {
 impl PublicKey {
     pub fn from_bytes(
         bytes: [u8; PUBLIC_KEY_LENGTH],
-    ) -> Result<Self, SignError> {
-        let public_key =
-            EdPublicKey::from_bytes(&bytes).context(MalformedPublicKey)?;
+    ) -> Result<Self, Top<SignError>> {
+        let public_key = EdPublicKey::from_bytes(&bytes)
+            .map_err(SignError::malformed_public_key)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         Ok(PublicKey(public_key))
     }
@@ -136,12 +155,21 @@ impl Signature {
         &self,
         public_key: PublicKey,
         message: &M,
-    ) -> Result<(), SignError>
+    ) -> Result<(), Top<SignError>>
     where
         M: Serialize,
     {
-        let message = bincode::serialize(message).context(SerializeFailed)?;
-        public_key.0.verify(&message, &self.0).context(VerifyFailed)
+        let message = bincode::serialize(message)
+            .map_err(SignError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        public_key
+            .0
+            .verify(&message, &self.0)
+            .map_err(SignError::verify_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
     /// Efficiently verifies a batch of `Signature`s on messages against the
@@ -178,7 +206,7 @@ impl Signature {
         public_keys: PI,
         messages: MI,
         signatures: SI,
-    ) -> Result<(), SignError>
+    ) -> Result<(), Top<SignError>>
     where
         PI: IntoIterator<Item = PublicKey>,
         MI: IntoIterator<Item = &'m M>,
@@ -194,7 +222,9 @@ impl Signature {
             .into_iter()
             .map(|message| bincode::serialize(&message))
             .collect::<Result<Vec<_>, _>>()
-            .context(SerializeFailed)?;
+            .map_err(SignError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         let messages = messages
             .iter()
@@ -211,12 +241,14 @@ impl Signature {
             &signatures[..],
             &public_keys[..],
         )
-        .context(VerifyFailed)
+        .map_err(SignError::verify_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())
     }
 }
 
 impl Debug for PublicKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
             .to_bytes()
             .iter()
@@ -238,7 +270,7 @@ impl Debug for PublicKey {
 }
 
 impl Debug for Signature {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
             .to_bytes()
             .iter()

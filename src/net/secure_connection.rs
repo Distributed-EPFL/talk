@@ -7,18 +7,14 @@ use crate::{
         },
         KeyCard, KeyChain, Scope, Statement, TalkHeader,
     },
-    net::{
-        errors::{
-            secure_connection::{AuthenticationFailed, SecureFailed},
-            SecureConnectionError,
-        },
-        PlainConnection, SecureReceiver, SecureSender,
-    },
+    net::{PlainConnection, SecureReceiver, SecureSender},
 };
+
+use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
 
-use snafu::ResultExt;
+use std::io;
 
 pub struct SecureConnection {
     sender: SecureSender,
@@ -31,22 +27,49 @@ struct Keys {
     remote: PublicKey,
 }
 
+#[derive(Doom)]
+pub enum SecureConnectionError {
+    #[doom(description("Failed to `authenticate`"))]
+    AuthenticateFailed,
+    #[doom(description("Failed to decrypt message"))]
+    DecryptFailed,
+    #[doom(description("Failed to encrypt message"))]
+    EncryptFailed,
+    #[doom(description("Failed to compute message authentication code"))]
+    MacComputeFailed,
+    #[doom(description("Failed to verify message authentication code"))]
+    MacVerifyFailed,
+    #[doom(description("Failed to read: {}", source))]
+    #[doom(wrap(read_failed))]
+    ReadFailed { source: io::Error },
+    #[doom(description("Failed to `secure`"))]
+    SecureFailed,
+    #[doom(description("Failed to write: {}", source))]
+    #[doom(wrap(write_failed))]
+    WriteFailed { source: io::Error },
+}
+
 #[derive(Serialize)]
 struct IdentityChallenge(PublicKey);
 
 impl SecureConnection {
     pub(in crate::net) async fn new(
         mut connection: PlainConnection,
-    ) -> Result<Self, SecureConnectionError> {
+    ) -> Result<Self, Top<SecureConnectionError>> {
         // Run Diffie-Helman
 
         let keypair = KeyPair::random();
         let local_key = keypair.public();
 
-        connection.send(&local_key).await.context(SecureFailed)?;
+        connection
+            .send(&local_key)
+            .await
+            .pot(SecureConnectionError::SecureFailed, here!())?;
 
-        let remote_key: PublicKey =
-            connection.receive().await.context(SecureFailed)?;
+        let remote_key: PublicKey = connection
+            .receive()
+            .await
+            .pot(SecureConnectionError::SecureFailed, here!())?;
 
         let (shared_key, role) = keypair.exchange(remote_key);
 
@@ -72,21 +95,33 @@ impl SecureConnection {
     pub async fn authenticate(
         &mut self,
         keychain: &KeyChain,
-    ) -> Result<KeyCard, SecureConnectionError> {
+    ) -> Result<KeyCard, Top<SecureConnectionError>> {
         let challenge = IdentityChallenge(self.keys.remote);
         let proof = keychain.sign(&challenge).unwrap();
 
-        self.send(&keychain.keycard()).await?;
-        self.send(&proof).await?;
+        self.send(&keychain.keycard())
+            .await
+            .pot(SecureConnectionError::AuthenticateFailed, here!())?;
 
-        let keycard: KeyCard = self.receive().await?;
-        let proof: Signature = self.receive().await?;
+        self.send(&proof)
+            .await
+            .pot(SecureConnectionError::AuthenticateFailed, here!())?;
+
+        let keycard: KeyCard = self
+            .receive()
+            .await
+            .pot(SecureConnectionError::AuthenticateFailed, here!())?;
+
+        let proof: Signature = self
+            .receive()
+            .await
+            .pot(SecureConnectionError::AuthenticateFailed, here!())?;
 
         let challenge = IdentityChallenge(self.keys.local);
 
         proof
             .verify(&keycard, &challenge)
-            .context(AuthenticationFailed)?;
+            .pot(SecureConnectionError::AuthenticateFailed, here!())?;
 
         Ok(keycard)
     }
@@ -94,7 +129,7 @@ impl SecureConnection {
     pub async fn send<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), SecureConnectionError>
+    ) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
@@ -104,21 +139,23 @@ impl SecureConnection {
     pub async fn send_plain<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), SecureConnectionError>
+    ) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.sender.send(message).await
     }
 
-    pub async fn receive<M>(&mut self) -> Result<M, SecureConnectionError>
+    pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
         self.receiver.receive().await
     }
 
-    pub async fn receive_plain<M>(&mut self) -> Result<M, SecureConnectionError>
+    pub async fn receive_plain<M>(
+        &mut self,
+    ) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {

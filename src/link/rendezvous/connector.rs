@@ -3,22 +3,14 @@ use async_trait::async_trait;
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
     errors::DynError,
-    link::rendezvous::{
-        errors::{
-            connector::{
-                AuthenticateFailed, ConnectionFailed, SecureFailed,
-                UnexpectedRemote,
-            },
-            ConnectorError,
-        },
-        Client, ConnectorSettings,
-    },
+    link::rendezvous::{Client, ConnectorSettings},
     net::{traits::TcpConnect, Connector as NetConnector, SecureConnection},
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::collections::HashMap;
+use std::io;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -30,6 +22,21 @@ pub struct Connector {
 
 struct Database {
     cache: HashMap<PublicKey, SocketAddr>,
+}
+
+#[derive(Doom)]
+pub enum ConnectorError {
+    #[doom(description("Address unknown"))]
+    AddressUnknown,
+    #[doom(description("Failed to `authenticate` connection"))]
+    AuthenticateFailed,
+    #[doom(description("Failed to connect: {}", source))]
+    #[doom(wrap(connect_failed))]
+    ConnectFailed { source: io::Error },
+    #[doom(description("Failed to `secure` connection"))]
+    SecureFailed,
+    #[doom(description("Unexpected remote: {:?}", remote))]
+    UnexpectedRemote { remote: PublicKey },
 }
 
 impl Connector {
@@ -57,31 +64,35 @@ impl Connector {
     async fn attempt(
         &self,
         root: PublicKey,
-    ) -> Result<SecureConnection, ConnectorError> {
+    ) -> Result<SecureConnection, Top<ConnectorError>> {
         let address = self
             .get_address(root)
-            .ok_or(ConnectorError::AddressUnknown)?;
+            .ok_or(ConnectorError::AddressUnknown.into_top())
+            .spot(here!())?;
 
         let mut connection = address
             .connect()
             .await
-            .context(ConnectionFailed)?
+            .map_err(ConnectorError::connect_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?
             .secure()
             .await
-            .context(SecureFailed)?;
+            .pot(ConnectorError::SecureFailed, here!())?;
 
         let keycard = connection
             .authenticate(&self.keychain)
             .await
-            .context(AuthenticateFailed)?;
+            .pot(ConnectorError::AuthenticateFailed, here!())?;
 
         if keycard.root() == root {
             Ok(connection)
         } else {
-            UnexpectedRemote {
+            ConnectorError::UnexpectedRemote {
                 remote: keycard.root(),
             }
             .fail()
+            .spot(here!())
         }
     }
 

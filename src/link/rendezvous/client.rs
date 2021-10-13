@@ -1,27 +1,43 @@
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyCard},
-    link::rendezvous::{
-        errors::{
-            client::{
-                AddressUnknown, AlreadyPublished, AttemptError, CardUnknown,
-                ConnectFailed, ConnectionError, ShardFull, ShardIdInvalid,
-                ShardIncomplete,
-            },
-            ClientError,
-        },
-        ClientSettings, Request, Response, ShardId,
-    },
+    link::rendezvous::{ClientSettings, Request, Response, ShardId},
     net::traits::TcpConnect,
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
+use std::io;
 use std::net::SocketAddr;
 use std::vec::Vec;
 
 pub struct Client {
     server: Box<dyn TcpConnect>,
     settings: ClientSettings,
+}
+
+#[derive(Doom)]
+pub enum ClientError {
+    #[doom(description("Address unknown"))]
+    AddressUnknown,
+    #[doom(description("Card is already published (shard: {:?})", shard))]
+    AlreadyPublished { shard: Option<ShardId> },
+    #[doom(description("Card unknown"))]
+    CardUnknown,
+    #[doom(description("Shard is full"))]
+    ShardFull,
+    #[doom(description("Shard ID is invalid"))]
+    ShardIdInvalid,
+    #[doom(description("Shard is incomplete"))]
+    ShardIncomplete,
+}
+
+#[derive(Doom)]
+enum AttemptError {
+    #[doom(description("Failed to `connect`"))]
+    #[doom(wrap(connect_failed))]
+    ConnectFailed { source: io::Error },
+    #[doom(description("Connection error"))]
+    ConnectionError,
 }
 
 impl Client {
@@ -39,14 +55,16 @@ impl Client {
         &self,
         card: KeyCard,
         shard: Option<ShardId>,
-    ) -> Result<(), ClientError> {
+    ) -> Result<(), Top<ClientError>> {
         match self.perform(&Request::PublishCard(card, shard)).await {
             Response::AcknowledgeCard => Ok(()),
             Response::AlreadyPublished(shard) => {
-                AlreadyPublished { shard }.fail()
+                ClientError::AlreadyPublished { shard }.fail().spot(here!())
             }
-            Response::ShardIdInvalid => ShardIdInvalid.fail(),
-            Response::ShardFull => ShardFull.fail(),
+            Response::ShardIdInvalid => {
+                ClientError::ShardIdInvalid.fail().spot(here!())
+            }
+            Response::ShardFull => ClientError::ShardFull.fail().spot(here!()),
             response => {
                 panic!("unexpected response to `publish_card`: {:?}", response)
             }
@@ -66,11 +84,15 @@ impl Client {
     pub async fn get_shard(
         &self,
         shard: ShardId,
-    ) -> Result<Vec<KeyCard>, ClientError> {
+    ) -> Result<Vec<KeyCard>, Top<ClientError>> {
         match self.perform(&Request::GetShard(shard)).await {
             Response::Shard(shard) => Ok(shard),
-            Response::ShardIdInvalid => ShardIdInvalid.fail(),
-            Response::ShardIncomplete => ShardIncomplete.fail(),
+            Response::ShardIdInvalid => {
+                ClientError::ShardIdInvalid.fail().spot(here!())
+            }
+            Response::ShardIncomplete => {
+                ClientError::ShardIncomplete.fail().spot(here!())
+            }
             response => {
                 panic!("unexpected response to `get_shard`: {:?}", response)
             }
@@ -80,10 +102,12 @@ impl Client {
     pub async fn get_card(
         &self,
         root: PublicKey,
-    ) -> Result<KeyCard, ClientError> {
+    ) -> Result<KeyCard, Top<ClientError>> {
         match self.perform(&Request::GetCard(root)).await {
             Response::Card(card) => Ok(card),
-            Response::CardUnknown => CardUnknown.fail(),
+            Response::CardUnknown => {
+                ClientError::CardUnknown.fail().spot(here!())
+            }
             response => {
                 panic!("unexpected response to `get_card`: {:?}", response)
             }
@@ -93,10 +117,12 @@ impl Client {
     pub async fn get_address(
         &self,
         root: PublicKey,
-    ) -> Result<SocketAddr, ClientError> {
+    ) -> Result<SocketAddr, Top<ClientError>> {
         match self.perform(&Request::GetAddress(root)).await {
             Response::Address(address) => Ok(address),
-            Response::AddressUnknown => AddressUnknown.fail(),
+            Response::AddressUnknown => {
+                ClientError::AddressUnknown.fail().spot(here!())
+            }
             response => {
                 panic!("unexpected response to `get_address`: {:?}", response)
             }
@@ -118,14 +144,24 @@ impl Client {
     async fn attempt(
         &self,
         request: &Request,
-    ) -> Result<Response, AttemptError> {
-        let mut connection =
-            self.server.connect().await.context(ConnectFailed)?;
+    ) -> Result<Response, Top<AttemptError>> {
+        let mut connection = self
+            .server
+            .connect()
+            .await
+            .map_err(AttemptError::connect_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
-        connection.send(&request).await.context(ConnectionError)?;
+        connection
+            .send(&request)
+            .await
+            .pot(AttemptError::ConnectionError, here!())?;
 
-        let response: Response =
-            connection.receive().await.context(ConnectionError)?;
+        let response: Response = connection
+            .receive()
+            .await
+            .pot(AttemptError::ConnectionError, here!())?;
 
         Ok(response)
     }
@@ -203,7 +239,7 @@ mod tests {
     ) {
         for j in 0..clients.len() {
             for c in 0..clients.len() {
-                match clients[c].get_shard(0).await.unwrap_err() {
+                match clients[c].get_shard(0).await.unwrap_err().top() {
                     ClientError::ShardIncomplete => (),
                     error => panic!(
                         "unexpected error upon querying shard: {}",
@@ -223,6 +259,7 @@ mod tests {
                         .get_card(roots[d].clone())
                         .await
                         .unwrap_err()
+                        .top()
                     {
                         ClientError::CardUnknown => (),
                         error => panic!(
@@ -376,6 +413,7 @@ mod tests {
             .publish_card(keycards[3].clone(), Some(0))
             .await
             .unwrap_err()
+            .top()
         {
             ClientError::ShardFull => (),
             error => {
@@ -393,6 +431,7 @@ mod tests {
             .publish_card(keycards[0].clone(), Some(1))
             .await
             .unwrap_err()
+            .top()
         {
             ClientError::ShardIdInvalid => (),
             error => panic!(

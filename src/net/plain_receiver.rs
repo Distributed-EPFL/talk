@@ -1,17 +1,11 @@
 use crate::{
     crypto::primitives::channel::Receiver as ChannelReceiver,
-    net::{
-        errors::{
-            plain_connection::{DeserializeFailed, ReadFailed},
-            PlainConnectionError,
-        },
-        SecureReceiver, Socket, UnitReceiver,
-    },
+    net::{PlainConnectionError, SecureReceiver, Socket, UnitReceiver},
 };
 
-use serde::Deserialize;
+use doomstack::{here, Doom, ResultExt, Top};
 
-use snafu::ResultExt;
+use serde::Deserialize;
 
 use tokio::io::ReadHalf;
 
@@ -30,14 +24,21 @@ impl PlainReceiver {
         self.unit_receiver.read_half()
     }
 
-    pub async fn receive<M>(&mut self) -> Result<M, PlainConnectionError>
+    pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver.receive().await.context(ReadFailed)?;
+        self.unit_receiver
+            .receive()
+            .await
+            .map_err(PlainConnectionError::read_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         bincode::deserialize(self.unit_receiver.as_slice())
-            .context(DeserializeFailed)
+            .map_err(PlainConnectionError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
     pub(in crate::net) fn secure(

@@ -10,7 +10,6 @@ mod socket;
 mod unit_receiver;
 mod unit_sender;
 
-pub mod errors;
 pub mod sockets;
 pub mod traits;
 
@@ -23,9 +22,11 @@ use unit_sender::UnitSender;
 pub use connector::Connector;
 pub use listener::Listener;
 pub use plain_connection::PlainConnection;
+pub use plain_connection::PlainConnectionError;
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
 pub use secure_connection::SecureConnection;
+pub use secure_connection::SecureConnectionError;
 pub use secure_receiver::SecureReceiver;
 pub use secure_sender::SecureSender;
 pub use socket::Socket;
