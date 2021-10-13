@@ -1,4 +1,6 @@
-use crate::crypto::primitives::errors::{ChannelError, SignError};
+use crate::crypto::primitives::{channel::ChannelError, errors::SignError};
+
+use doomstack::Top;
 
 use snafu::Snafu;
 
@@ -42,9 +44,9 @@ pub(crate) mod secure_connection {
         ))]
         AuthenticationFailed { source: SignError },
         #[snafu(display("failed to encrypt message: {}", source))]
-        EncryptFailed { source: ChannelError },
+        EncryptFailed { source: Top<ChannelError> },
         #[snafu(display("failed to decrypt message: {}", source))]
-        DecryptFailed { source: ChannelError },
+        DecryptFailed { source: Top<ChannelError> },
         #[snafu(display("failed to write: {}", source))]
         WriteFailed { source: IoError },
         #[snafu(display("failed to read: {}", source))]

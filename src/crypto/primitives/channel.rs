@@ -9,17 +9,13 @@ use chacha20poly1305::{
 };
 
 use crate::crypto::primitives::{
-    errors::{
-        channel::{AuthenticateFailed, DeserializeFailed, SerializeFailed},
-        ChannelError,
-    },
     exchange::{Role, SharedKey},
     hash::HASH_LENGTH,
 };
 
 use serde::{Deserialize, Serialize};
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::convert::TryInto;
 
@@ -28,13 +24,6 @@ const NONCE_LENGTH: usize = 12;
 pub struct Sender(State);
 pub struct Receiver(State);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(u8)]
-enum Lane {
-    Low = 0,
-    High = 1,
-}
-
 struct State {
     cipher: ChaCha20Poly1305,
     hasher: Hasher,
@@ -42,8 +31,32 @@ struct State {
     nonce: u128,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u8)]
+enum Lane {
+    Low = 0,
+    High = 1,
+}
+
+#[derive(Doom)]
+pub enum ChannelError {
+    #[doom(description("Failed to serialize: {:?}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
+    #[doom(description("Failed to deserialize: {:?}", source))]
+    #[doom(wrap(deserialize_failed))]
+    DeserializeFailed { source: bincode::Error },
+    #[doom(description("Failed to `decrypt`"))]
+    DecryptFailed,
+    #[doom(description("Failed to `authenticate`"))]
+    AuthenticateFailed,
+}
+
 impl Sender {
-    pub fn encrypt<M>(&mut self, message: &M) -> Result<Vec<u8>, ChannelError>
+    pub fn encrypt<M>(
+        &mut self,
+        message: &M,
+    ) -> Result<Vec<u8>, Top<ChannelError>>
     where
         M: Serialize,
     {
@@ -56,12 +69,14 @@ impl Sender {
         &mut self,
         message: &M,
         buffer: &mut Vec<u8>,
-    ) -> Result<(), ChannelError>
+    ) -> Result<(), Top<ChannelError>>
     where
         M: Serialize,
     {
         bincode::serialize_into(buffer as &mut Vec<u8>, message)
-            .context(SerializeFailed)?; // Serialize `message` into `buffer`
+            .map_err(ChannelError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?; // Serialize `message` into `buffer`
 
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
@@ -80,7 +95,7 @@ impl Sender {
     pub fn authenticate<M>(
         &mut self,
         message: &M,
-    ) -> Result<Vec<u8>, ChannelError>
+    ) -> Result<Vec<u8>, Top<ChannelError>>
     where
         M: Serialize,
     {
@@ -93,12 +108,14 @@ impl Sender {
         &mut self,
         message: &M,
         buffer: &mut Vec<u8>,
-    ) -> Result<(), ChannelError>
+    ) -> Result<(), Top<ChannelError>>
     where
         M: Serialize,
     {
         bincode::serialize_into(buffer as &mut Vec<u8>, message)
-            .context(SerializeFailed)?; // Serialize `message` into `buffer`
+            .map_err(ChannelError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?; // Serialize `message` into `buffer`
 
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
@@ -115,7 +132,10 @@ impl Sender {
 }
 
 impl Receiver {
-    pub fn decrypt<M>(&mut self, ciphertext: &[u8]) -> Result<M, ChannelError>
+    pub fn decrypt<M>(
+        &mut self,
+        ciphertext: &[u8],
+    ) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -125,15 +145,19 @@ impl Receiver {
             .0
             .cipher
             .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
-            .map_err(|_| ChannelError::DecryptFailed)?; // Decrypt `ciphertext` to obtain `message`
+            .map_err(|_| ChannelError::DecryptFailed.into_top())
+            .spot(here!())?; // Decrypt `ciphertext` to obtain `message`
 
-        bincode::deserialize(&message).context(DeserializeFailed) // Deserialize `message`
+        bincode::deserialize(&message)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!()) // Deserialize `message`
     }
 
     pub fn decrypt_in_place<M>(
         &mut self,
         ciphertext: &mut Vec<u8>,
-    ) -> Result<M, ChannelError>
+    ) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -146,16 +170,20 @@ impl Receiver {
                 &[],
                 ciphertext as &mut Vec<u8>,
             )
-            .map_err(|_| ChannelError::DecryptFailed)?; // Decrypt `ciphertext` in place
+            .map_err(|_| ChannelError::DecryptFailed.into_top())
+            .spot(here!())?; // Decrypt `ciphertext` in place
 
         let plaintext = ciphertext; // `ciphertext` is now `plaintext`
-        bincode::deserialize(plaintext).context(DeserializeFailed) // Deserialize `plaintext`
+        bincode::deserialize(plaintext)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!()) // Deserialize `plaintext`
     }
 
     pub fn authenticate<M>(
         &mut self,
         ciphertext: &[u8],
-    ) -> Result<M, ChannelError>
+    ) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -163,7 +191,7 @@ impl Receiver {
 
         if ciphertext.len() < HASH_LENGTH {
             // If `ciphertext` is shorter than `HASH_LENGTH`..
-            AuthenticateFailed.fail() // .. then it cannot contain an authentication tag
+            ChannelError::AuthenticateFailed.fail().spot(here!()) // .. then it cannot contain an authentication tag
         } else {
             let (message, tag) =
                 ciphertext.split_at(ciphertext.len() - HASH_LENGTH); // Split `ciphertext` into `message` and `tag` (`tag` is always second and `HASH_LENGTH` long)
@@ -179,9 +207,12 @@ impl Receiver {
 
             // IMPORTANT: The following equality MUST be computed between `Hash`es to ensure constant-time comparison!
             if tag == digest {
-                bincode::deserialize(message).context(DeserializeFailed) // If `tag` is correct, deserialize `message`..
+                bincode::deserialize(message)
+                    .map_err(ChannelError::deserialize_failed)
+                    .map_err(Doom::into_top)
+                    .spot(here!()) // If `tag` is correct, deserialize `message`..
             } else {
-                AuthenticateFailed.fail() // .. otherwise, authentication failed
+                ChannelError::AuthenticateFailed.fail().spot(here!()) // .. otherwise, authentication failed
             }
         }
     }
