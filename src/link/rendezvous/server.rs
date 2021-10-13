@@ -1,29 +1,42 @@
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyCard},
-    link::rendezvous::{
-        errors::{
-            server::{
-                ConnectionError, InitializeFailed, ListenError,
-                ListenInterrupted, ServeError, ServeInterrupted,
-            },
-            ServerError,
-        },
-        Request, Response, ServerSettings, ShardId,
-    },
+    link::rendezvous::{Request, Response, ServerSettings, ShardId},
     net::PlainConnection,
     sync::fuse::{Fuse, Relay},
 };
 
-use snafu::ResultExt;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
+use tokio::io;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 pub struct Server {
     fuse: Fuse,
+}
+
+#[derive(Doom)]
+pub enum ServerError {
+    #[doom(description("Failed to initialize server: {}", source))]
+    #[doom(wrap(initialize_failed))]
+    InitializeFailed { source: io::Error },
+}
+
+#[derive(Doom)]
+enum ListenError {
+    #[doom(description("`listen` interrupted"))]
+    ListenInterrupted,
+}
+
+#[derive(Doom)]
+enum ServeError {
+    #[doom(description("`serve` interrupted"))]
+    ServeInterrupted,
+    #[doom(description("connection error"))]
+    ConnectionError,
 }
 
 struct Database {
@@ -37,7 +50,7 @@ impl Server {
     pub async fn new<A>(
         address: A,
         settings: ServerSettings,
-    ) -> Result<Self, ServerError>
+    ) -> Result<Self, Top<ServerError>>
     where
         A: ToSocketAddrs,
     {
@@ -55,8 +68,11 @@ impl Server {
         let fuse = Fuse::new();
         let relay = fuse.relay();
 
-        let listener =
-            TcpListener::bind(address).await.context(InitializeFailed)?;
+        let listener = TcpListener::bind(address)
+            .await
+            .map_err(ServerError::initialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         tokio::spawn(async move {
             let _ = Server::listen(settings, database, listener, relay).await;
@@ -70,14 +86,14 @@ impl Server {
         database: Arc<Mutex<Database>>,
         listener: TcpListener,
         mut relay: Relay,
-    ) -> Result<(), ListenError> {
+    ) -> Result<(), Top<ListenError>> {
         let fuse = Fuse::new();
 
         loop {
             if let Ok((stream, address)) = relay
                 .map(listener.accept())
                 .await
-                .context(ListenInterrupted)?
+                .pot(ListenError::ListenInterrupted, here!())?
             {
                 let settings = settings.clone();
                 let database = database.clone();
@@ -103,12 +119,12 @@ impl Server {
         mut connection: PlainConnection,
         mut address: SocketAddr,
         mut relay: Relay,
-    ) -> Result<(), ServeError> {
+    ) -> Result<(), Top<ServeError>> {
         let request: Request = relay
             .map(connection.receive())
             .await
-            .context(ServeInterrupted)?
-            .context(ConnectionError)?;
+            .pot(ServeError::ServeInterrupted, here!())?
+            .pot(ServeError::ConnectionError, here!())?;
 
         let response = {
             let mut database = database.lock().unwrap();
@@ -192,7 +208,10 @@ impl Server {
             }
         };
 
-        connection.send(&response).await.context(ConnectionError)?;
+        connection
+            .send(&response)
+            .await
+            .pot(ServeError::ConnectionError, here!())?;
 
         Ok(())
     }
