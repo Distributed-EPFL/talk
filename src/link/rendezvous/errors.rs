@@ -1,7 +1,7 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
     link::rendezvous::ShardId,
-    net::{errors::SecureConnectionError, PlainConnectionError},
+    net::{PlainConnectionError, SecureConnectionError},
     sync::fuse::FuseError,
 };
 
@@ -96,9 +96,9 @@ pub(crate) mod connector {
         #[snafu(display("connection failed: {}", source))]
         ConnectionFailed { source: StdIoError },
         #[snafu(display("`secure` failed: {}", source))]
-        SecureFailed { source: SecureConnectionError },
+        SecureFailed { source: Top<SecureConnectionError> },
         #[snafu(display("`authenticate` failed: {}", source))]
-        AuthenticateFailed { source: SecureConnectionError },
+        AuthenticateFailed { source: Top<SecureConnectionError> },
         #[snafu(display("unexpected remote: {:?}", remote))]
         UnexpectedRemote { remote: PublicKey },
     }

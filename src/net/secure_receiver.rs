@@ -1,17 +1,11 @@
 use crate::{
     crypto::primitives::channel::Receiver as ChannelReceiver,
-    net::{
-        errors::{
-            secure_connection::{DecryptFailed, ReadFailed},
-            SecureConnectionError,
-        },
-        UnitReceiver,
-    },
+    net::{SecureConnectionError, UnitReceiver},
 };
 
-use serde::Deserialize;
+use doomstack::{here, Doom, ResultExt, Top};
 
-use snafu::ResultExt;
+use serde::Deserialize;
 
 pub struct SecureReceiver {
     unit_receiver: UnitReceiver,
@@ -29,25 +23,37 @@ impl SecureReceiver {
         }
     }
 
-    pub async fn receive<M>(&mut self) -> Result<M, SecureConnectionError>
+    pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver.receive().await.context(ReadFailed)?;
+        self.unit_receiver
+            .receive()
+            .await
+            .map_err(SecureConnectionError::read_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         self.channel_receiver
             .decrypt_in_place(self.unit_receiver.as_vec())
-            .context(DecryptFailed)
+            .pot(SecureConnectionError::DecryptFailed, here!())
     }
 
-    pub async fn receive_plain<M>(&mut self) -> Result<M, SecureConnectionError>
+    pub async fn receive_plain<M>(
+        &mut self,
+    ) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver.receive().await.context(ReadFailed)?;
+        self.unit_receiver
+            .receive()
+            .await
+            .map_err(SecureConnectionError::read_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         self.channel_receiver
             .authenticate(self.unit_receiver.as_vec())
-            .context(DecryptFailed)
+            .pot(SecureConnectionError::MacVerifyFailed, here!())
     }
 }

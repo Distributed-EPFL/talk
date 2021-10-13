@@ -1,6 +1,5 @@
 use crate::net::{
-    errors::SecureConnectionError, PlainReceiver, PlainSender,
-    SecureConnection, Socket,
+    PlainReceiver, PlainSender, SecureConnection, SecureConnectionError, Socket,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -83,7 +82,7 @@ impl PlainConnection {
 
     pub async fn secure(
         self,
-    ) -> Result<SecureConnection, SecureConnectionError> {
+    ) -> Result<SecureConnection, Top<SecureConnectionError>> {
         SecureConnection::new(self).await
     }
 }

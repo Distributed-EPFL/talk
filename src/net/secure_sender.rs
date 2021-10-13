@@ -1,17 +1,11 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
-    net::{
-        errors::{
-            secure_connection::{EncryptFailed, WriteFailed},
-            SecureConnectionError,
-        },
-        UnitSender,
-    },
+    net::{SecureConnectionError, UnitSender},
 };
 
-use serde::Serialize;
+use doomstack::{here, Doom, ResultExt, Top};
 
-use snafu::ResultExt;
+use serde::Serialize;
 
 pub struct SecureSender {
     unit_sender: UnitSender,
@@ -32,28 +26,38 @@ impl SecureSender {
     pub async fn send<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), SecureConnectionError>
+    ) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.channel_sender
             .encrypt_into(message, self.unit_sender.as_vec())
-            .context(EncryptFailed)?;
+            .pot(SecureConnectionError::EncryptFailed, here!())?;
 
-        self.unit_sender.flush().await.context(WriteFailed)
+        self.unit_sender
+            .flush()
+            .await
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
     pub async fn send_plain<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), SecureConnectionError>
+    ) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.channel_sender
             .authenticate_into(message, self.unit_sender.as_vec())
-            .context(EncryptFailed)?;
+            .pot(SecureConnectionError::MacComputeFailed, here!())?;
 
-        self.unit_sender.flush().await.context(WriteFailed)
+        self.unit_sender
+            .flush()
+            .await
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 }

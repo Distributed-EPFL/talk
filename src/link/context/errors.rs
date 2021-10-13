@@ -1,5 +1,5 @@
 use crate::{
-    errors::DynError, net::errors::SecureConnectionError, sync::fuse::FuseError,
+    errors::DynError, net::SecureConnectionError, sync::fuse::FuseError,
 };
 
 use doomstack::Top;
@@ -17,7 +17,7 @@ pub(crate) mod connector {
         #[snafu(display("connection failed: {}", source))]
         ConnectionFailed { source: DynError },
         #[snafu(display("connection error: {}", source))]
-        ConnectionError { source: SecureConnectionError },
+        ConnectionError { source: Top<SecureConnectionError> },
         #[snafu(display("context refused"))]
         ContextRefused,
     }

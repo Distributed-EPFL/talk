@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey, net::errors::SecureConnectionError,
+    crypto::primitives::sign::PublicKey, net::SecureConnectionError,
     sync::fuse::FuseError,
 };
 
@@ -22,9 +22,9 @@ pub(crate) mod test_connector {
         #[snafu(display("connection failed: {}", source))]
         ConnectionFailed { source: IoError },
         #[snafu(display("`secure` failed: {}", source))]
-        SecureFailed { source: SecureConnectionError },
+        SecureFailed { source: Top<SecureConnectionError> },
         #[snafu(display("`authenticate` failed: {}", source))]
-        AuthenticateFailed { source: SecureConnectionError },
+        AuthenticateFailed { source: Top<SecureConnectionError> },
         #[snafu(display("unexpected remote: {:?}", remote))]
         UnexpectedRemote { remote: PublicKey },
     }

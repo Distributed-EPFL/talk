@@ -1,4 +1,4 @@
-use crate::{net::errors::SecureConnectionError, sync::fuse::FuseError};
+use crate::{net::SecureConnectionError, sync::fuse::FuseError};
 
 use doomstack::Top;
 
@@ -33,7 +33,7 @@ pub(crate) mod receiver {
             #[snafu(display("`serve` interrupted: {}", source))]
             ServeInterrupted { source: Top<FuseError> },
             #[snafu(display("connection error: {}", source))]
-            ConnectionError { source: SecureConnectionError },
+            ConnectionError { source: Top<SecureConnectionError> },
         }
     }
 
@@ -44,7 +44,7 @@ pub(crate) mod receiver {
         #[snafu(visibility(pub(crate)))]
         pub enum AcknowledgeError {
             #[snafu(display("connection error: {}", source))]
-            ConnectionError { source: SecureConnectionError },
+            ConnectionError { source: Top<SecureConnectionError> },
         }
     }
 }
