@@ -1,5 +1,4 @@
 use crate::crypto::{
-    errors::{KeyCardError, MalformedKeyCard},
     primitives::{
         multi::{
             MultiError, PublicKey as MultiPublicKey,
@@ -12,12 +11,10 @@ use crate::crypto::{
     KeyChain, Scope, Statement, TalkHeader,
 };
 
-use doomstack::Top;
+use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-use snafu::ResultExt;
 
 #[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 #[serde(remote = "Self")]
@@ -30,6 +27,12 @@ pub struct KeyCard {
 struct PublicKeys {
     sign: SignPublicKey,
     multi: MultiPublicKey,
+}
+
+#[derive(Doom)]
+pub enum KeyCardError {
+    #[doom(description("Malformed keycard"))]
+    MalformedKeyCard,
 }
 
 impl KeyCard {
@@ -48,10 +51,10 @@ impl KeyCard {
         self.keys.sign
     }
 
-    fn check(&self) -> Result<(), KeyCardError> {
+    fn check(&self) -> Result<(), Top<KeyCardError>> {
         self.signature
             .verify(&self, &self.keys)
-            .context(MalformedKeyCard)
+            .pot(KeyCardError::MalformedKeyCard, here!())
     }
 }
 
