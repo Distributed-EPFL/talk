@@ -1,12 +1,17 @@
 use crate::crypto::{
     errors::{KeyCardError, MalformedKeyCard},
     primitives::{
-        errors::{MultiError, SignError},
-        multi::{PublicKey as MultiPublicKey, Signature as MultiSignature},
+        errors::SignError,
+        multi::{
+            MultiError, PublicKey as MultiPublicKey,
+            Signature as MultiSignature,
+        },
         sign::{PublicKey as SignPublicKey, Signature as SignSignature},
     },
     KeyChain, Scope, Statement, TalkHeader,
 };
+
+use doomstack::Top;
 
 use serde::de::Error as DeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -67,7 +72,7 @@ impl MultiSignature {
         &self,
         cards: C,
         message: &S,
-    ) -> Result<(), MultiError>
+    ) -> Result<(), Top<MultiError>>
     where
         C: IntoIterator<Item = &'c KeyCard>,
         S: Statement,
