@@ -1,7 +1,9 @@
 use crate::net::{
-    errors::{PlainConnectionError, SecureConnectionError},
-    PlainReceiver, PlainSender, SecureConnection, Socket,
+    errors::SecureConnectionError, PlainReceiver, PlainSender,
+    SecureConnection, Socket,
 };
+
+use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +12,24 @@ use tokio::io;
 pub struct PlainConnection {
     sender: PlainSender,
     receiver: PlainReceiver,
+}
+
+#[derive(Doom)]
+pub enum PlainConnectionError {
+    #[doom(description("Failed to deserialize: {}", source))]
+    #[doom(wrap(deserialize_failed))]
+    DeserializeFailed { source: bincode::Error },
+    #[doom(description("Mismatched halves"))]
+    MismatchedHalves,
+    #[doom(description("Failed to read: {}", source))]
+    #[doom(wrap(read_failed))]
+    ReadFailed { source: std::io::Error },
+    #[doom(description("Failed to serialize: {}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
+    #[doom(description("Failed to write: {}", source))]
+    #[doom(wrap(write_failed))]
+    WriteFailed { source: std::io::Error },
 }
 
 impl PlainConnection {
@@ -32,25 +52,25 @@ impl PlainConnection {
     pub fn join(
         sender: PlainSender,
         receiver: PlainReceiver,
-    ) -> Result<Self, PlainConnectionError> {
+    ) -> Result<Self, Top<PlainConnectionError>> {
         if receiver.read_half().is_pair_of(sender.write_half()) {
             Ok(Self { sender, receiver })
         } else {
-            Err(PlainConnectionError::MismatchedHalves)
+            PlainConnectionError::MismatchedHalves.fail().spot(here!())
         }
     }
 
     pub async fn send<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), PlainConnectionError>
+    ) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
     {
         self.sender.send(message).await
     }
 
-    pub async fn receive<M>(&mut self) -> Result<M, PlainConnectionError>
+    pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {

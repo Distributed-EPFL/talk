@@ -23,6 +23,7 @@ use unit_sender::UnitSender;
 pub use connector::Connector;
 pub use listener::Listener;
 pub use plain_connection::PlainConnection;
+pub use plain_connection::PlainConnectionError;
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
 pub use secure_connection::SecureConnection;

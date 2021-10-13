@@ -1,17 +1,11 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
-    net::{
-        errors::{
-            plain_connection::{SerializeFailed, WriteFailed},
-            PlainConnectionError,
-        },
-        SecureSender, Socket, UnitSender,
-    },
+    net::{PlainConnectionError, SecureSender, Socket, UnitSender},
 };
 
-use serde::Serialize;
+use doomstack::{here, Doom, ResultExt, Top};
 
-use snafu::ResultExt;
+use serde::Serialize;
 
 use tokio::io::WriteHalf;
 
@@ -33,14 +27,21 @@ impl PlainSender {
     pub async fn send<M>(
         &mut self,
         message: &M,
-    ) -> Result<(), PlainConnectionError>
+    ) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
     {
         bincode::serialize_into(self.unit_sender.as_vec(), &message)
-            .context(SerializeFailed)?;
+            .map_err(PlainConnectionError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
-        self.unit_sender.flush().await.context(WriteFailed)
+        self.unit_sender
+            .flush()
+            .await
+            .map_err(PlainConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
     pub(in crate::net) fn secure(

@@ -1,7 +1,7 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
     link::rendezvous::ShardId,
-    net::errors::{PlainConnectionError, SecureConnectionError},
+    net::{errors::SecureConnectionError, PlainConnectionError},
     sync::fuse::FuseError,
 };
 
@@ -40,7 +40,7 @@ pub(crate) mod server {
         #[snafu(display("`serve` interrupted: {}", source))]
         ServeInterrupted { source: Top<FuseError> },
         #[snafu(display("connection error: {}", source))]
-        ConnectionError { source: PlainConnectionError },
+        ConnectionError { source: Top<PlainConnectionError> },
     }
 }
 
@@ -70,7 +70,7 @@ pub(crate) mod client {
         #[snafu(display("`connect` failed: {}", source))]
         ConnectFailed { source: StdIoError },
         #[snafu(display("connection error: {}", source))]
-        ConnectionError { source: PlainConnectionError },
+        ConnectionError { source: Top<PlainConnectionError> },
     }
 }
 
