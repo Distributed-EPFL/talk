@@ -22,7 +22,7 @@ type Outlet = Receiver<(PublicKey, SecureConnection)>;
 
 pub struct Listener {
     outlet: Outlet,
-    fuse: Fuse,
+    _fuse: Fuse,
 }
 
 #[derive(Doom)]
@@ -71,7 +71,10 @@ impl Listener {
         let client = Client::new(server, settings.client_settings);
         client.advertise_port(root, port).await;
 
-        Listener { outlet, fuse }
+        Listener {
+            outlet,
+            _fuse: fuse,
+        }
     }
 
     async fn listen(

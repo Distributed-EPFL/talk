@@ -20,10 +20,6 @@ impl UnitSender {
         &self.write_half
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        self.buffer.as_slice()
-    }
-
     pub fn as_vec(&mut self) -> &mut Vec<u8> {
         &mut self.buffer
     }

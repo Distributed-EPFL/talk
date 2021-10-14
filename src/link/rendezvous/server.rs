@@ -15,7 +15,7 @@ use tokio::io;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 pub struct Server {
-    fuse: Fuse,
+    _fuse: Fuse,
 }
 
 #[derive(Doom)]
@@ -78,7 +78,7 @@ impl Server {
             let _ = Server::listen(settings, database, listener, relay).await;
         });
 
-        Ok(Server { fuse })
+        Ok(Server { _fuse: fuse })
     }
 
     async fn listen(

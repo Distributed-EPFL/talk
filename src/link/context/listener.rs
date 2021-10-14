@@ -19,7 +19,7 @@ pub struct Listener {
     context: ContextId,
     outlet: Outlet,
     database: Arc<Mutex<Database>>,
-    fuse: Arc<Fuse>,
+    _fuse: Arc<Fuse>,
 }
 
 impl Listener {
@@ -33,7 +33,7 @@ impl Listener {
             context,
             outlet,
             database,
-            fuse,
+            _fuse: fuse,
         }
     }
 }

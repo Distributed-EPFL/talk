@@ -33,7 +33,7 @@ pub enum ClientError {
 
 #[derive(Doom)]
 enum AttemptError {
-    #[doom(description("Failed to `connect`"))]
+    #[doom(description("Failed to `connect`: {}", source))]
     #[doom(wrap(connect_failed))]
     ConnectFailed { source: io::Error },
     #[doom(description("Connection error"))]

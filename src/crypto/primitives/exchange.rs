@@ -59,11 +59,11 @@ impl KeyPair {
 }
 
 impl PublicKey {
-    fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Self {
+    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Self {
         PublicKey(bytes.into())
     }
 
-    fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
+    pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
         self.0.to_bytes()
     }
 }

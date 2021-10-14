@@ -20,7 +20,7 @@ type Outlet = Receiver<(PublicKey, SecureConnection)>;
 
 pub struct TestListener {
     outlet: Outlet,
-    fuse: Fuse,
+    _fuse: Fuse,
 }
 
 #[derive(Doom)]
@@ -56,7 +56,13 @@ impl TestListener {
                 TestListener::listen(keychain, listener, inlet, relay).await;
         });
 
-        (TestListener { outlet, fuse }, address)
+        (
+            TestListener {
+                outlet,
+                _fuse: fuse,
+            },
+            address,
+        )
     }
 
     async fn listen(
