@@ -112,7 +112,6 @@ mod tests {
                 row.into_iter().map(|mut pair| {
                     tokio::spawn(async move {
                         let sent: u32 = 42;
-
                         let received: u32 = pair.transmit(&sent).await.unwrap();
 
                         assert_eq!(received, sent);

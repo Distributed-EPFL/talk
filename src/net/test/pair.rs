@@ -5,16 +5,19 @@ use doomstack::Top;
 use serde::{Deserialize, Serialize};
 
 pub(crate) struct ConnectionPair {
-    pub sender: SecureConnection,
-    pub receiver: SecureConnection,
+    pub source: SecureConnection,
+    pub destination: SecureConnection,
 }
 
 impl ConnectionPair {
     pub(crate) fn new(
-        sender: SecureConnection,
-        receiver: SecureConnection,
+        source: SecureConnection,
+        destination: SecureConnection,
     ) -> Self {
-        ConnectionPair { sender, receiver }
+        ConnectionPair {
+            source,
+            destination,
+        }
     }
 
     pub(crate) async fn transmit<M>(
@@ -24,6 +27,6 @@ impl ConnectionPair {
     where
         M: Serialize + for<'de> Deserialize<'de>,
     {
-        futures::join!(self.sender.send(message), self.receiver.receive()).1
+        futures::join!(self.source.send(message), self.destination.receive()).1
     }
 }

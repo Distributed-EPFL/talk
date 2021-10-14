@@ -1,8 +1,6 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
-    link::context::{
-        ConnectDispatcher, ContextId, ListenDispatcher,
-    },
+    link::context::{ConnectDispatcher, ContextId, ListenDispatcher},
     net::{
         test::{ConnectionPair, System as NetSystem},
         Connector, Listener,
@@ -42,12 +40,7 @@ impl ContextSystem {
 
         let listeners = listeners
             .into_iter()
-            .map(|listener| {
-                ListenDispatcher::new(
-                    listener,
-                    Default::default(),
-                )
-            })
+            .map(|listener| ListenDispatcher::new(listener, Default::default()))
             .collect();
 
         ContextSystem::new(keys, connectors, listeners)

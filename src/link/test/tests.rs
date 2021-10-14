@@ -2,9 +2,7 @@ mod context {
     use crate::{
         crypto::primitives::sign::PublicKey,
         link::{
-            context::{
-                ConnectDispatcher, ListenDispatcher,
-            },
+            context::{ConnectDispatcher, ListenDispatcher},
             test::ContextSystem,
         },
         net::{
@@ -78,7 +76,6 @@ mod context {
                 row.into_iter().map(|mut pair| {
                     tokio::spawn(async move {
                         let sent: u32 = 42;
-
                         let received: u32 = pair.transmit(&sent).await.unwrap();
 
                         assert_eq!(received, sent);
@@ -109,11 +106,9 @@ mod context {
             mut listeners,
         } = NetSystem::setup(2).await.into();
 
-        let mut listener = ListenDispatcher::new(
-            listeners.remove(1),
-            Default::default(),
-        )
-        .register(format!("Context"));
+        let mut listener =
+            ListenDispatcher::new(listeners.remove(1), Default::default())
+                .register(format!("Context"));
 
         let handle_a = tokio::spawn(async move {
             let _connection = listener.accept().await.unwrap();
