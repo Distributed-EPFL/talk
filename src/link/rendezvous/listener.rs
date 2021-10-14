@@ -95,7 +95,8 @@ impl Listener {
                 let relay = fuse.relay();
 
                 tokio::spawn(async move {
-                    let _ = Listener::serve(connection, keychain, inlet, relay).await;
+                    let _ = Listener::serve(connection, keychain, inlet, relay)
+                        .await;
                 });
             }
         }
@@ -119,7 +120,7 @@ impl Listener {
             .pot(ServeError::ServeInterrupted, here!())?
             .pot(ServeError::AuthenticateFailed, here!())?;
 
-        // This can only fail if the (local) receiving end is 
+        // This can only fail if the (local) receiving end is
         // dropped, in which case we don't care about the error
         let _ = inlet.send((keycard.root(), connection)).await;
 
