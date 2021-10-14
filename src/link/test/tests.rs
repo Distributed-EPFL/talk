@@ -53,13 +53,16 @@ mod context {
     async fn simple() {
         let mut system: ContextSystem = ContextSystem::setup(2).await.into();
 
+        let sent = 42;
+
         let received = system
             .connect(0, 1, format!("Context 1"))
             .await
-            .transmit(&42)
-            .await;
+            .transmit(&sent)
+            .await
+            .unwrap();
 
-        assert_eq!(42u32, received.unwrap());
+        assert_eq!(sent, received);
     }
 
     #[tokio::test]
@@ -87,14 +90,14 @@ mod context {
         join(handles).await.unwrap();
     }
 
-    struct SlowConnector(TestConnector);
+    struct SlowLoris(TestConnector);
 
-    impl SlowConnector {
+    impl SlowLoris {
         async fn connect(&self, root: PublicKey) -> PlainConnection {
             let address = self.0.peers.get(&root).unwrap().clone();
             address.connect().await.unwrap()
 
-            // does not complete
+            // does not complete (no `secure` or `authenticate`)
         }
     }
 
@@ -110,21 +113,21 @@ mod context {
             ListenDispatcher::new(listeners.remove(1), Default::default())
                 .register(format!("Context"));
 
-        let handle_a = tokio::spawn(async move {
+        let accept_handle = tokio::spawn(async move {
             let _connection = listener.accept().await.unwrap();
         });
 
-        let slow_loris = SlowConnector(connectors.remove(0));
+        let slow_loris = SlowLoris(connectors.remove(0));
         let _slow_connection = slow_loris.connect(keys[1]).await;
 
         let connector = ConnectDispatcher::new(connectors.remove(0))
             .register(format!("Context"));
 
-        let handle_b = tokio::spawn(async move {
+        let connect_handle = tokio::spawn(async move {
             let _connection = connector.connect(keys[1]).await.unwrap();
         });
 
-        join([handle_a, handle_b])
+        join([accept_handle, connect_handle])
             .await
             .expect("Stuck handling a slow loris");
     }

@@ -68,28 +68,34 @@ impl System {
 
     pub(crate) async fn connect(
         &mut self,
-        peer_a: usize,
-        peer_b: usize,
+        source: usize,
+        destination: usize,
     ) -> ConnectionPair {
-        let fut_a = self.connectors[peer_a].connect(self.keys[peer_b]);
-        let fut_b = self.listeners[peer_b].accept();
+        let source_future =
+            self.connectors[source].connect(self.keys[destination]);
+        let destination_future = self.listeners[destination].accept();
 
-        let (connection_a, connection_b) = futures::join!(fut_a, fut_b);
+        let (source, destination) =
+            futures::join!(source_future, destination_future);
 
-        ConnectionPair::new(connection_a.unwrap(), connection_b.unwrap().1)
+        ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }
 
     pub(crate) async fn connection_matrix(
         &mut self,
     ) -> Vec<Vec<ConnectionPair>> {
         let mut matrix = Vec::with_capacity(self.keys.len());
+
         for sender in 0..self.keys.len() {
-            let mut column = Vec::with_capacity(self.keys.len());
+            let mut row = Vec::with_capacity(self.keys.len());
+
             for receiver in 0..self.keys.len() {
-                column.push(self.connect(sender, receiver).await);
+                row.push(self.connect(sender, receiver).await);
             }
-            matrix.push(column);
+
+            matrix.push(row);
         }
+
         matrix
     }
 }
@@ -100,9 +106,7 @@ mod tests {
 
     #[tokio::test]
     async fn example_setup() {
-        let peers = 10;
-
-        let mut system = System::setup(peers).await;
+        let mut system = System::setup(8).await;
 
         let handles = system
             .connection_matrix()

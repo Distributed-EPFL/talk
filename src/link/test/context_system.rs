@@ -48,19 +48,20 @@ impl ContextSystem {
 
     pub(crate) async fn connect(
         &mut self,
-        peer_a: usize,
-        peer_b: usize,
+        source: usize,
+        destination: usize,
         context: ContextId,
     ) -> ConnectionPair {
-        let connector = self.connectors[peer_a].register(context.clone());
-        let mut listener = self.listeners[peer_b].register(context);
+        let connector = self.connectors[source].register(context.clone());
+        let mut listener = self.listeners[destination].register(context);
 
-        let fut_a = connector.connect(self.keys[peer_b]);
-        let fut_b = listener.accept();
+        let source_future = connector.connect(self.keys[destination]);
+        let destination_future = listener.accept();
 
-        let (connection_a, connection_b) = futures::join!(fut_a, fut_b);
+        let (source, destination) =
+            futures::join!(source_future, destination_future);
 
-        ConnectionPair::new(connection_a.unwrap(), connection_b.unwrap().1)
+        ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }
 
     pub(crate) async fn connection_matrix(
@@ -68,15 +69,17 @@ impl ContextSystem {
         context: ContextId,
     ) -> Vec<Vec<ConnectionPair>> {
         let mut matrix = Vec::with_capacity(self.keys.len());
+
         for sender in 0..self.keys.len() {
-            let mut column = Vec::with_capacity(self.keys.len());
+            let mut row = Vec::with_capacity(self.keys.len());
+
             for receiver in 0..self.keys.len() {
-                column.push(
-                    self.connect(sender, receiver, context.clone()).await,
-                );
+                row.push(self.connect(sender, receiver, context.clone()).await);
             }
-            matrix.push(column);
+
+            matrix.push(row);
         }
+
         matrix
     }
 }
