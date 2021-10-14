@@ -1,3 +1,5 @@
+use crate::net::{ReceiverSettings, SenderSettings};
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -39,6 +41,17 @@ impl Default for ConnectionSettings {
 }
 
 impl ConnectionSettings {
+    pub fn split(self) -> (SenderSettings, ReceiverSettings) {
+        (
+            SenderSettings {
+                send_timeout: self.send_timeout,
+            },
+            ReceiverSettings {
+                receive_timeout: self.receive_timeout,
+            },
+        )
+    }
+
     pub fn set_default(settings: ConnectionSettings) {
         let send_timeout = if let Some(send_timeout) = settings.send_timeout {
             let send_timeout = send_timeout.as_micros() as u64;
