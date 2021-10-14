@@ -31,6 +31,16 @@ enum ListenError {
     ListenInterrupted,
 }
 
+#[derive(Doom)]
+enum ServeError {
+    #[doom(description("`serve` interrupted"))]
+    ServeInterrupted,
+    #[doom(description("Failed to `secure` the connection"))]
+    SecureFailed,
+    #[doom(description("Failed to `authenticate` the connection"))]
+    AuthenticateFailed,
+}
+
 impl Listener {
     pub async fn new<S>(
         server: S,
@@ -70,23 +80,50 @@ impl Listener {
         inlet: Sender<(PublicKey, SecureConnection)>,
         mut relay: Relay,
     ) -> Result<(), Top<ListenError>> {
+        let fuse = Fuse::new();
+
         loop {
             if let Ok((stream, _)) = relay
                 .map(listener.accept())
                 .await
                 .pot(ListenError::ListenInterrupted, here!())?
             {
-                if let Ok(mut connection) =
-                    PlainConnection::from(stream).secure().await
-                {
-                    if let Ok(keycard) =
-                        connection.authenticate(&keychain).await
-                    {
-                        let _ = inlet.send((keycard.root(), connection)).await;
-                    }
-                }
+                let connection = stream.into();
+
+                let keychain = keychain.clone();
+                let inlet = inlet.clone();
+                let relay = fuse.relay();
+
+                tokio::spawn(async move {
+                    let _ = Listener::serve(connection, keychain, inlet, relay);
+                });
             }
         }
+    }
+
+    async fn serve(
+        connection: PlainConnection,
+        keychain: KeyChain,
+        inlet: Sender<(PublicKey, SecureConnection)>,
+        mut relay: Relay,
+    ) -> Result<(), Top<ServeError>> {
+        let mut connection = relay
+            .map(connection.secure())
+            .await
+            .pot(ServeError::ServeInterrupted, here!())?
+            .pot(ServeError::SecureFailed, here!())?;
+
+        let keycard = relay
+            .map(connection.authenticate(&keychain))
+            .await
+            .pot(ServeError::ServeInterrupted, here!())?
+            .pot(ServeError::AuthenticateFailed, here!())?;
+
+        // This can only fail if the (local) receiving end is 
+        // dropped, in which case we don't care about the error
+        let _ = inlet.send((keycard.root(), connection)).await;
+
+        Ok(())
     }
 }
 
