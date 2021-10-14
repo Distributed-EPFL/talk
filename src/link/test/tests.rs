@@ -12,7 +12,7 @@ mod context {
             traits::TcpConnect,
             Connector, Listener, PlainConnection,
         },
-        time,
+        time::test::join,
     };
 
     #[tokio::test]
@@ -87,7 +87,7 @@ mod context {
             })
             .flatten();
 
-        time::join(handles).await.unwrap();
+        join(handles).await.unwrap();
     }
 
     struct SlowConnector(TestConnector);
@@ -129,7 +129,7 @@ mod context {
             let _connection = connector.connect(keys[1]).await.unwrap();
         });
 
-        time::join([handle_a, handle_b])
+        join([handle_a, handle_b])
             .await
             .expect("Stuck handling a slow loris");
     }

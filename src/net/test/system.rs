@@ -4,7 +4,7 @@ use crate::{
         test::{ConnectionPair, TestConnector, TestListener},
         Connector, Listener,
     },
-    time,
+    time::test::join,
 };
 
 use futures::stream::{FuturesOrdered, StreamExt};
@@ -121,6 +121,6 @@ mod tests {
             })
             .flatten();
 
-        time::join(handles).await.unwrap();
+        join(handles).await.unwrap();
     }
 }

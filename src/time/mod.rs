@@ -2,10 +2,7 @@ mod sleep_agent;
 mod sleep_schedule;
 
 #[cfg(test)]
-mod join;
-
-#[cfg(test)]
-pub(crate) use join::join;
+pub(crate) mod test;
 
 pub mod sleep_schedules;
 
