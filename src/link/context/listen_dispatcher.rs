@@ -149,7 +149,7 @@ impl ListenDispatcher {
 
                 // This can only fail if the (local) receiving end is
                 // dropped, in which case we don't care about the error
-                let _ = inlet.send((remote, connection)).await;
+                let _ = inlet.try_send((remote, connection));
 
                 Ok(())
             }

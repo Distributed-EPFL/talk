@@ -108,7 +108,7 @@ impl TestListener {
 
         // This can only fail if the (local) receiving end is
         // dropped, in which case we don't care about the error
-        let _ = inlet.send((keycard.root(), connection)).await;
+        let _ = inlet.try_send((keycard.root(), connection));
 
         Ok(())
     }
