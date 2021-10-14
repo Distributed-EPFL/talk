@@ -7,11 +7,11 @@ use crate::{
     sync::fuse::{Fuse, Relay},
 };
 
+use doomstack::{here, Doom, ResultExt, Top};
+
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
-use doomstack::{here, Doom, ResultExt, Top};
 
 use tokio::sync::mpsc::{self, Sender};
 
@@ -24,13 +24,25 @@ pub struct ListenDispatcher {
 }
 
 pub(in crate::link::context) struct Database {
-    pub inlets: HashMap<ContextId, Arc<Mutex<Inlet>>>,
+    pub inlets: HashMap<ContextId, Inlet>,
 }
 
 #[derive(Doom)]
 enum ListenError {
     #[doom(description("`listen` interrupted"))]
     ListenInterrupted,
+}
+
+#[derive(Doom)]
+enum ServeError {
+    #[doom(description("`serve` interrupted"))]
+    ServeInterrupted,
+    #[doom(description("Failed to receive context"))]
+    ReceiveFailed,
+    #[doom(description("Failed to send context acknowledgement"))]
+    SendFailed,
+    #[doom(description("`ContextId` missing: \"{}\"", context))]
+    MissingContext { context: ContextId },
 }
 
 impl ListenDispatcher {
@@ -65,9 +77,10 @@ impl ListenDispatcher {
         let (inlet, outlet) = mpsc::channel(self.settings.channel_capacity);
 
         let mut database = self.database.lock().unwrap();
+
         match database.inlets.entry(context.clone()) {
             Entry::Vacant(entry) => {
-                entry.insert(Arc::new(Mutex::new(inlet)));
+                entry.insert(inlet);
             }
             Entry::Occupied(_) => {
                 drop(database);
@@ -86,37 +99,68 @@ impl ListenDispatcher {
     where
         L: NetListener,
     {
+        let fuse = Fuse::new();
+
         loop {
-            if let Ok((remote, mut connection)) = relay
+            if let Ok((remote, connection)) = relay
                 .map(listener.accept())
                 .await
                 .pot(ListenError::ListenInterrupted, here!())?
             {
-                if let Ok(Request::Context(context)) =
-                    connection.receive().await
-                {
-                    let inlet = database
-                        .lock()
-                        .unwrap()
-                        .inlets
-                        .get(&context)
-                        .map(Clone::clone);
+                let relay = fuse.relay();
+                let database = database.clone();
 
-                    if let Some(inlet) = inlet {
-                        if connection
-                            .send(&Response::ContextAccepted)
-                            .await
-                            .is_ok()
-                        {
-                            let _ = inlet
-                                .lock()
-                                .unwrap()
-                                .try_send((remote, connection));
-                        }
-                    }
-                } else {
-                    let _ = connection.send(&Response::ContextRefused).await;
-                }
+                tokio::spawn(async move {
+                    let _ = ListenDispatcher::serve(
+                        remote, connection, database, relay,
+                    )
+                    .await;
+                });
+            }
+        }
+    }
+
+    async fn serve(
+        remote: PublicKey,
+        mut connection: SecureConnection,
+        database: Arc<Mutex<Database>>,
+        mut relay: Relay,
+    ) -> Result<(), Top<ServeError>> {
+        let Request::Context(context) = relay
+            .map(connection.receive())
+            .await
+            .pot(ServeError::ServeInterrupted, here!())?
+            .pot(ServeError::ReceiveFailed, here!())?;
+
+        let inlet = database
+            .lock()
+            .unwrap()
+            .inlets
+            .get(&context)
+            .map(Clone::clone);
+
+        match inlet {
+            Some(inlet) => {
+                relay
+                    .map(connection.send(&Response::ContextAccepted))
+                    .await
+                    .pot(ServeError::ServeInterrupted, here!())?
+                    .pot(ServeError::SendFailed, here!())?;
+
+                // This can only fail if the (local) receiving end is
+                // dropped, in which case we don't care about the error
+                let _ = inlet.send((remote, connection)).await;
+
+                Ok(())
+            }
+            None => {
+                relay
+                    .map(connection.send(&Response::ContextRefused))
+                    .await
+                    .pot(ServeError::ServeInterrupted, here!())?
+                    .pot(ServeError::SendFailed, here!())?;
+
+                ServeError::MissingContext { context }.fail().spot(here!())
             }
         }
     }
