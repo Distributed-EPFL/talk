@@ -1,9 +1,10 @@
 use crate::{
     crypto::{primitives::sign::PublicKey, KeyChain},
     net::{
-        test::{self, ConnectionPair, TestConnector, TestListener},
+        test::{ConnectionPair, TestConnector, TestListener},
         Connector, Listener,
     },
+    time,
 };
 
 use futures::stream::{FuturesOrdered, StreamExt};
@@ -107,8 +108,8 @@ mod tests {
             .connection_matrix()
             .await
             .into_iter()
-            .map(|v| {
-                v.into_iter().map(|mut pair| {
+            .map(|row| {
+                row.into_iter().map(|mut pair| {
                     tokio::spawn(async move {
                         let sent: u32 = 42;
 
@@ -118,9 +119,8 @@ mod tests {
                     })
                 })
             })
-            .flatten()
-            .collect::<Vec<_>>();
+            .flatten();
 
-        test::join(handles).await.unwrap();
+        time::join(handles).await.unwrap();
     }
 }

@@ -3,24 +3,22 @@ mod context {
         crypto::primitives::sign::PublicKey,
         link::{
             context::{
-                ConnectDispatcher, ListenDispatcher, ListenDispatcherSettings,
+                ConnectDispatcher, ListenDispatcher,
             },
-            test::System,
+            test::ContextSystem,
         },
         net::{
-            test::{self, System as NetSystem, TestConnector},
+            test::{System as NetSystem, TestConnector},
             traits::TcpConnect,
             Connector, Listener, PlainConnection,
         },
+        time,
     };
-
-    use futures::stream::FuturesUnordered;
-    use futures::StreamExt;
 
     #[tokio::test]
     #[should_panic(expected = "called `register` twice for the same `context`")]
     async fn connector_double_register() {
-        let System { connectors, .. } = System::setup(1).await;
+        let ContextSystem { connectors, .. } = ContextSystem::setup(1).await;
 
         let _connector_1 = connectors[0].register(format!("Context 1"));
         let _connector_2 = connectors[0].register(format!("Context 1"));
@@ -28,7 +26,7 @@ mod context {
 
     #[tokio::test]
     async fn connector_register_again() {
-        let System { connectors, .. } = System::setup(1).await;
+        let ContextSystem { connectors, .. } = ContextSystem::setup(1).await;
 
         let _connector_1 = connectors[0].register(format!("Context 1"));
         drop(_connector_1);
@@ -38,7 +36,7 @@ mod context {
     #[tokio::test]
     #[should_panic(expected = "called `register` twice for the same `context`")]
     async fn listener_double_register() {
-        let System { listeners, .. } = System::setup(1).await;
+        let ContextSystem { listeners, .. } = ContextSystem::setup(1).await;
 
         let _listener_1 = listeners[0].register(format!("Context 1"));
         let _listener_2 = listeners[0].register(format!("Context 1"));
@@ -46,7 +44,7 @@ mod context {
 
     #[tokio::test]
     async fn listener_register_again() {
-        let System { listeners, .. } = System::setup(1).await;
+        let ContextSystem { listeners, .. } = ContextSystem::setup(1).await;
 
         let listener_1 = listeners[0].register(format!("Context 1"));
         drop(listener_1);
@@ -55,7 +53,7 @@ mod context {
 
     #[tokio::test]
     async fn simple() {
-        let mut system: System = System::setup(2).await.into();
+        let mut system: ContextSystem = ContextSystem::setup(2).await.into();
 
         let received = system
             .connect(0, 1, format!("Context 1"))
@@ -70,30 +68,26 @@ mod context {
     async fn stress() {
         let peer = 10;
 
-        let mut system: System = System::setup(peer).await.into();
+        let mut system: ContextSystem = ContextSystem::setup(peer).await.into();
 
-        let mut matrix =
-            system.connection_matrix(format!("Universal Context")).await;
+        let handles = system
+            .connection_matrix(format!("Context"))
+            .await
+            .into_iter()
+            .map(|row| {
+                row.into_iter().map(|mut pair| {
+                    tokio::spawn(async move {
+                        let sent: u32 = 42;
 
-        // TODO: refactor to use the join
-        matrix
-            .iter_mut()
-            .enumerate()
-            .map(|(i, column)| async move {
-                column
-                    .iter_mut()
-                    .enumerate()
-                    .map(|(j, pair)| async move {
-                        let n = ((i + 1) * (j + 1)) as u32;
-                        let result: u32 = pair.transmit(&n).await.unwrap();
-                        assert_eq!(n, result);
+                        let received: u32 = pair.transmit(&sent).await.unwrap();
+
+                        assert_eq!(received, sent);
                     })
-                    .collect::<FuturesUnordered<_>>()
+                })
             })
-            .collect::<FuturesUnordered<_>>()
-            .flatten()
-            .collect::<Vec<()>>()
-            .await;
+            .flatten();
+
+        time::join(handles).await.unwrap();
     }
 
     struct SlowConnector(TestConnector);
@@ -117,7 +111,7 @@ mod context {
 
         let mut listener = ListenDispatcher::new(
             listeners.remove(1),
-            ListenDispatcherSettings::default(),
+            Default::default(),
         )
         .register(format!("Context"));
 
@@ -135,7 +129,7 @@ mod context {
             let _connection = connector.connect(keys[1]).await.unwrap();
         });
 
-        test::join([handle_a, handle_b])
+        time::join([handle_a, handle_b])
             .await
             .expect("Stuck handling a slow loris");
     }

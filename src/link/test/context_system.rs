@@ -2,7 +2,6 @@ use crate::{
     crypto::primitives::sign::PublicKey,
     link::context::{
         ConnectDispatcher, ContextId, ListenDispatcher,
-        ListenDispatcherSettings,
     },
     net::{
         test::{ConnectionPair, System as NetSystem},
@@ -10,26 +9,26 @@ use crate::{
     },
 };
 
-pub(crate) struct System {
+pub(crate) struct ContextSystem {
     pub keys: Vec<PublicKey>,
     pub connectors: Vec<ConnectDispatcher>,
     pub listeners: Vec<ListenDispatcher>,
 }
 
-impl System {
+impl ContextSystem {
     pub(crate) fn new(
         keys: Vec<PublicKey>,
         connectors: Vec<ConnectDispatcher>,
         listeners: Vec<ListenDispatcher>,
     ) -> Self {
-        System {
+        ContextSystem {
             keys,
             connectors,
             listeners,
         }
     }
 
-    pub(crate) async fn setup(peers: usize) -> System {
+    pub(crate) async fn setup(peers: usize) -> ContextSystem {
         let NetSystem {
             keys,
             connectors,
@@ -46,12 +45,12 @@ impl System {
             .map(|listener| {
                 ListenDispatcher::new(
                     listener,
-                    ListenDispatcherSettings::default(),
+                    Default::default(),
                 )
             })
             .collect();
 
-        System::new(keys, connectors, listeners)
+        ContextSystem::new(keys, connectors, listeners)
     }
 
     pub(crate) async fn connect(
