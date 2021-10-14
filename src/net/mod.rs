@@ -1,3 +1,4 @@
+mod connection_settings;
 mod connector;
 mod listener;
 mod plain_connection;
@@ -19,6 +20,7 @@ pub mod test;
 use unit_receiver::UnitReceiver;
 use unit_sender::UnitSender;
 
+pub use connection_settings::ConnectionSettings;
 pub use connector::Connector;
 pub use listener::Listener;
 pub use plain_connection::PlainConnection;
