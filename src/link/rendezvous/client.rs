@@ -207,7 +207,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let clients = (0..clients)
-            .map(|_| Client::new(address, ClientSettings::default()))
+            .map(|_| Client::new(address, Default::default()))
             .collect::<Vec<_>>();
 
         (keychains, keycards, roots, clients)

@@ -9,7 +9,7 @@ pub struct ListenerSettings {
 impl Default for ListenerSettings {
     fn default() -> Self {
         ListenerSettings {
-            client_settings: ClientSettings::default(),
+            client_settings: Default::default(),
             channel_capacity: 32,
         }
     }
