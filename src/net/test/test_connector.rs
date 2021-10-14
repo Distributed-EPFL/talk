@@ -17,7 +17,7 @@ pub(crate) struct TestConnector {
 }
 
 #[derive(Doom)]
-pub enum TestConnectorError {
+pub(crate) enum TestConnectorError {
     #[doom(description("Address unknown"))]
     AddressUnknown,
     #[doom(description("Failed to `authenticate` connection"))]
