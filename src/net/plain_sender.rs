@@ -10,6 +10,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use serde::Serialize;
 
 use tokio::io::WriteHalf;
+use tokio::time;
 
 pub struct PlainSender {
     unit_sender: UnitSender,
@@ -47,9 +48,18 @@ impl PlainSender {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.unit_sender
-            .flush()
-            .await
+        let future = self.unit_sender.flush();
+
+        let result = if let Some(send_timeout) = self.settings.send_timeout {
+            time::timeout(send_timeout, future)
+                .await
+                .map_err(|_| PlainConnectionError::SendTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(PlainConnectionError::write_failed)
             .map_err(Doom::into_top)
             .spot(here!())

@@ -7,6 +7,8 @@ use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::Deserialize;
 
+use tokio::time;
+
 pub struct SecureReceiver {
     unit_receiver: UnitReceiver,
     channel_receiver: ChannelReceiver,
@@ -34,9 +36,20 @@ impl SecureReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver
-            .receive()
-            .await
+        let future = self.unit_receiver.receive();
+
+        let result = if let Some(receive_timeout) =
+            self.settings.receive_timeout
+        {
+            time::timeout(receive_timeout, future)
+                .await
+                .map_err(|_| SecureConnectionError::ReceiveTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(SecureConnectionError::read_failed)
             .map_err(Doom::into_top)
             .spot(here!())?;
@@ -52,9 +65,20 @@ impl SecureReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver
-            .receive()
-            .await
+        let future = self.unit_receiver.receive();
+
+        let result = if let Some(receive_timeout) =
+            self.settings.receive_timeout
+        {
+            time::timeout(receive_timeout, future)
+                .await
+                .map_err(|_| SecureConnectionError::ReceiveTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(SecureConnectionError::read_failed)
             .map_err(Doom::into_top)
             .spot(here!())?;

@@ -11,6 +11,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use serde::Deserialize;
 
 use tokio::io::ReadHalf;
+use tokio::time;
 
 pub struct PlainReceiver {
     unit_receiver: UnitReceiver,
@@ -40,9 +41,20 @@ impl PlainReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.unit_receiver
-            .receive()
-            .await
+        let future = self.unit_receiver.receive();
+
+        let result = if let Some(receive_timeout) =
+            self.settings.receive_timeout
+        {
+            time::timeout(receive_timeout, future)
+                .await
+                .map_err(|_| PlainConnectionError::ReceiveTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(PlainConnectionError::read_failed)
             .map_err(Doom::into_top)
             .spot(here!())?;

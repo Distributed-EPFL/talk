@@ -24,6 +24,10 @@ pub enum PlainConnectionError {
     #[doom(description("Failed to read: {}", source))]
     #[doom(wrap(read_failed))]
     ReadFailed { source: std::io::Error },
+    #[doom(description("Timed out while `receive`ing"))]
+    ReceiveTimeout,
+    #[doom(description("Timed out while `send`ing"))]
+    SendTimeout,
     #[doom(description("Failed to serialize: {}", source))]
     #[doom(wrap(serialize_failed))]
     SerializeFailed { source: bincode::Error },

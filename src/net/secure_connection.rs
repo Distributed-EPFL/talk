@@ -42,8 +42,12 @@ pub enum SecureConnectionError {
     #[doom(description("Failed to read: {}", source))]
     #[doom(wrap(read_failed))]
     ReadFailed { source: io::Error },
+    #[doom(description("Timed out while `receive`ing"))]
+    ReceiveTimeout,
     #[doom(description("Failed to `secure`"))]
     SecureFailed,
+    #[doom(description("Timed out while `send`ing"))]
+    SendTimeout,
     #[doom(description("Failed to write: {}", source))]
     #[doom(wrap(write_failed))]
     WriteFailed { source: io::Error },

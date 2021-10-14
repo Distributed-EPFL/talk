@@ -7,6 +7,8 @@ use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::Serialize;
 
+use tokio::time;
+
 pub struct SecureSender {
     unit_sender: UnitSender,
     channel_sender: ChannelSender,
@@ -41,9 +43,18 @@ impl SecureSender {
             .encrypt_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::EncryptFailed, here!())?;
 
-        self.unit_sender
-            .flush()
-            .await
+        let future = self.unit_sender.flush();
+
+        let result = if let Some(send_timeout) = self.settings.send_timeout {
+            time::timeout(send_timeout, future)
+                .await
+                .map_err(|_| SecureConnectionError::SendTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(SecureConnectionError::write_failed)
             .map_err(Doom::into_top)
             .spot(here!())
@@ -60,9 +71,18 @@ impl SecureSender {
             .authenticate_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::MacComputeFailed, here!())?;
 
-        self.unit_sender
-            .flush()
-            .await
+        let future = self.unit_sender.flush();
+
+        let result = if let Some(send_timeout) = self.settings.send_timeout {
+            time::timeout(send_timeout, future)
+                .await
+                .map_err(|_| SecureConnectionError::SendTimeout.into_top())
+                .spot(here!())?
+        } else {
+            future.await
+        };
+
+        result
             .map_err(SecureConnectionError::write_failed)
             .map_err(Doom::into_top)
             .spot(here!())
