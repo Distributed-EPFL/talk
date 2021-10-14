@@ -81,7 +81,7 @@ impl TestListener {
 
                 tokio::spawn(async move {
                     let _ =
-                        TestListener::serve(connection, keychain, inlet, relay);
+                        TestListener::serve(connection, keychain, inlet, relay).await;
                 });
             }
         }

@@ -95,7 +95,7 @@ impl Listener {
                 let relay = fuse.relay();
 
                 tokio::spawn(async move {
-                    let _ = Listener::serve(connection, keychain, inlet, relay);
+                    let _ = Listener::serve(connection, keychain, inlet, relay).await;
                 });
             }
         }
