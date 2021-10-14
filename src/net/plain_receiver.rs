@@ -1,6 +1,9 @@
 use crate::{
     crypto::primitives::channel::Receiver as ChannelReceiver,
-    net::{PlainConnectionError, SecureReceiver, Socket, UnitReceiver},
+    net::{
+        PlainConnectionError, ReceiverSettings, SecureReceiver, Socket,
+        UnitReceiver,
+    },
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -11,13 +14,22 @@ use tokio::io::ReadHalf;
 
 pub struct PlainReceiver {
     unit_receiver: UnitReceiver,
+    settings: ReceiverSettings,
 }
 
 impl PlainReceiver {
-    pub(in crate::net) fn new(read_half: ReadHalf<Box<dyn Socket>>) -> Self {
+    pub(in crate::net) fn new(
+        read_half: ReadHalf<Box<dyn Socket>>,
+        settings: ReceiverSettings,
+    ) -> Self {
         PlainReceiver {
             unit_receiver: UnitReceiver::new(read_half),
+            settings,
         }
+    }
+
+    pub fn configure(&mut self, settings: ReceiverSettings) {
+        self.settings = settings;
     }
 
     pub(in crate::net) fn read_half(&self) -> &ReadHalf<Box<dyn Socket>> {
@@ -45,6 +57,6 @@ impl PlainReceiver {
         self,
         channel_receiver: ChannelReceiver,
     ) -> SecureReceiver {
-        SecureReceiver::new(self.unit_receiver, channel_receiver)
+        SecureReceiver::new(self.unit_receiver, channel_receiver, self.settings)
     }
 }

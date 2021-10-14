@@ -1,5 +1,6 @@
 use crate::net::{
-    PlainReceiver, PlainSender, SecureConnection, SecureConnectionError, Socket,
+    ConnectionSettings, PlainReceiver, PlainSender, SecureConnection,
+    SecureConnectionError, Socket,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -42,8 +43,11 @@ impl PlainConnection {
     pub(in crate::net) fn from_boxed(socket: Box<dyn Socket>) -> Self {
         let (read_half, write_half) = io::split(socket);
 
-        let sender = PlainSender::new(write_half);
-        let receiver = PlainReceiver::new(read_half);
+        let settings = ConnectionSettings::default();
+        let (sender_settings, receiver_settings) = settings.split();
+
+        let sender = PlainSender::new(write_half, sender_settings);
+        let receiver = PlainReceiver::new(read_half, receiver_settings);
 
         PlainConnection { sender, receiver }
     }
@@ -57,6 +61,13 @@ impl PlainConnection {
         } else {
             PlainConnectionError::MismatchedHalves.fail().spot(here!())
         }
+    }
+
+    pub fn configure(&mut self, settings: ConnectionSettings) {
+        let (sender_settings, receiver_settings) = settings.split();
+
+        self.sender.configure(sender_settings);
+        self.receiver.configure(receiver_settings);
     }
 
     pub async fn send<M>(

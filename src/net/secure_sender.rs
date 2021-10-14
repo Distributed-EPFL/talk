@@ -1,6 +1,6 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
-    net::{SecureConnectionError, UnitSender},
+    net::{SecureConnectionError, SenderSettings, UnitSender},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -10,17 +10,24 @@ use serde::Serialize;
 pub struct SecureSender {
     unit_sender: UnitSender,
     channel_sender: ChannelSender,
+    settings: SenderSettings,
 }
 
 impl SecureSender {
     pub(in crate::net) fn new(
         unit_sender: UnitSender,
         channel_sender: ChannelSender,
+        settings: SenderSettings,
     ) -> Self {
         Self {
             unit_sender,
             channel_sender,
+            settings,
         }
+    }
+
+    pub fn configure(&mut self, settings: SenderSettings) {
+        self.settings = settings;
     }
 
     pub async fn send<M>(

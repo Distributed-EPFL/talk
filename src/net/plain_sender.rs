@@ -1,6 +1,8 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
-    net::{PlainConnectionError, SecureSender, Socket, UnitSender},
+    net::{
+        PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender,
+    },
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -11,13 +13,22 @@ use tokio::io::WriteHalf;
 
 pub struct PlainSender {
     unit_sender: UnitSender,
+    settings: SenderSettings,
 }
 
 impl PlainSender {
-    pub(in crate::net) fn new(write_half: WriteHalf<Box<dyn Socket>>) -> Self {
+    pub(in crate::net) fn new(
+        write_half: WriteHalf<Box<dyn Socket>>,
+        settings: SenderSettings,
+    ) -> Self {
         PlainSender {
             unit_sender: UnitSender::new(write_half),
+            settings,
         }
+    }
+
+    pub fn configure(&mut self, settings: SenderSettings) {
+        self.settings = settings;
     }
 
     pub(in crate::net) fn write_half(&self) -> &WriteHalf<Box<dyn Socket>> {
@@ -48,6 +59,6 @@ impl PlainSender {
         self,
         channel_sender: ChannelSender,
     ) -> SecureSender {
-        SecureSender::new(self.unit_sender, channel_sender)
+        SecureSender::new(self.unit_sender, channel_sender, self.settings)
     }
 }

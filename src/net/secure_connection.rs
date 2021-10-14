@@ -7,7 +7,7 @@ use crate::{
         },
         KeyCard, KeyChain, Scope, Statement, TalkHeader,
     },
-    net::{PlainConnection, SecureReceiver, SecureSender},
+    net::{ConnectionSettings, PlainConnection, SecureReceiver, SecureSender},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -90,6 +90,13 @@ impl SecureConnection {
                 remote: remote_key,
             },
         })
+    }
+
+    pub fn configure(&mut self, settings: ConnectionSettings) {
+        let (sender_settings, receiver_settings) = settings.split();
+
+        self.sender.configure(sender_settings);
+        self.receiver.configure(receiver_settings);
     }
 
     pub async fn authenticate(

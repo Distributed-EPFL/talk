@@ -1,6 +1,6 @@
 use crate::{
     crypto::primitives::channel::Receiver as ChannelReceiver,
-    net::{SecureConnectionError, UnitReceiver},
+    net::{ReceiverSettings, SecureConnectionError, UnitReceiver},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -10,17 +10,24 @@ use serde::Deserialize;
 pub struct SecureReceiver {
     unit_receiver: UnitReceiver,
     channel_receiver: ChannelReceiver,
+    settings: ReceiverSettings,
 }
 
 impl SecureReceiver {
     pub(in crate::net) fn new(
         unit_receiver: UnitReceiver,
         channel_receiver: ChannelReceiver,
+        settings: ReceiverSettings,
     ) -> Self {
         Self {
             unit_receiver,
             channel_receiver,
+            settings,
         }
+    }
+
+    pub fn configure(&mut self, settings: ReceiverSettings) {
+        self.settings = settings;
     }
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
