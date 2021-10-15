@@ -1,7 +1,7 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
     net::{Listener, SecureConnection, SecureSender},
-    sync::fuse::{Fuse, Relay},
+    sync::fuse::{Fuse, Mikado, Relay},
     unicast::{
         Acknowledger, Message as UnicastMessage, ReceiverSettings, Response,
     },
@@ -43,6 +43,8 @@ enum ServeError {
 
 #[derive(Doom)]
 enum AcknowledgeError {
+    #[doom(description("`acknowledge` interrupted"))]
+    AcknowledgeInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
@@ -112,20 +114,32 @@ where
         connection: SecureConnection,
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
-        mut relay: Relay,
+        relay: Relay,
     ) -> Result<(), Top<ServeError>> {
         let (sender, mut receiver) = connection.split();
 
         let (response_inlet, response_outlet) =
             mpsc::channel::<Response>(settings.response_channel_capacity);
 
-        tokio::spawn(async move {
-            let _ =
-                Receiver::<Message>::acknowledge(sender, response_outlet).await;
-        });
+        let mut mikado = Mikado::new();
+
+        {
+            let mikado = mikado.try_clone().unwrap();
+
+            tokio::spawn(async move {
+                let _ = Receiver::<Message>::acknowledge(
+                    sender,
+                    response_outlet,
+                    mikado,
+                )
+                .await;
+            });
+        }
+
+        mikado.depend(relay);
 
         for sequence in 0..u32::MAX {
-            let message: Message = relay
+            let message: Message = mikado
                 .map(receiver.receive())
                 .await
                 .pot(ServeError::ServeInterrupted, here!())?
@@ -134,7 +148,7 @@ where
             let acknowledger =
                 Acknowledger::new(sequence, response_inlet.clone());
 
-            let _ = message_inlet.send((remote, message, acknowledger)).await;
+            let _ = message_inlet.try_send((remote, message, acknowledger));
         }
 
         Ok(())
@@ -143,16 +157,19 @@ where
     async fn acknowledge(
         mut sender: SecureSender,
         mut response_outlet: ResponseOutlet,
+        mut mikado: Mikado,
     ) -> Result<(), Top<AcknowledgeError>> {
         loop {
-            match response_outlet.recv().await {
-                Some(response) => {
-                    sender
-                        .send(&response)
-                        .await
-                        .pot(AcknowledgeError::ConnectionError, here!())?;
-                }
-                None => return Ok(()),
+            if let Some(response) = mikado
+                .map(response_outlet.recv())
+                .await
+                .pot(AcknowledgeError::AcknowledgeInterrupted, here!())?
+            {
+                mikado
+                    .map(sender.send(&response))
+                    .await
+                    .pot(AcknowledgeError::AcknowledgeInterrupted, here!())?
+                    .pot(AcknowledgeError::ConnectionError, here!())?;
             }
         }
     }
