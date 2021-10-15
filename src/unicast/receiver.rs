@@ -20,7 +20,7 @@ type ResponseOutlet = TokioReceiver<Response>;
 
 pub struct Receiver<Message: UnicastMessage> {
     message_outlet: MessageOutlet<Message>,
-    fuse: Fuse,
+    _fuse: Fuse,
 }
 
 #[derive(Doom)]
@@ -68,7 +68,7 @@ where
 
         Receiver {
             message_outlet,
-            fuse,
+            _fuse: fuse,
         }
     }
 
@@ -90,8 +90,8 @@ where
                 .pot(ListenError::ListenInterrupted, here!())?
             {
                 let message_inlet = message_inlet.clone();
-                let relay = fuse.relay();
                 let settings = settings.clone();
+                let relay = fuse.relay();
 
                 tokio::spawn(async move {
                     let _ = Receiver::serve(
@@ -133,6 +133,7 @@ where
 
             let acknowledger =
                 Acknowledger::new(sequence, response_inlet.clone());
+
             let _ = message_inlet.send((remote, message, acknowledger)).await;
         }
 
