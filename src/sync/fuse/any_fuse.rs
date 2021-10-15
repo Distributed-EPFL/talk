@@ -21,6 +21,15 @@ impl AnyFuse {
         }
     }
 
+    pub fn depend(&self, mut relay: Relay) {
+        let fuse = self.clone();
+
+        tokio::spawn(async move {
+            let _fuse = fuse;
+            relay.wait().await
+        });
+    }
+
     pub fn relay(&self) -> Result<Relay, Top<FuseError>> {
         match &*self.state.lock().unwrap() {
             State::Intact(fuse) => Ok(fuse.relay()),
