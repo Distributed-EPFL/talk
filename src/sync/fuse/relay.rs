@@ -32,7 +32,7 @@ impl Relay {
         tokio::select! {
             biased;
 
-            _ = self.switch_off() => {
+            _ = self.wait() => {
                 FuseError::FuseBurned.fail().spot(here!())
             },
             result = future => {
@@ -41,7 +41,7 @@ impl Relay {
         }
     }
 
-    async fn switch_off(&mut self) {
+    pub async fn wait(&mut self) {
         match &mut self.state {
             State::On(receiver) => receiver.recv().await.unwrap(),
             State::Off => (),
