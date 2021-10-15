@@ -24,10 +24,12 @@ impl Acknowledger {
 
     pub fn weak(self) {
         // `self.acknowledgement` is already initialized to `Weak`
+        // `Drop::drop` is called here
     }
 
     pub fn strong(mut self) {
         self.acknowledgement = Acknowledgement::Strong;
+        // `Drop::drop` is called here
     }
 }
 
