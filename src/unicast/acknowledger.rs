@@ -35,8 +35,9 @@ impl Acknowledger {
 
 impl Drop for Acknowledger {
     fn drop(&mut self) {
-        let _ = self
-            .response_inlet
-            .try_send(Response::new(self.sequence, self.acknowledgement));
+        let _ = self.response_inlet.try_send(Response::Acknowledgement(
+            self.sequence,
+            self.acknowledgement,
+        ));
     }
 }

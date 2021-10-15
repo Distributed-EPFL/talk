@@ -131,9 +131,12 @@ where
         });
 
         tokio::spawn(async move {
-            let _ =
-                Receiver::<Message>::drive_out(sender, response_outlet, mikado_out)
-                    .await;
+            let _ = Receiver::<Message>::drive_out(
+                sender,
+                response_outlet,
+                mikado_out,
+            )
+            .await;
         });
     }
 
