@@ -1,6 +1,6 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
-    net::{Listener, SecureConnection, SecureSender},
+    net::{Listener, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::{Fuse, Mikado, Relay},
     unicast::{
         Acknowledger, Message as UnicastMessage, ReceiverSettings, Response,
@@ -24,27 +24,23 @@ pub struct Receiver<Message: UnicastMessage> {
 }
 
 #[derive(Doom)]
-#[doom(description("<Placeholder `ReceiverError`>"))]
-pub struct ReceiverError;
-
-#[derive(Doom)]
 enum ListenError {
     #[doom(description("`listen` interrupted"))]
     ListenInterrupted,
 }
 
 #[derive(Doom)]
-enum ServeError {
-    #[doom(description("`serve` interrupted"))]
-    ServeInterrupted,
+enum DriveInError {
+    #[doom(description("`drive_in` interrupted"))]
+    DriveInInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
 
 #[derive(Doom)]
-enum AcknowledgeError {
-    #[doom(description("`acknowledge` interrupted"))]
-    AcknowledgeInterrupted,
+enum DriveOutError {
+    #[doom(description("`drive_out` interrupted"))]
+    DriveOutInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
@@ -95,55 +91,65 @@ where
                 let settings = settings.clone();
                 let relay = fuse.relay();
 
-                tokio::spawn(async move {
-                    let _ = Receiver::serve(
-                        remote,
-                        connection,
-                        message_inlet,
-                        settings,
-                        relay,
-                    )
-                    .await;
-                });
+                Receiver::spawn(
+                    remote,
+                    connection,
+                    message_inlet,
+                    settings,
+                    relay,
+                );
             }
         }
     }
 
-    async fn serve(
+    fn spawn(
         remote: PublicKey,
         connection: SecureConnection,
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
         relay: Relay,
-    ) -> Result<(), Top<ServeError>> {
-        let (sender, mut receiver) = connection.split();
+    ) {
+        let (sender, receiver) = connection.split();
 
         let (response_inlet, response_outlet) =
             mpsc::channel::<Response>(settings.response_channel_capacity);
 
-        let mut mikado = Mikado::new();
+        let mikado_in = Mikado::new();
+        let mikado_out = mikado_in.try_clone().unwrap();
 
-        {
-            let mikado = mikado.try_clone().unwrap();
+        mikado_in.depend(relay);
 
-            tokio::spawn(async move {
-                let _ = Receiver::<Message>::acknowledge(
-                    sender,
-                    response_outlet,
-                    mikado,
-                )
-                .await;
-            });
-        }
+        tokio::spawn(async move {
+            let _ = Receiver::<Message>::drive_in(
+                remote,
+                receiver,
+                message_inlet,
+                response_inlet,
+                mikado_in,
+            )
+            .await;
+        });
 
-        mikado.depend(relay);
+        tokio::spawn(async move {
+            let _ =
+                Receiver::<Message>::drive_out(sender, response_outlet, mikado_out)
+                    .await;
+        });
+    }
 
+    async fn drive_in(
+        remote: PublicKey,
+        mut receiver: SecureReceiver,
+        message_inlet: MessageInlet<Message>,
+        response_inlet: ResponseInlet,
+        mut mikado: Mikado,
+    ) -> Result<(), Top<DriveInError>> {
         for sequence in 0..u32::MAX {
             let message: Message = mikado
                 .map(receiver.receive())
                 .await
-                .pot(ServeError::ServeInterrupted, here!())?
-                .pot(ServeError::ConnectionError, here!())?;
+                .pot(DriveInError::DriveInInterrupted, here!())?
+                .pot(DriveInError::ConnectionError, here!())?;
 
             let acknowledger =
                 Acknowledger::new(sequence, response_inlet.clone());
@@ -154,22 +160,22 @@ where
         Ok(())
     }
 
-    async fn acknowledge(
+    async fn drive_out(
         mut sender: SecureSender,
         mut response_outlet: ResponseOutlet,
         mut mikado: Mikado,
-    ) -> Result<(), Top<AcknowledgeError>> {
+    ) -> Result<(), Top<DriveOutError>> {
         loop {
             if let Some(response) = mikado
                 .map(response_outlet.recv())
                 .await
-                .pot(AcknowledgeError::AcknowledgeInterrupted, here!())?
+                .pot(DriveOutError::DriveOutInterrupted, here!())?
             {
                 mikado
                     .map(sender.send(&response))
                     .await
-                    .pot(AcknowledgeError::AcknowledgeInterrupted, here!())?
-                    .pot(AcknowledgeError::ConnectionError, here!())?;
+                    .pot(DriveOutError::DriveOutInterrupted, here!())?
+                    .pot(DriveOutError::ConnectionError, here!())?;
             }
         }
     }
