@@ -3,7 +3,8 @@ use crate::{
     net::{Listener, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::{Fuse, Mikado, Relay},
     unicast::{
-        Acknowledger, Message as UnicastMessage, ReceiverSettings, Response,
+        Acknowledgement, Acknowledger, Message as UnicastMessage,
+        ReceiverSettings, Request, Response,
     },
 };
 
@@ -148,16 +149,27 @@ where
         mut mikado: Mikado,
     ) -> Result<(), Top<DriveInError>> {
         for sequence in 0..u32::MAX {
-            let message: Message = mikado
+            let request: Request<Message> = mikado
                 .map(receiver.receive())
                 .await
                 .pot(DriveInError::DriveInInterrupted, here!())?
                 .pot(DriveInError::ConnectionError, here!())?;
 
-            let acknowledger =
-                Acknowledger::new(sequence, response_inlet.clone());
+            match request {
+                Request::Message(message) => {
+                    let acknowledger =
+                        Acknowledger::new(sequence, response_inlet.clone());
 
-            let _ = message_inlet.try_send((remote, message, acknowledger));
+                    let _ =
+                        message_inlet.try_send((remote, message, acknowledger));
+                }
+                Request::KeepAlive => {
+                    let _ = response_inlet.try_send(Response::Acknowledgement(
+                        sequence,
+                        Acknowledgement::Weak,
+                    ));
+                }
+            }
         }
 
         Ok(())
