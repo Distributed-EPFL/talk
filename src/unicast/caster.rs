@@ -44,7 +44,7 @@ struct Database {
 }
 
 pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(
-    Request<Message>,
+    pub Request<Message>,
 );
 
 #[derive(Clone, Doom)]
