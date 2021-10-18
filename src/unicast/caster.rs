@@ -19,8 +19,10 @@ use tokio::sync::oneshot::{
 
 use std::collections::HashMap;
 
-type MessageInlet<Message> = MpscSender<(Message, AcknowledgementInlet)>;
-type MessageOutlet<Message> = MpscReceiver<(Message, AcknowledgementInlet)>;
+type RequestInlet<Message> =
+    MpscSender<(Request<Message>, AcknowledgementInlet)>;
+type RequestOutlet<Message> =
+    MpscReceiver<(Request<Message>, AcknowledgementInlet)>;
 
 type AcknowledgementInlet =
     OneshotSender<Result<Acknowledgement, Top<CasterError>>>;
@@ -33,7 +35,7 @@ pub(in crate::unicast) struct Caster<Message: UnicastMessage> {
 }
 
 enum State<Message: UnicastMessage> {
-    Running(MessageInlet<Message>),
+    Running(RequestInlet<Message>),
     Terminated,
 }
 
@@ -42,7 +44,7 @@ struct Database {
 }
 
 pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(
-    Message,
+    Request<Message>,
 );
 
 #[derive(Clone, Doom)]
@@ -100,16 +102,16 @@ where
         Caster { state, _fuse: fuse }
     }
 
-    pub fn send(
+    pub fn push(
         &self,
-        message: Message,
+        request: Request<Message>,
     ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
         match &*self.state.lock().unwrap() {
             State::Running(message_inlet) => {
                 let (acknowledgement_inlet, acknowledgement_outlet) =
                     oneshot::channel();
 
-                match message_inlet.try_send((message, acknowledgement_inlet)) {
+                match message_inlet.try_send((request, acknowledgement_inlet)) {
                     Ok(()) => {}
                     Err(error) => {
                         let acknowledgement_inlet = match error {
@@ -128,14 +130,14 @@ where
 
                 Ok(acknowledgement_outlet)
             }
-            State::Terminated => Err(CasterTerminated(message)),
+            State::Terminated => Err(CasterTerminated(request)),
         }
     }
 
     async fn run(
         connector: Arc<dyn Connector>,
         remote: PublicKey,
-        mut message_outlet: MessageOutlet<Message>,
+        mut message_outlet: RequestOutlet<Message>,
         state: Arc<Mutex<State<Message>>>,
         mut relay: Relay,
     ) {
@@ -216,7 +218,7 @@ where
     async fn drive_out(
         database: Arc<Mutex<Database>>,
         mut sender: SecureSender,
-        message_outlet: &mut MessageOutlet<Message>,
+        message_outlet: &mut RequestOutlet<Message>,
         mut mikado: Mikado,
     ) -> Result<(), Top<DriveOutError>> {
         for sequence in 0..u32::MAX {
@@ -244,7 +246,7 @@ where
 
     async fn clean(
         database: Arc<Mutex<Database>>,
-        mut message_outlet: MessageOutlet<Message>,
+        mut message_outlet: RequestOutlet<Message>,
         error: Top<CasterError>,
     ) {
         let mut database = database.lock().unwrap();
