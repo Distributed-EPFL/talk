@@ -47,8 +47,8 @@ pub(in crate::unicast) enum CasterError {
     ConnectFailed,
     #[doom(description("Interrupted while connecting"))]
     ConnectInterrupted,
-    #[doom(description("`Caster` overflowed"))]
-    CasterOverflow,
+    #[doom(description("`Caster` congested"))]
+    CasterCongested,
     #[doom(description("`Caster` terminated"))]
     CasterTerminated {
         in_result: Result<(), Stack>,
@@ -77,7 +77,7 @@ where
     Message: UnicastMessage,
 {
     pub fn new(connector: Arc<dyn Connector>, remote: PublicKey) -> Self {
-        let (message_inlet, mut message_outlet) = mpsc::channel(1024); // TODO: Add settings
+        let (message_inlet, message_outlet) = mpsc::channel(1024); // TODO: Add settings
 
         let state = Arc::new(Mutex::new(State::Running(message_inlet)));
         let fuse = Fuse::new();
@@ -88,14 +88,8 @@ where
             let relay = fuse.relay();
 
             tokio::spawn(async move {
-                Caster::run(
-                    connector,
-                    remote,
-                    &mut message_outlet,
-                    state,
-                    relay,
-                )
-                .await;
+                Caster::run(connector, remote, message_outlet, state, relay)
+                    .await;
             });
         }
 
@@ -124,7 +118,7 @@ where
                         };
 
                         let _ = acknowledgement_inlet
-                            .send(CasterError::CasterOverflow.fail());
+                            .send(CasterError::CasterCongested.fail());
                     }
                 }
 
@@ -137,7 +131,7 @@ where
     async fn run(
         connector: Arc<dyn Connector>,
         remote: PublicKey,
-        message_outlet: &mut MessageOutlet<Message>,
+        mut message_outlet: MessageOutlet<Message>,
         state: Arc<Mutex<State<Message>>>,
         mut relay: Relay,
     ) {
@@ -162,20 +156,15 @@ where
 
             mikado_in.depend(relay);
 
-            let in_future = async {
-                Caster::<Message>::drive_in(database_in, receiver, mikado_in)
-                    .await
-            };
+            let in_future =
+                Caster::<Message>::drive_in(database_in, receiver, mikado_in);
 
-            let out_future = async {
-                Caster::<Message>::drive_out(
-                    database_out,
-                    sender,
-                    message_outlet,
-                    mikado_out,
-                )
-                .await
-            };
+            let out_future = Caster::<Message>::drive_out(
+                database_out,
+                sender,
+                &mut message_outlet,
+                mikado_out,
+            );
 
             let (in_result, out_result) = tokio::join!(in_future, out_future);
 
@@ -251,7 +240,7 @@ where
 
     async fn clean(
         database: Arc<Mutex<Database>>,
-        message_outlet: &mut MessageOutlet<Message>,
+        mut message_outlet: MessageOutlet<Message>,
         error: Top<CasterError>,
     ) {
         let mut database = database.lock().unwrap();
