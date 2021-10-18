@@ -41,6 +41,10 @@ struct Database {
     acknowledgement_inlets: HashMap<u32, AcknowledgementInlet>,
 }
 
+pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(
+    Message,
+);
+
 #[derive(Clone, Doom)]
 pub(in crate::unicast) enum CasterError {
     #[doom(description("Failed to connect"))]
@@ -99,7 +103,7 @@ where
     pub fn send(
         &self,
         message: Message,
-    ) -> Result<AcknowledgementOutlet, Message> {
+    ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
         match &*self.state.lock().unwrap() {
             State::Running(message_inlet) => {
                 let (acknowledgement_inlet, acknowledgement_outlet) =
@@ -124,7 +128,7 @@ where
 
                 Ok(acknowledgement_outlet)
             }
-            State::Terminated => Err(message),
+            State::Terminated => Err(CasterTerminated(message)),
         }
     }
 
