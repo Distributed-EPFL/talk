@@ -127,6 +127,9 @@ where
                                 acknowledgement_inlet
                             }
                             TrySendError::Closed(_) => {
+                                // This is unreachable because `acknowledgement_outlet` is owned by `self`:
+                                // if `acknowledgement_outlet` was dropped, it would be impossible to call
+                                // `self.push` in the first place
                                 unreachable!()
                             }
                         };
@@ -235,17 +238,17 @@ where
                 .await
                 .pot(DriveOutError::DriveOutInterrupted, here!())?
             {
-                tether
-                    .map(sender.send(&request))
-                    .await
-                    .pot(DriveOutError::DriveOutInterrupted, here!())?
-                    .pot(DriveOutError::ConnectionError, here!())?;
-
                 database
                     .lock()
                     .unwrap()
                     .acknowledgement_inlets
                     .insert(sequence, acknowledgement_inlet);
+
+                tether
+                    .map(sender.send(&request))
+                    .await
+                    .pot(DriveOutError::DriveOutInterrupted, here!())?
+                    .pot(DriveOutError::ConnectionError, here!())?;
             }
         }
 
