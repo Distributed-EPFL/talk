@@ -11,9 +11,9 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Doom)]
 #[doom(description("Failed to `join`: unfinished tasks remaining"))]
-pub(crate) struct JoinError;
+pub struct JoinError;
 
-pub(crate) async fn join<I>(handles: I) -> Result<(), Top<JoinError>>
+pub async fn join<I>(handles: I) -> Result<(), Top<JoinError>>
 where
     I: IntoIterator<Item = JoinHandle<()>>,
 {

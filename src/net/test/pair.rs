@@ -4,7 +4,7 @@ use doomstack::Top;
 
 use serde::{Deserialize, Serialize};
 
-pub(crate) struct ConnectionPair {
+pub struct ConnectionPair {
     pub source: SecureConnection,
     pub destination: SecureConnection,
 }

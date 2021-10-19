@@ -3,4 +3,4 @@ pub mod rendezvous;
 
 #[cfg(test)]
 #[allow(unused_imports)]
-pub(crate) mod test;
+pub mod test;

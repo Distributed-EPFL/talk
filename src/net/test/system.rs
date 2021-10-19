@@ -12,7 +12,7 @@ use futures::stream::{FuturesOrdered, StreamExt};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-pub(crate) struct System {
+pub struct System {
     pub keys: Vec<PublicKey>,
     pub connectors: Vec<TestConnector>,
     pub listeners: Vec<TestListener>,

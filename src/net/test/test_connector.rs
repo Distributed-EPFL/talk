@@ -11,13 +11,13 @@ use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
 
-pub(crate) struct TestConnector {
+pub struct TestConnector {
     pub keychain: KeyChain,
     pub peers: HashMap<PublicKey, SocketAddr>,
 }
 
 #[derive(Doom)]
-pub(crate) enum TestConnectorError {
+pub enum TestConnectorError {
     #[doom(description("Address unknown"))]
     AddressUnknown,
     #[doom(description("Failed to `authenticate` connection"))]

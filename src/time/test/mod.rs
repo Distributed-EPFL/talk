@@ -1,4 +1,4 @@
 mod join;
 
-pub(crate) use join::join;
-pub(crate) use join::JoinError;
+pub use join::join;
+pub use join::JoinError;

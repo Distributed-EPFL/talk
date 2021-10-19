@@ -7,7 +7,7 @@ use crate::{
     },
 };
 
-pub(crate) struct ContextSystem {
+pub struct ContextSystem {
     pub keys: Vec<PublicKey>,
     pub connectors: Vec<ConnectDispatcher>,
     pub listeners: Vec<ListenDispatcher>,

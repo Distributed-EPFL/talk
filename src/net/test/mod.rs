@@ -3,8 +3,8 @@ mod system;
 mod test_connector;
 mod test_listener;
 
-pub(crate) use pair::ConnectionPair;
-pub(crate) use system::System;
-pub(crate) use test_connector::TestConnector;
-pub(crate) use test_connector::TestConnectorError;
-pub(crate) use test_listener::TestListener;
+pub use pair::ConnectionPair;
+pub use system::System;
+pub use test_connector::TestConnector;
+pub use test_connector::TestConnectorError;
+pub use test_listener::TestListener;
