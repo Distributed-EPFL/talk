@@ -2,13 +2,13 @@ use crate::unicast::SenderSettings;
 
 #[derive(Debug, Clone)]
 pub(in crate::unicast) struct CasterSettings {
-    pub message_channel_capacity: usize,
+    pub request_channel_capacity: usize,
 }
 
 impl CasterSettings {
     pub fn from_sender_settings(settings: &SenderSettings) -> Self {
         CasterSettings {
-            message_channel_capacity: settings.message_channel_capacity,
+            request_channel_capacity: settings.request_channel_capacity,
         }
     }
 }

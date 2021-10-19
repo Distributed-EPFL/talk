@@ -90,10 +90,10 @@ where
         remote: PublicKey,
         settings: CasterSettings,
     ) -> Self {
-        let (message_inlet, message_outlet) =
-            mpsc::channel(settings.message_channel_capacity);
+        let (request_inlet, request_outlet) =
+            mpsc::channel(settings.request_channel_capacity);
 
-        let state = Arc::new(Mutex::new(State::Running(message_inlet)));
+        let state = Arc::new(Mutex::new(State::Running(request_inlet)));
         let fuse = Fuse::new();
 
         {
@@ -102,7 +102,7 @@ where
             let relay = fuse.relay();
 
             tokio::spawn(async move {
-                Caster::run(connector, remote, message_outlet, state, relay)
+                Caster::run(connector, remote, request_outlet, state, relay)
                     .await;
             });
         }
@@ -115,11 +115,11 @@ where
         request: Request<Message>,
     ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
         match &*self.state.lock().unwrap() {
-            State::Running(message_inlet) => {
+            State::Running(request_inlet) => {
                 let (acknowledgement_inlet, acknowledgement_outlet) =
                     oneshot::channel();
 
-                match message_inlet.try_send((request, acknowledgement_inlet)) {
+                match request_inlet.try_send((request, acknowledgement_inlet)) {
                     Ok(()) => {}
                     Err(error) => {
                         let acknowledgement_inlet = match error {
@@ -145,7 +145,7 @@ where
     async fn run(
         connector: Arc<dyn Connector>,
         remote: PublicKey,
-        mut message_outlet: RequestOutlet<Message>,
+        mut request_outlet: RequestOutlet<Message>,
         state: Arc<Mutex<State<Message>>>,
         mut relay: Relay,
     ) {
@@ -176,7 +176,7 @@ where
             let future_out = Caster::<Message>::drive_out(
                 database_out,
                 sender,
-                &mut message_outlet,
+                &mut request_outlet,
                 mikado_out,
             );
 
@@ -193,7 +193,7 @@ where
         let error = result.unwrap_err();
         *state.lock().unwrap() = State::Terminated;
 
-        Caster::<Message>::clean(database, message_outlet, error).await;
+        Caster::<Message>::clean(database, request_outlet, error).await;
     }
 
     async fn drive_in(
@@ -254,7 +254,7 @@ where
 
     async fn clean(
         database: Arc<Mutex<Database>>,
-        mut message_outlet: RequestOutlet<Message>,
+        mut request_outlet: RequestOutlet<Message>,
         error: Top<CasterError>,
     ) {
         let mut database = database.lock().unwrap();
@@ -265,7 +265,7 @@ where
             let _ = acknowledgement_inlet.send(Err(error.clone()));
         }
 
-        while let Ok((_, acknowledgement_inlet)) = message_outlet.try_recv() {
+        while let Ok((_, acknowledgement_inlet)) = request_outlet.try_recv() {
             let _ = acknowledgement_inlet.send(Err(error.clone()));
         }
     }
