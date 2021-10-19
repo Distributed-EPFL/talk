@@ -218,17 +218,17 @@ where
     async fn drive_out(
         database: Arc<Mutex<Database>>,
         mut sender: SecureSender,
-        message_outlet: &mut RequestOutlet<Message>,
+        request_outlet: &mut RequestOutlet<Message>,
         mut mikado: Mikado,
     ) -> Result<(), Top<DriveOutError>> {
         for sequence in 0..u32::MAX {
-            if let Some((message, acknowledgement_inlet)) = mikado
-                .map(message_outlet.recv())
+            if let Some((request, acknowledgement_inlet)) = mikado
+                .map(request_outlet.recv())
                 .await
                 .pot(DriveOutError::DriveOutInterrupted, here!())?
             {
                 mikado
-                    .map(sender.send(&Request::Message(message)))
+                    .map(sender.send(&request))
                     .await
                     .pot(DriveOutError::DriveOutInterrupted, here!())?
                     .pot(DriveOutError::ConnectionError, here!())?;
