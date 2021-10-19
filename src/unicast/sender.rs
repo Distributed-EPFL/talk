@@ -3,8 +3,8 @@ use crate::{
     net::Connector,
     sync::fuse::{Fuse, Relay},
     unicast::{
-        Acknowledgement, Caster, CasterError, CasterTerminated,
-        Message as UnicastMessage, Request,
+        Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated,
+        Message as UnicastMessage, Request, SenderSettings,
     },
 };
 
@@ -13,7 +13,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tokio::sync::oneshot::Receiver;
 use tokio::time;
@@ -24,6 +24,7 @@ type AcknowledgementOutlet =
 pub struct Sender<Message: UnicastMessage> {
     connector: Arc<dyn Connector>,
     database: Arc<Mutex<Database<Message>>>,
+    settings: SenderSettings,
     _fuse: Arc<Fuse>,
 }
 
@@ -52,7 +53,7 @@ impl<Message> Sender<Message>
 where
     Message: UnicastMessage,
 {
-    pub fn new<C>(connector: C) -> Self
+    pub fn new<C>(connector: C, settings: SenderSettings) -> Self
     where
         C: Connector,
     {
@@ -66,16 +67,18 @@ where
 
         {
             let database = database.clone();
+            let settings = settings.clone();
             let relay = fuse.relay();
 
             tokio::spawn(async move {
-                let _ = Sender::keep_alive(database, relay).await;
+                let _ = Sender::keep_alive(database, relay, settings).await;
             });
         }
 
         Sender {
             connector,
             database,
+            settings,
             _fuse: fuse,
         }
     }
@@ -102,7 +105,11 @@ where
             let link = match database.links.entry(remote) {
                 Entry::Occupied(entry) => entry.into_mut(),
                 Entry::Vacant(entry) => entry.insert(Link {
-                    caster: Caster::new(self.connector.clone(), remote),
+                    caster: Caster::new(
+                        self.connector.clone(),
+                        remote,
+                        CasterSettings::from_sender_settings(&self.settings),
+                    ),
                     last_message: Instant::now(),
                 }),
             };
@@ -120,11 +127,11 @@ where
     async fn keep_alive(
         database: Arc<Mutex<Database<Message>>>,
         mut relay: Relay,
+        settings: SenderSettings,
     ) -> Result<(), Top<KeepAliveError>> {
         loop {
             database.lock().unwrap().links.retain(|_, link| {
-                // TODO: Add settings
-                if link.last_message.elapsed() > Duration::from_secs(600) {
+                if link.last_message.elapsed() > settings.link_timeout {
                     false
                 } else {
                     link.caster.push(Request::KeepAlive).is_ok()
@@ -132,7 +139,7 @@ where
             });
 
             relay
-                .map(time::sleep(Duration::from_secs(10))) // TODO: Add settings
+                .map(time::sleep(settings.keepalive_interval))
                 .await
                 .pot(KeepAliveError::KeepAliveInterrupted, here!())?;
         }
@@ -162,7 +169,7 @@ mod tests {
         let mut keys = keys.into_iter().skip(1);
         let key = keys.next().unwrap();
 
-        let sender: Sender<u32> = Sender::new(connector);
+        let sender: Sender<u32> = Sender::new(connector, Default::default());
 
         let mut receiver: Receiver<u32> =
             Receiver::new(listener, Default::default());

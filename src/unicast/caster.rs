@@ -2,7 +2,10 @@ use crate::{
     crypto::primitives::sign::PublicKey,
     net::{Connector, SecureReceiver, SecureSender},
     sync::fuse::{Fuse, Mikado, Relay},
-    unicast::{Acknowledgement, Message as UnicastMessage, Request, Response},
+    unicast::{
+        Acknowledgement, CasterSettings, Message as UnicastMessage, Request,
+        Response,
+    },
 };
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
@@ -82,8 +85,13 @@ impl<Message> Caster<Message>
 where
     Message: UnicastMessage,
 {
-    pub fn new(connector: Arc<dyn Connector>, remote: PublicKey) -> Self {
-        let (message_inlet, message_outlet) = mpsc::channel(1024); // TODO: Add settings
+    pub fn new(
+        connector: Arc<dyn Connector>,
+        remote: PublicKey,
+        settings: CasterSettings,
+    ) -> Self {
+        let (message_inlet, message_outlet) =
+            mpsc::channel(settings.message_channel_capacity);
 
         let state = Arc::new(Mutex::new(State::Running(message_inlet)));
         let fuse = Fuse::new();
