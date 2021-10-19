@@ -21,6 +21,7 @@ use tokio::time;
 type AcknowledgementOutlet =
     Receiver<Result<Acknowledgement, Top<CasterError>>>;
 
+#[derive(Clone)]
 pub struct Sender<Message: UnicastMessage> {
     connector: Arc<dyn Connector>,
     database: Arc<Mutex<Database<Message>>>,
@@ -142,47 +143,6 @@ where
                 .map(time::sleep(settings.keepalive_interval))
                 .await
                 .pot(KeepAliveError::KeepAliveInterrupted, here!())?;
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::{net::test::System, unicast::Receiver};
-
-    #[tokio::test]
-    async fn simple() {
-        let System {
-            keys,
-            connectors,
-            listeners,
-        } = System::setup(2).await;
-
-        let mut connectors = connectors.into_iter();
-        let connector = connectors.next().unwrap();
-
-        let mut listeners = listeners.into_iter().skip(1);
-        let listener = listeners.next().unwrap();
-
-        let mut keys = keys.into_iter().skip(1);
-        let key = keys.next().unwrap();
-
-        let sender: Sender<u32> = Sender::new(connector, Default::default());
-
-        let mut receiver: Receiver<u32> =
-            Receiver::new(listener, Default::default());
-
-        tokio::spawn(async move {
-            for reference in 0..32 {
-                let (_, value, _) = receiver.receive().await;
-                assert_eq!(value, reference);
-            }
-        });
-
-        for value in 0..32 {
-            sender.send(key, value).await.unwrap();
         }
     }
 }
