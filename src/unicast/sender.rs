@@ -4,7 +4,7 @@ use crate::{
     sync::fuse::{Fuse, Relay},
     unicast::{
         Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated,
-        Message as UnicastMessage, Request, SenderSettings,
+        Message as UnicastMessage, PushSettings, Request, SenderSettings,
     },
 };
 
@@ -93,6 +93,29 @@ where
             .await
             .unwrap()
             .pot(SenderError::SendFailed, here!())
+    }
+
+    pub async fn push(
+        &self,
+        remote: PublicKey,
+        message: Message,
+        settings: PushSettings,
+    ) where
+        Message: Clone,
+    {
+        let mut sleep_agent = settings.retry_schedule.agent();
+
+        loop {
+            if let Ok(acknowledgement) =
+                self.send(remote, message.clone()).await
+            {
+                if acknowledgement >= settings.stop_condition {
+                    break;
+                }
+            }
+
+            sleep_agent.step().await;
+        }
     }
 
     fn post(
