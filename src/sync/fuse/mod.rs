@@ -1,10 +1,10 @@
 mod any_fuse;
 mod fuse;
-mod mikado;
 mod relay;
+mod tether;
 
 pub use any_fuse::AnyFuse;
 pub use fuse::Fuse;
 pub use fuse::FuseError;
-pub use mikado::Mikado;
 pub use relay::Relay;
+pub use tether::Tether;

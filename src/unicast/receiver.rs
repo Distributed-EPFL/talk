@@ -1,7 +1,7 @@
 use crate::{
     crypto::primitives::sign::PublicKey,
     net::{Listener, SecureConnection, SecureReceiver, SecureSender},
-    sync::fuse::{Fuse, Mikado, Relay},
+    sync::fuse::{Fuse, Relay, Tether},
     unicast::{
         Acknowledgement, Acknowledger, Message as UnicastMessage,
         ReceiverSettings, Request, Response,
@@ -125,21 +125,21 @@ where
         let (response_inlet, response_outlet) =
             mpsc::channel::<Response>(settings.response_channel_capacity);
 
-        let mikado_in = Mikado::new();
-        let mikado_out = mikado_in.try_clone().unwrap();
+        let tether_in = Tether::new();
+        let tether_out = tether_in.try_clone().unwrap();
 
-        mikado_in.depend(relay);
+        tether_in.depend(relay);
 
         let future_in = Receiver::<Message>::drive_in(
             remote,
             receiver,
             message_inlet,
             response_inlet,
-            mikado_in,
+            tether_in,
         );
 
         let future_out =
-            Receiver::<Message>::drive_out(sender, response_outlet, mikado_out);
+            Receiver::<Message>::drive_out(sender, response_outlet, tether_out);
 
         let _ = tokio::join!(future_in, future_out);
     }
@@ -149,10 +149,10 @@ where
         mut receiver: SecureReceiver,
         message_inlet: MessageInlet<Message>,
         response_inlet: ResponseInlet,
-        mut mikado: Mikado,
+        mut tether: Tether,
     ) -> Result<(), Top<DriveInError>> {
         for sequence in 0..u32::MAX {
-            let request: Request<Message> = mikado
+            let request: Request<Message> = tether
                 .map(receiver.receive())
                 .await
                 .pot(DriveInError::DriveInInterrupted, here!())?
@@ -181,15 +181,15 @@ where
     async fn drive_out(
         mut sender: SecureSender,
         mut response_outlet: ResponseOutlet,
-        mut mikado: Mikado,
+        mut tether: Tether,
     ) -> Result<(), Top<DriveOutError>> {
         loop {
-            if let Some(response) = mikado
+            if let Some(response) = tether
                 .map(response_outlet.recv())
                 .await
                 .pot(DriveOutError::DriveOutInterrupted, here!())?
             {
-                mikado
+                tether
                     .map(sender.send(&response))
                     .await
                     .pot(DriveOutError::DriveOutInterrupted, here!())?

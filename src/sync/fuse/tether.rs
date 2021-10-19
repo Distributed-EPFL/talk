@@ -4,24 +4,24 @@ use doomstack::{here, ResultExt, Top};
 
 use std::future::Future;
 
-pub struct Mikado {
+pub struct Tether {
     fuse: AnyFuse,
     relay: Relay,
 }
 
-impl Mikado {
+impl Tether {
     pub fn new() -> Self {
         let fuse = AnyFuse::new(Fuse::new());
         let relay = fuse.relay().unwrap();
 
-        Mikado { fuse, relay }
+        Tether { fuse, relay }
     }
 
     pub fn try_clone(&self) -> Result<Self, Top<FuseError>> {
         let fuse = self.fuse.clone();
         let relay = fuse.relay().spot(here!())?;
 
-        Ok(Mikado { fuse, relay })
+        Ok(Tether { fuse, relay })
     }
 
     pub fn depend(&self, relay: Relay) {
