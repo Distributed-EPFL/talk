@@ -71,6 +71,13 @@ where
         }
     }
 
+    pub async fn receive(&mut self) -> (PublicKey, Message, Acknowledger) {
+        // This cannot fail, as `message_inlet` is held by `listen` until
+        // `self._fuse` is dropped along with `self`: if `recv()` failed,
+        // one could not call `receive()` in the first place
+        self.message_outlet.recv().await.unwrap()
+    }
+
     async fn listen<L>(
         mut listener: L,
         message_inlet: MessageInlet<Message>,
