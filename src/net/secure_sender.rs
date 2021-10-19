@@ -1,13 +1,12 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
     net::{SecureConnectionError, SenderSettings, UnitSender},
+    time,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::Serialize;
-
-use tokio::time;
 
 pub struct SecureSender {
     unit_sender: UnitSender,
@@ -43,21 +42,15 @@ impl SecureSender {
             .encrypt_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::EncryptFailed, here!())?;
 
-        let future = self.unit_sender.flush();
-
-        let result = if let Some(send_timeout) = self.settings.send_timeout {
-            time::timeout(send_timeout, future)
-                .await
-                .map_err(|_| SecureConnectionError::SendTimeout.into_top())
-                .spot(here!())?
-        } else {
-            future.await
-        };
-
-        result
-            .map_err(SecureConnectionError::write_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())
+        time::optional_timeout(
+            self.settings.send_timeout,
+            self.unit_sender.flush(),
+        )
+        .await
+        .pot(SecureConnectionError::SendTimeout, here!())?
+        .map_err(SecureConnectionError::write_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())
     }
 
     pub async fn send_plain<M>(
@@ -71,20 +64,14 @@ impl SecureSender {
             .authenticate_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::MacComputeFailed, here!())?;
 
-        let future = self.unit_sender.flush();
-
-        let result = if let Some(send_timeout) = self.settings.send_timeout {
-            time::timeout(send_timeout, future)
-                .await
-                .map_err(|_| SecureConnectionError::SendTimeout.into_top())
-                .spot(here!())?
-        } else {
-            future.await
-        };
-
-        result
-            .map_err(SecureConnectionError::write_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())
+        time::optional_timeout(
+            self.settings.send_timeout,
+            self.unit_sender.flush(),
+        )
+        .await
+        .pot(SecureConnectionError::SendTimeout, here!())?
+        .map_err(SecureConnectionError::write_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())
     }
 }

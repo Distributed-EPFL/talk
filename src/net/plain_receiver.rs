@@ -4,6 +4,7 @@ use crate::{
         PlainConnectionError, ReceiverSettings, SecureReceiver, Socket,
         UnitReceiver,
     },
+    time,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -11,7 +12,6 @@ use doomstack::{here, Doom, ResultExt, Top};
 use serde::Deserialize;
 
 use tokio::io::ReadHalf;
-use tokio::time;
 
 pub struct PlainReceiver {
     unit_receiver: UnitReceiver,
@@ -41,23 +41,15 @@ impl PlainReceiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        let future = self.unit_receiver.receive();
-
-        let result = if let Some(receive_timeout) =
-            self.settings.receive_timeout
-        {
-            time::timeout(receive_timeout, future)
-                .await
-                .map_err(|_| PlainConnectionError::ReceiveTimeout.into_top())
-                .spot(here!())?
-        } else {
-            future.await
-        };
-
-        result
-            .map_err(PlainConnectionError::read_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        time::optional_timeout(
+            self.settings.receive_timeout,
+            self.unit_receiver.receive(),
+        )
+        .await
+        .pot(PlainConnectionError::ReceiveTimeout, here!())?
+        .map_err(PlainConnectionError::read_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())?;
 
         bincode::deserialize(self.unit_receiver.as_slice())
             .map_err(PlainConnectionError::deserialize_failed)

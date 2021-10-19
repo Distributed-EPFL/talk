@@ -3,6 +3,7 @@ use crate::{
     net::{
         PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender,
     },
+    time,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -10,7 +11,6 @@ use doomstack::{here, Doom, ResultExt, Top};
 use serde::Serialize;
 
 use tokio::io::WriteHalf;
-use tokio::time;
 
 pub struct PlainSender {
     unit_sender: UnitSender,
@@ -48,21 +48,15 @@ impl PlainSender {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        let future = self.unit_sender.flush();
-
-        let result = if let Some(send_timeout) = self.settings.send_timeout {
-            time::timeout(send_timeout, future)
-                .await
-                .map_err(|_| PlainConnectionError::SendTimeout.into_top())
-                .spot(here!())?
-        } else {
-            future.await
-        };
-
-        result
-            .map_err(PlainConnectionError::write_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())
+        time::optional_timeout(
+            self.settings.send_timeout,
+            self.unit_sender.flush(),
+        )
+        .await
+        .pot(PlainConnectionError::SendTimeout, here!())?
+        .map_err(PlainConnectionError::write_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())
     }
 
     pub(in crate::net) fn secure(
