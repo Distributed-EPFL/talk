@@ -99,18 +99,21 @@ where
                 let settings = settings.clone();
                 let relay = fuse.relay();
 
-                Receiver::spawn(
-                    remote,
-                    connection,
-                    message_inlet,
-                    settings,
-                    relay,
-                );
+                tokio::spawn(async move {
+                    Receiver::serve(
+                        remote,
+                        connection,
+                        message_inlet,
+                        settings,
+                        relay,
+                    )
+                    .await;
+                });
             }
         }
     }
 
-    fn spawn(
+    async fn serve(
         remote: PublicKey,
         connection: SecureConnection,
         message_inlet: MessageInlet<Message>,
@@ -127,25 +130,18 @@ where
 
         mikado_in.depend(relay);
 
-        tokio::spawn(async move {
-            let _ = Receiver::<Message>::drive_in(
-                remote,
-                receiver,
-                message_inlet,
-                response_inlet,
-                mikado_in,
-            )
-            .await;
-        });
+        let future_in = Receiver::<Message>::drive_in(
+            remote,
+            receiver,
+            message_inlet,
+            response_inlet,
+            mikado_in,
+        );
 
-        tokio::spawn(async move {
-            let _ = Receiver::<Message>::drive_out(
-                sender,
-                response_outlet,
-                mikado_out,
-            )
-            .await;
-        });
+        let future_out =
+            Receiver::<Message>::drive_out(sender, response_outlet, mikado_out);
+
+        let _ = tokio::join!(future_in, future_out);
     }
 
     async fn drive_in(

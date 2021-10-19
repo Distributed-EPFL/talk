@@ -57,8 +57,8 @@ pub(in crate::unicast) enum CasterError {
     CasterCongested,
     #[doom(description("`Caster` terminated"))]
     CasterTerminated {
-        in_result: Result<(), Stack>,
-        out_result: Result<(), Stack>,
+        result_in: Result<(), Stack>,
+        result_out: Result<(), Stack>,
     },
 }
 
@@ -162,21 +162,21 @@ where
 
             mikado_in.depend(relay);
 
-            let in_future =
+            let future_in =
                 Caster::<Message>::drive_in(database_in, receiver, mikado_in);
 
-            let out_future = Caster::<Message>::drive_out(
+            let future_out = Caster::<Message>::drive_out(
                 database_out,
                 sender,
                 &mut message_outlet,
                 mikado_out,
             );
 
-            let (in_result, out_result) = tokio::join!(in_future, out_future);
+            let (result_in, result_out) = tokio::join!(future_in, future_out);
 
             CasterError::CasterTerminated {
-                in_result: in_result.map_err(Into::into),
-                out_result: out_result.map_err(Into::into),
+                result_in: result_in.map_err(Into::into),
+                result_out: result_out.map_err(Into::into),
             }
             .fail()
         }
