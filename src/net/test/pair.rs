@@ -10,7 +10,7 @@ pub struct ConnectionPair {
 }
 
 impl ConnectionPair {
-    pub(crate) fn new(
+    pub fn new(
         source: SecureConnection,
         destination: SecureConnection,
     ) -> Self {
@@ -20,7 +20,7 @@ impl ConnectionPair {
         }
     }
 
-    pub(crate) async fn transmit<M>(
+    pub async fn transmit<M>(
         &mut self,
         message: &M,
     ) -> Result<M, Top<SecureConnectionError>>

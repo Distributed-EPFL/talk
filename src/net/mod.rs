@@ -17,7 +17,6 @@ pub mod sockets;
 pub mod traits;
 
 #[cfg(test)]
-#[allow(unused_imports)]
 pub mod test;
 
 use unit_receiver::UnitReceiver;

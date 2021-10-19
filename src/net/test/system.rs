@@ -19,7 +19,7 @@ pub struct System {
 }
 
 impl System {
-    pub(crate) fn new(
+    pub fn new(
         keys: Vec<PublicKey>,
         connectors: Vec<TestConnector>,
         listeners: Vec<TestListener>,
@@ -31,7 +31,7 @@ impl System {
         }
     }
 
-    pub(crate) async fn setup(peers: usize) -> System {
+    pub async fn setup(peers: usize) -> System {
         let keychains =
             (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
 
@@ -66,7 +66,7 @@ impl System {
         System::new(roots, connectors, listeners)
     }
 
-    pub(crate) async fn connect(
+    pub async fn connect(
         &mut self,
         source: usize,
         destination: usize,
@@ -81,9 +81,7 @@ impl System {
         ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }
 
-    pub(crate) async fn connection_matrix(
-        &mut self,
-    ) -> Vec<Vec<ConnectionPair>> {
+    pub async fn connection_matrix(&mut self) -> Vec<Vec<ConnectionPair>> {
         let mut matrix = Vec::with_capacity(self.keys.len());
 
         for sender in 0..self.keys.len() {

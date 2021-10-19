@@ -10,6 +10,9 @@ mod response;
 mod sender;
 mod sender_settings;
 
+#[cfg(test)]
+pub mod test;
+
 use caster::Caster;
 use caster::CasterError;
 use caster::CasterTerminated;

@@ -14,7 +14,7 @@ pub struct ContextSystem {
 }
 
 impl ContextSystem {
-    pub(crate) fn new(
+    pub fn new(
         keys: Vec<PublicKey>,
         connectors: Vec<ConnectDispatcher>,
         listeners: Vec<ListenDispatcher>,
@@ -26,7 +26,7 @@ impl ContextSystem {
         }
     }
 
-    pub(crate) async fn setup(peers: usize) -> ContextSystem {
+    pub async fn setup(peers: usize) -> ContextSystem {
         let NetSystem {
             keys,
             connectors,
@@ -46,7 +46,7 @@ impl ContextSystem {
         ContextSystem::new(keys, connectors, listeners)
     }
 
-    pub(crate) async fn connect(
+    pub async fn connect(
         &mut self,
         source: usize,
         destination: usize,
@@ -64,7 +64,7 @@ impl ContextSystem {
         ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }
 
-    pub(crate) async fn connection_matrix(
+    pub async fn connection_matrix(
         &mut self,
         context: ContextId,
     ) -> Vec<Vec<ConnectionPair>> {

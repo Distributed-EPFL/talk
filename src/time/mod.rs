@@ -3,7 +3,6 @@ mod sleep_schedule;
 mod timeout;
 
 #[cfg(test)]
-#[allow(unused_imports)]
 pub mod test;
 
 pub mod sleep_schedules;
