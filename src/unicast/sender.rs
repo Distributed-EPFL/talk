@@ -89,13 +89,13 @@ where
         remote: PublicKey,
         message: Message,
     ) -> Result<Acknowledgement, Top<SenderError>> {
-        self.push(remote, Request::Message(message))
+        self.post(remote, Request::Message(message))
             .await
             .unwrap()
             .pot(SenderError::SendFailed, here!())
     }
 
-    fn push(
+    fn post(
         &self,
         remote: PublicKey,
         mut request: Request<Message>,
@@ -115,7 +115,7 @@ where
                 }),
             };
 
-            request = match link.caster.push(request) {
+            request = match link.caster.post(request) {
                 Ok(outlet) => break outlet,
                 Err(CasterTerminated(request)) => {
                     database.links.remove(&remote);
@@ -135,7 +135,7 @@ where
                 if link.last_message.elapsed() > settings.link_timeout {
                     false
                 } else {
-                    link.caster.push(Request::KeepAlive).is_ok()
+                    link.caster.post(Request::KeepAlive).is_ok()
                 }
             });
 

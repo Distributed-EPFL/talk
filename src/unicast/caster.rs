@@ -110,7 +110,7 @@ where
         Caster { state, _fuse: fuse }
     }
 
-    pub fn push(
+    pub fn post(
         &self,
         request: Request<Message>,
     ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
