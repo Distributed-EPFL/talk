@@ -24,3 +24,21 @@ impl Default for PushSettings {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::time::sleep_schedules::Constant;
+
+    impl PushSettings {
+        pub fn strong_constant() -> Self {
+            PushSettings {
+                stop_condition: Acknowledgement::Strong,
+                retry_schedule: Arc::new(Constant::new(Duration::from_millis(
+                    100,
+                ))),
+            }
+        }
+    }
+}
