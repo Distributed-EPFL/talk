@@ -35,7 +35,7 @@ mod unicast {
 
     #[tokio::test]
     async fn constant_one_to_one_strong_multiple_messages() {
-        const IGNORED: usize = 10;
+        const MESSAGES: usize = 10;
 
         let UnicastSystem {
             keys,
@@ -47,7 +47,7 @@ mod unicast {
         let sender = senders.remove(0);
 
         let handle = tokio::spawn(async move {
-            for _ in 0..IGNORED {
+            for _ in 0..MESSAGES {
                 let (_, message, acknowledger) = receiver.receive().await;
 
                 assert_eq!(message, 42);
@@ -55,7 +55,7 @@ mod unicast {
             }
         });
 
-        for _ in 0..IGNORED {
+        for _ in 0..MESSAGES {
             let ack = sender.send(keys[0], 42).await.unwrap();
             assert_eq!(ack, Acknowledgement::Strong);
         }
