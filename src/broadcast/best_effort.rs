@@ -67,15 +67,9 @@ impl BestEffort {
 mod tests {
     use super::*;
 
-    use crate::{
-        time::{sleep_schedules::Constant, test::join},
-        unicast::{test::UnicastSystem, Acknowledgement},
-    };
+    use crate::{time::test::join, unicast::test::UnicastSystem};
 
     use futures::stream::{FuturesUnordered, StreamExt};
-
-    use std::sync::Arc;
-    use std::time::Duration;
 
     #[tokio::test]
     async fn constant_one_broadcast() {
@@ -106,12 +100,12 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let mut settings = BestEffortSettings::default();
-        settings.push_settings.retry_schedule =
-            Arc::new(Constant::new(Duration::from_millis(100)));
-        settings.push_settings.stop_condition = Acknowledgement::Strong;
-
-        let best_effort = BestEffort::new(sender, keys, 42u32, settings);
+        let best_effort = BestEffort::new(
+            sender,
+            keys,
+            42u32,
+            BestEffortSettings::strong_constant(),
+        );
 
         let best_effort_handle =
             tokio::spawn(async move { best_effort.complete().await });
@@ -149,11 +143,6 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let mut settings = BestEffortSettings::default();
-        settings.push_settings.retry_schedule =
-            Arc::new(Constant::new(Duration::from_millis(100)));
-        settings.push_settings.stop_condition = Acknowledgement::Strong;
-
         let best_effort_handle = tokio::spawn(async move {
             senders
                 .into_iter()
@@ -162,7 +151,7 @@ mod tests {
                         sender,
                         keys.clone(),
                         42u32,
-                        settings.clone(),
+                        BestEffortSettings::strong_constant(),
                     );
                     best_effort.complete()
                 })
@@ -206,21 +195,19 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let mut settings = BestEffortSettings::default();
-        settings.push_settings.retry_schedule =
-            Arc::new(Constant::new(Duration::from_millis(100)));
-        settings.push_settings.stop_condition = Acknowledgement::Strong;
-
         let best_effort_handle = tokio::spawn(async move {
             senders
                 .into_iter()
                 .map(|sender| {
                     let keys = keys.clone();
-                    let settings = settings.clone();
 
                     async move {
-                        let mut best_effort =
-                            BestEffort::new(sender, keys, 42u32, settings);
+                        let mut best_effort = BestEffort::new(
+                            sender,
+                            keys,
+                            42u32,
+                            BestEffortSettings::strong_constant(),
+                        );
                         best_effort.until(PEERS - FAULTY + 1).await;
                     }
                 })
@@ -262,21 +249,19 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let mut settings = BestEffortSettings::default();
-        settings.push_settings.retry_schedule =
-            Arc::new(Constant::new(Duration::from_millis(100)));
-        settings.push_settings.stop_condition = Acknowledgement::Strong;
-
         let best_effort_handle = tokio::spawn(async move {
             senders
                 .into_iter()
                 .map(|sender| {
                     let keys = keys.clone();
-                    let settings = settings.clone();
 
                     async move {
-                        let mut best_effort =
-                            BestEffort::new(sender, keys, 42u32, settings);
+                        let mut best_effort = BestEffort::new(
+                            sender,
+                            keys,
+                            42u32,
+                            BestEffortSettings::strong_constant(),
+                        );
                         best_effort.until(PEERS - FAULTY).await;
                     }
                 })

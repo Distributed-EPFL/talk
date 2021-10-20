@@ -1,13 +1,10 @@
 mod unicast {
     use crate::{
-        time::{sleep_schedules::Constant, test::join},
+        time::test::join,
         unicast::{test::UnicastSystem, Acknowledgement, PushSettings},
     };
 
     use futures::stream::{FuturesUnordered, StreamExt};
-
-    use std::sync::Arc;
-    use std::time::Duration;
 
     #[tokio::test]
     async fn constant_one_to_one_strong() {
@@ -177,12 +174,9 @@ mod unicast {
             acknowledger.strong();
         });
 
-        let mut settings = PushSettings::default();
-        settings.retry_schedule =
-            Arc::new(Constant::new(Duration::from_millis(100)));
-        settings.stop_condition = Acknowledgement::Strong;
-
-        sender.push(keys[0], 42, settings).await;
+        sender
+            .push(keys[0], 42, PushSettings::strong_constant())
+            .await;
 
         join([handle]).await.unwrap();
     }
