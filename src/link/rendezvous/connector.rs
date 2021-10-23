@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyChain},
+    crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ConnectorSettings},
     net::{traits::TcpConnect, Connector as NetConnector, SecureConnection},
 };
@@ -20,7 +20,7 @@ pub struct Connector {
 }
 
 struct Database {
-    cache: HashMap<PublicKey, SocketAddr>,
+    cache: HashMap<Identity, SocketAddr>,
 }
 
 #[derive(Doom)]
@@ -35,7 +35,7 @@ pub enum ConnectorError {
     #[doom(description("Failed to `secure` connection"))]
     SecureFailed,
     #[doom(description("Unexpected remote: {:?}", remote))]
-    UnexpectedRemote { remote: PublicKey },
+    UnexpectedRemote { remote: Identity },
 }
 
 impl Connector {
@@ -62,10 +62,10 @@ impl Connector {
 
     async fn attempt(
         &self,
-        root: PublicKey,
+        identity: Identity,
     ) -> Result<SecureConnection, Top<ConnectorError>> {
         let address = self
-            .get_address(root)
+            .get_address(identity)
             .ok_or(ConnectorError::AddressUnknown.into_top())
             .spot(here!())?;
 
@@ -84,40 +84,49 @@ impl Connector {
             .await
             .pot(ConnectorError::AuthenticateFailed, here!())?;
 
-        if keycard.root() == root {
+        if keycard.identity() == identity {
             Ok(connection)
         } else {
             ConnectorError::UnexpectedRemote {
-                remote: keycard.root(),
+                remote: keycard.identity(),
             }
             .fail()
             .spot(here!())
         }
     }
 
-    async fn refresh(&self, root: PublicKey) -> bool {
-        let stale = self.get_address(root);
-        let fresh = self.client.get_address(root).await.ok().or(stale.clone());
+    async fn refresh(&self, identity: Identity) -> bool {
+        let stale = self.get_address(identity);
+        let fresh = self
+            .client
+            .get_address(identity)
+            .await
+            .ok()
+            .or(stale.clone());
 
         if fresh != stale {
-            self.cache_address(root, fresh.unwrap()); // `fresh` can be `None` only if `stale` is `None` too
+            self.cache_address(identity, fresh.unwrap()); // `fresh` can be `None` only if `stale` is `None` too
             true
         } else {
             false
         }
     }
 
-    fn get_address(&self, root: PublicKey) -> Option<SocketAddr> {
+    fn get_address(&self, identity: Identity) -> Option<SocketAddr> {
         self.database
             .lock()
             .unwrap()
             .cache
-            .get(&root)
+            .get(&identity)
             .map(Clone::clone)
     }
 
-    fn cache_address(&self, root: PublicKey, address: SocketAddr) {
-        self.database.lock().unwrap().cache.insert(root, address);
+    fn cache_address(&self, identity: Identity, address: SocketAddr) {
+        self.database
+            .lock()
+            .unwrap()
+            .cache
+            .insert(identity, address);
     }
 }
 
@@ -125,12 +134,12 @@ impl Connector {
 impl NetConnector for Connector {
     async fn connect(
         &self,
-        root: PublicKey,
+        identity: Identity,
     ) -> Result<SecureConnection, Stack> {
         loop {
-            let result = self.attempt(root).await.map_err(Into::into);
+            let result = self.attempt(identity).await.map_err(Into::into);
 
-            if result.is_ok() || !self.refresh(root).await {
+            if result.is_ok() || !self.refresh(identity).await {
                 return result;
             }
         }
@@ -156,8 +165,8 @@ mod tests {
         let alice_keychain = KeyChain::random();
         let bob_keychain = KeyChain::random();
 
-        let alice_public = alice_keychain.keycard().root();
-        let bob_public = bob_keychain.keycard().root();
+        let alice_identity = alice_keychain.keycard().identity();
+        let bob_identity = bob_keychain.keycard().identity();
 
         let mut alice_listener =
             Listener::new(SERVER, alice_keychain, Default::default()).await;
@@ -169,11 +178,13 @@ mod tests {
             let (remote, mut connection) =
                 alice_listener.accept().await.unwrap();
 
-            assert_eq!(remote, bob_public);
+            assert_eq!(remote, bob_identity);
             assert_eq!(connection.receive::<String>().await.unwrap(), MESSAGE);
         });
 
-        let mut connection = bob_connector.connect(alice_public).await.unwrap();
+        let mut connection =
+            bob_connector.connect(alice_identity).await.unwrap();
+
         connection.send(&String::from(MESSAGE)).await.unwrap();
 
         alice_task.await.unwrap();

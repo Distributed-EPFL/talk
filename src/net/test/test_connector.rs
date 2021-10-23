@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyChain},
+    crypto::{Identity, KeyChain},
     net::{traits::TcpConnect, Connector, SecureConnection},
 };
 
@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 
 pub struct TestConnector {
     pub keychain: KeyChain,
-    pub peers: HashMap<PublicKey, SocketAddr>,
+    pub peers: HashMap<Identity, SocketAddr>,
 }
 
 #[derive(Doom)]
@@ -28,13 +28,13 @@ pub enum TestConnectorError {
     #[doom(description("Failed to `secure` connection"))]
     SecureFailed,
     #[doom(description("Unexpected remote: {:?}", remote))]
-    UnexpectedRemote { remote: PublicKey },
+    UnexpectedRemote { remote: Identity },
 }
 
 impl TestConnector {
     pub fn new(
         keychain: KeyChain,
-        peers: HashMap<PublicKey, SocketAddr>,
+        peers: HashMap<Identity, SocketAddr>,
     ) -> Self {
         TestConnector { keychain, peers }
     }
@@ -44,11 +44,11 @@ impl TestConnector {
 impl Connector for TestConnector {
     async fn connect(
         &self,
-        root: PublicKey,
+        identity: Identity,
     ) -> Result<SecureConnection, Stack> {
         let address = self
             .peers
-            .get(&root)
+            .get(&identity)
             .ok_or(TestConnectorError::AddressUnknown.into_stack())
             .spot(here!())?
             .clone();
@@ -68,11 +68,11 @@ impl Connector for TestConnector {
             .await
             .pot(TestConnectorError::AuthenticateFailed, here!())?;
 
-        if keycard.root() == root {
+        if keycard.identity() == identity {
             Ok(connection)
         } else {
             TestConnectorError::UnexpectedRemote {
-                remote: keycard.root(),
+                remote: keycard.identity(),
             }
             .fail()
             .spot(here!())

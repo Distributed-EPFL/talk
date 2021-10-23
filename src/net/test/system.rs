@@ -1,5 +1,5 @@
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyChain},
+    crypto::{Identity, KeyChain},
     net::{
         test::{ConnectionPair, TestConnector, TestListener},
         Connector, Listener,
@@ -13,14 +13,14 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 pub struct System {
-    pub keys: Vec<PublicKey>,
+    pub keys: Vec<Identity>,
     pub connectors: Vec<TestConnector>,
     pub listeners: Vec<TestListener>,
 }
 
 impl System {
     pub fn new(
-        keys: Vec<PublicKey>,
+        keys: Vec<Identity>,
         connectors: Vec<TestConnector>,
         listeners: Vec<TestListener>,
     ) -> Self {
@@ -35,9 +35,9 @@ impl System {
         let keychains =
             (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
 
-        let roots = keychains
+        let identities = keychains
             .iter()
-            .map(|keychain| keychain.keycard().root())
+            .map(|keychain| keychain.keycard().identity())
             .collect::<Vec<_>>();
 
         let (listeners, addresses): (Vec<TestListener>, Vec<SocketAddr>) =
@@ -52,7 +52,7 @@ impl System {
                 .into_iter()
                 .unzip();
 
-        let peers: HashMap<PublicKey, SocketAddr> = roots
+        let peers: HashMap<Identity, SocketAddr> = identities
             .clone()
             .into_iter()
             .zip(addresses.into_iter())
@@ -63,7 +63,7 @@ impl System {
             .map(|keychain| TestConnector::new(keychain, peers.clone()))
             .collect();
 
-        System::new(roots, connectors, listeners)
+        System::new(identities, connectors, listeners)
     }
 
     pub async fn connect(

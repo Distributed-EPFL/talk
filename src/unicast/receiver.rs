@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     net::{Listener, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::{Fuse, Relay, Tether},
     unicast::{
@@ -13,8 +13,8 @@ use doomstack::{here, Doom, ResultExt, Top};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
-type MessageInlet<Message> = TokioSender<(PublicKey, Message, Acknowledger)>;
-type MessageOutlet<Message> = TokioReceiver<(PublicKey, Message, Acknowledger)>;
+type MessageInlet<Message> = TokioSender<(Identity, Message, Acknowledger)>;
+type MessageOutlet<Message> = TokioReceiver<(Identity, Message, Acknowledger)>;
 
 type ResponseInlet = TokioSender<Response>;
 type ResponseOutlet = TokioReceiver<Response>;
@@ -71,7 +71,7 @@ where
         }
     }
 
-    pub async fn receive(&mut self) -> (PublicKey, Message, Acknowledger) {
+    pub async fn receive(&mut self) -> (Identity, Message, Acknowledger) {
         // This cannot fail, as `message_inlet` is held by `listen` until
         // `self._fuse` is dropped along with `self`: if `recv()` failed,
         // one could not call `receive()` in the first place
@@ -114,7 +114,7 @@ where
     }
 
     async fn serve(
-        remote: PublicKey,
+        remote: Identity,
         connection: SecureConnection,
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
@@ -145,7 +145,7 @@ where
     }
 
     async fn drive_in(
-        remote: PublicKey,
+        remote: Identity,
         mut receiver: SecureReceiver,
         message_inlet: MessageInlet<Message>,
         response_inlet: ResponseInlet,

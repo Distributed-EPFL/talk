@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     link::context::{
         ContextId, ListenDispatcherSettings, Listener, Request, Response,
     },
@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc::{self, Sender};
 
-type Inlet = Sender<(PublicKey, SecureConnection)>;
+type Inlet = Sender<(Identity, SecureConnection)>;
 
 pub struct ListenDispatcher {
     database: Arc<Mutex<Database>>,
@@ -121,7 +121,7 @@ impl ListenDispatcher {
     }
 
     async fn serve(
-        remote: PublicKey,
+        remote: Identity,
         mut connection: SecureConnection,
         database: Arc<Mutex<Database>>,
         mut relay: Relay,

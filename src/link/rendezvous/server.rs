@@ -1,5 +1,5 @@
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyCard},
+    crypto::{Identity, KeyCard},
     link::rendezvous::{Request, Response, ServerSettings, ShardId},
     net::PlainConnection,
     sync::fuse::{Fuse, Relay},
@@ -40,10 +40,10 @@ enum ServeError {
 }
 
 struct Database {
-    shards: Vec<HashSet<PublicKey>>,
-    cards: HashMap<PublicKey, KeyCard>,
-    membership: HashMap<PublicKey, Option<ShardId>>,
-    addresses: HashMap<PublicKey, SocketAddr>,
+    shards: Vec<HashSet<Identity>>,
+    cards: HashMap<Identity, KeyCard>,
+    membership: HashMap<Identity, Option<ShardId>>,
+    addresses: HashMap<Identity, SocketAddr>,
 }
 
 impl Server {
@@ -131,9 +131,9 @@ impl Server {
 
             match request {
                 Request::PublishCard(card, shard)
-                    if database.cards.contains_key(&card.root()) =>
+                    if database.cards.contains_key(&card.identity()) =>
                 {
-                    let membership = database.membership[&card.root()];
+                    let membership = database.membership[&card.identity()];
 
                     if membership == shard {
                         Response::AcknowledgeCard
@@ -154,18 +154,18 @@ impl Server {
                 }
                 Request::PublishCard(card, shard) => {
                     if let Some(shard) = shard {
-                        database.shards[shard as usize].insert(card.root());
+                        database.shards[shard as usize].insert(card.identity());
                     }
 
-                    database.membership.insert(card.root(), shard);
-                    database.cards.insert(card.root(), card);
+                    database.membership.insert(card.identity(), shard);
+                    database.cards.insert(card.identity(), card);
 
                     Response::AcknowledgeCard
                 }
 
-                Request::AdvertisePort(root, port) => {
+                Request::AdvertisePort(identity, port) => {
                     address.set_port(port);
-                    database.addresses.insert(root, address);
+                    database.addresses.insert(identity, address);
 
                     Response::AcknowledgePort
                 }
@@ -190,16 +190,16 @@ impl Server {
                     Response::Shard(shard)
                 }
 
-                Request::GetCard(root) => {
-                    if let Some(card) = database.cards.get(&root) {
+                Request::GetCard(identity) => {
+                    if let Some(card) = database.cards.get(&identity) {
                         Response::Card(card.clone())
                     } else {
                         Response::CardUnknown
                     }
                 }
 
-                Request::GetAddress(root) => {
-                    if let Some(address) = database.addresses.get(&root) {
+                Request::GetAddress(identity) => {
+                    if let Some(address) = database.addresses.get(&identity) {
                         Response::Address(address.clone())
                     } else {
                         Response::AddressUnknown

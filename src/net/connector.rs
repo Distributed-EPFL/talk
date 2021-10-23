@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{crypto::primitives::sign::PublicKey, net::SecureConnection};
+use crate::{crypto::Identity, net::SecureConnection};
 
 use doomstack::Stack;
 
@@ -8,6 +8,6 @@ use doomstack::Stack;
 pub trait Connector: 'static + Send + Sync {
     async fn connect(
         &self,
-        remote: PublicKey,
+        remote: Identity,
     ) -> Result<SecureConnection, Stack>;
 }

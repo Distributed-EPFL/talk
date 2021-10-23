@@ -46,10 +46,6 @@ impl KeyCard {
     pub fn identity(&self) -> Identity {
         self.identity
     }
-
-    pub fn root(&self) -> SignPublicKey {
-        self.keys.sign
-    }
 }
 
 impl SignSignature {

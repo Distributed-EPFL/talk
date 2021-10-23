@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     net::Connector,
     sync::fuse::{Fuse, Relay},
     unicast::{
@@ -30,7 +30,7 @@ pub struct Sender<Message: UnicastMessage> {
 }
 
 struct Database<Message: UnicastMessage> {
-    links: HashMap<PublicKey, Link<Message>>,
+    links: HashMap<Identity, Link<Message>>,
 }
 
 struct Link<Message: UnicastMessage> {
@@ -86,7 +86,7 @@ where
 
     pub async fn send(
         &self,
-        remote: PublicKey,
+        remote: Identity,
         message: Message,
     ) -> Result<Acknowledgement, Top<SenderError>> {
         self.post(remote, Request::Message(message))
@@ -97,7 +97,7 @@ where
 
     pub async fn push(
         &self,
-        remote: PublicKey,
+        remote: Identity,
         message: Message,
         settings: PushSettings,
     ) where
@@ -120,7 +120,7 @@ where
 
     fn post(
         &self,
-        remote: PublicKey,
+        remote: Identity,
         mut request: Request<Message>,
     ) -> AcknowledgementOutlet {
         let mut database = self.database.lock().unwrap();

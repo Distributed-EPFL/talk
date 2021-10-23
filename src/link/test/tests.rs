@@ -1,6 +1,6 @@
 mod context {
     use crate::{
-        crypto::primitives::sign::PublicKey,
+        crypto::Identity,
         link::{
             context::{ConnectDispatcher, ListenDispatcher},
             test::ContextSystem,
@@ -93,8 +93,8 @@ mod context {
     struct SlowLoris(TestConnector);
 
     impl SlowLoris {
-        async fn connect(&self, root: PublicKey) -> PlainConnection {
-            let address = self.0.peers.get(&root).unwrap().clone();
+        async fn connect(&self, identity: Identity) -> PlainConnection {
+            let address = self.0.peers.get(&identity).unwrap().clone();
             address.connect().await.unwrap()
 
             // does not complete (no `secure` or `authenticate`)

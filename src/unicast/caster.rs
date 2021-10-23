@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     net::{Connector, SecureReceiver, SecureSender},
     sync::fuse::{Fuse, Relay, Tether},
     unicast::{
@@ -87,7 +87,7 @@ where
 {
     pub fn new(
         connector: Arc<dyn Connector>,
-        remote: PublicKey,
+        remote: Identity,
         settings: CasterSettings,
     ) -> Self {
         let (request_inlet, request_outlet) =
@@ -147,7 +147,7 @@ where
 
     async fn run(
         connector: Arc<dyn Connector>,
-        remote: PublicKey,
+        remote: Identity,
         mut request_outlet: RequestOutlet<Message>,
         state: Arc<Mutex<State<Message>>>,
         mut relay: Relay,

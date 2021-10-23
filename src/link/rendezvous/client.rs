@@ -1,5 +1,5 @@
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyCard},
+    crypto::{Identity, KeyCard},
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
     net::traits::TcpConnect,
 };
@@ -71,8 +71,8 @@ impl Client {
         }
     }
 
-    pub async fn advertise_port(&self, root: PublicKey, port: u16) {
-        match self.perform(&Request::AdvertisePort(root, port)).await {
+    pub async fn advertise_port(&self, identity: Identity, port: u16) {
+        match self.perform(&Request::AdvertisePort(identity, port)).await {
             Response::AcknowledgePort => (),
             response => panic!(
                 "unexpected response to `advertise_port`: {:?}",
@@ -101,9 +101,9 @@ impl Client {
 
     pub async fn get_card(
         &self,
-        root: PublicKey,
+        identity: Identity,
     ) -> Result<KeyCard, Top<ClientError>> {
-        match self.perform(&Request::GetCard(root)).await {
+        match self.perform(&Request::GetCard(identity)).await {
             Response::Card(card) => Ok(card),
             Response::CardUnknown => {
                 ClientError::CardUnknown.fail().spot(here!())
@@ -116,9 +116,9 @@ impl Client {
 
     pub async fn get_address(
         &self,
-        root: PublicKey,
+        identity: Identity,
     ) -> Result<SocketAddr, Top<ClientError>> {
-        match self.perform(&Request::GetAddress(root)).await {
+        match self.perform(&Request::GetAddress(identity)).await {
             Response::Address(address) => Ok(address),
             Response::AddressUnknown => {
                 ClientError::AddressUnknown.fail().spot(here!())
@@ -192,7 +192,7 @@ mod tests {
     async fn setup_clients(
         address: &'static str,
         clients: usize,
-    ) -> (Vec<KeyChain>, Vec<KeyCard>, Vec<PublicKey>, Vec<Client>) {
+    ) -> (Vec<KeyChain>, Vec<KeyCard>, Vec<Identity>, Vec<Client>) {
         let keychains =
             (0..clients).map(|_| KeyChain::random()).collect::<Vec<_>>();
 
@@ -201,16 +201,16 @@ mod tests {
             .map(|keychain| keychain.keycard())
             .collect::<Vec<_>>();
 
-        let roots = keycards
+        let identities = keycards
             .iter()
-            .map(|keycard| keycard.root())
+            .map(|keycard| keycard.identity())
             .collect::<Vec<_>>();
 
         let clients = (0..clients)
             .map(|_| Client::new(address, Default::default()))
             .collect::<Vec<_>>();
 
-        (keychains, keycards, roots, clients)
+        (keychains, keycards, identities, clients)
     }
 
     async fn setup(
@@ -221,20 +221,20 @@ mod tests {
         Server,
         Vec<KeyChain>,
         Vec<KeyCard>,
-        Vec<PublicKey>,
+        Vec<Identity>,
         Vec<Client>,
     ) {
         let server = setup_server(address, shard_sizes).await;
-        let (keychains, keycards, roots, clients) =
+        let (keychains, keycards, identities, clients) =
             setup_clients(address, clients).await;
 
-        (server, keychains, keycards, roots, clients)
+        (server, keychains, keycards, identities, clients)
     }
 
     async fn keycard_fill(
         shard: ShardId,
         keycards: Vec<KeyCard>,
-        roots: Vec<PublicKey>,
+        identities: Vec<Identity>,
         clients: Vec<Client>,
     ) {
         for j in 0..clients.len() {
@@ -249,14 +249,17 @@ mod tests {
 
                 for d in 0..j {
                     assert_eq!(
-                        clients[c].get_card(roots[d].clone()).await.unwrap(),
+                        clients[c]
+                            .get_card(identities[d].clone())
+                            .await
+                            .unwrap(),
                         keycards[d]
                     );
                 }
 
                 for d in j..clients.len() {
                     match clients[c]
-                        .get_card(roots[d].clone())
+                        .get_card(identities[d].clone())
                         .await
                         .unwrap_err()
                         .top()
@@ -284,7 +287,7 @@ mod tests {
 
             for d in 0..clients.len() {
                 assert_eq!(
-                    clients[c].get_card(roots[d].clone()).await.unwrap(),
+                    clients[c].get_card(identities[d].clone()).await.unwrap(),
                     keycards[d]
                 );
             }
@@ -293,10 +296,10 @@ mod tests {
 
     #[tokio::test]
     async fn single_shard_keycard_fill() {
-        let (_server, _keychains, keycards, roots, clients) =
+        let (_server, _keychains, keycards, identities, clients) =
             setup("127.0.0.1:1234", 3, vec![3]).await;
 
-        keycard_fill(0, keycards, roots, clients).await;
+        keycard_fill(0, keycards, identities, clients).await;
     }
 
     #[tokio::test]
@@ -306,11 +309,11 @@ mod tests {
         const CLIENTS: usize = 3;
         const SHARD_SIZES: &[usize] = &[3];
 
-        let (_keychains, keycards, roots, clients) =
+        let (_keychains, keycards, identities, clients) =
             setup_clients(ADDRESS, CLIENTS).await;
 
         let fill = tokio::spawn(async move {
-            keycard_fill(0, keycards, roots, clients).await;
+            keycard_fill(0, keycards, identities, clients).await;
         });
 
         time::sleep(Duration::from_secs(5)).await;
@@ -322,31 +325,33 @@ mod tests {
 
     #[tokio::test]
     async fn multiple_shard_keycard_fill() {
-        let (_server, _keychains, keycards, roots, clients) =
+        let (_server, _keychains, keycards, identities, clients) =
             setup("127.0.0.1:1236", 9, vec![3, 3, 3]).await;
 
         let mut keycards_alpha = keycards;
         let mut keycards_beta = keycards_alpha.split_off(3);
         let keycards_gamma = keycards_beta.split_off(3);
 
-        let mut roots_alpha = roots;
-        let mut roots_beta = roots_alpha.split_off(3);
-        let roots_gamma = roots_beta.split_off(3);
+        let mut identities_alpha = identities;
+        let mut identities_beta = identities_alpha.split_off(3);
+        let identities_gamma = identities_beta.split_off(3);
 
         let mut clients_alpha = clients;
         let mut clients_beta = clients_alpha.split_off(3);
         let clients_gamma = clients_beta.split_off(3);
 
         let alpha = tokio::spawn(async move {
-            keycard_fill(0, keycards_alpha, roots_alpha, clients_alpha).await;
+            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha)
+                .await;
         });
 
         let beta = tokio::spawn(async move {
-            keycard_fill(1, keycards_beta, roots_beta, clients_beta).await;
+            keycard_fill(1, keycards_beta, identities_beta, clients_beta).await;
         });
 
         let gamma = tokio::spawn(async move {
-            keycard_fill(2, keycards_gamma, roots_gamma, clients_gamma).await;
+            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma)
+                .await;
         });
 
         alpha.await.unwrap();
@@ -361,31 +366,33 @@ mod tests {
         const CLIENTS: usize = 9;
         const SHARD_SIZES: &[usize] = &[3, 3, 3];
 
-        let (_keychains, keycards, roots, clients) =
+        let (_keychains, keycards, identities, clients) =
             setup_clients(ADDRESS, CLIENTS).await;
 
         let mut keycards_alpha = keycards;
         let mut keycards_beta = keycards_alpha.split_off(3);
         let keycards_gamma = keycards_beta.split_off(3);
 
-        let mut roots_alpha = roots;
-        let mut roots_beta = roots_alpha.split_off(3);
-        let roots_gamma = roots_beta.split_off(3);
+        let mut identities_alpha = identities;
+        let mut identities_beta = identities_alpha.split_off(3);
+        let identities_gamma = identities_beta.split_off(3);
 
         let mut clients_alpha = clients;
         let mut clients_beta = clients_alpha.split_off(3);
         let clients_gamma = clients_beta.split_off(3);
 
         let alpha = tokio::spawn(async move {
-            keycard_fill(0, keycards_alpha, roots_alpha, clients_alpha).await;
+            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha)
+                .await;
         });
 
         let beta = tokio::spawn(async move {
-            keycard_fill(1, keycards_beta, roots_beta, clients_beta).await;
+            keycard_fill(1, keycards_beta, identities_beta, clients_beta).await;
         });
 
         let gamma = tokio::spawn(async move {
-            keycard_fill(2, keycards_gamma, roots_gamma, clients_gamma).await;
+            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma)
+                .await;
         });
 
         time::sleep(Duration::from_secs(5)).await;
@@ -399,7 +406,7 @@ mod tests {
 
     #[tokio::test]
     async fn shard_overflow() {
-        let (_server, _keychains, keycards, _roots, clients) =
+        let (_server, _keychains, keycards, _identities, clients) =
             setup("127.0.0.1:1238", 4, vec![3]).await;
 
         for j in 0..3 {
@@ -424,7 +431,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_shard() {
-        let (_server, _keychains, keycards, _roots, clients) =
+        let (_server, _keychains, keycards, _identities, clients) =
             setup("127.0.0.1:1239", 1, vec![3]).await;
 
         match clients[0]

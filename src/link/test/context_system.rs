@@ -1,5 +1,5 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     link::context::{ConnectDispatcher, ContextId, ListenDispatcher},
     net::{
         test::{ConnectionPair, System as NetSystem},
@@ -8,14 +8,14 @@ use crate::{
 };
 
 pub struct ContextSystem {
-    pub keys: Vec<PublicKey>,
+    pub keys: Vec<Identity>,
     pub connectors: Vec<ConnectDispatcher>,
     pub listeners: Vec<ListenDispatcher>,
 }
 
 impl ContextSystem {
     pub fn new(
-        keys: Vec<PublicKey>,
+        keys: Vec<Identity>,
         connectors: Vec<ConnectDispatcher>,
         listeners: Vec<ListenDispatcher>,
     ) -> Self {

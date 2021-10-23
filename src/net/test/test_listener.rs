@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyChain},
+    crypto::{Identity, KeyChain},
     net::{Listener, PlainConnection, SecureConnection},
     sync::fuse::{Fuse, Relay},
 };
@@ -16,7 +16,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 const CHANNEL_CAPACITY: usize = 32;
 
-type Outlet = Receiver<(PublicKey, SecureConnection)>;
+type Outlet = Receiver<(Identity, SecureConnection)>;
 
 pub struct TestListener {
     outlet: Outlet,
@@ -68,7 +68,7 @@ impl TestListener {
     async fn listen(
         keychain: KeyChain,
         listener: TcpListener,
-        inlet: Sender<(PublicKey, SecureConnection)>,
+        inlet: Sender<(Identity, SecureConnection)>,
         mut relay: Relay,
     ) -> Result<(), Top<ListenError>> {
         let fuse = Fuse::new();
@@ -97,7 +97,7 @@ impl TestListener {
     async fn serve(
         connection: PlainConnection,
         keychain: KeyChain,
-        inlet: Sender<(PublicKey, SecureConnection)>,
+        inlet: Sender<(Identity, SecureConnection)>,
         mut relay: Relay,
     ) -> Result<(), Top<ServeError>> {
         let mut connection = relay
@@ -114,7 +114,7 @@ impl TestListener {
 
         // This can only fail if the (local) receiving end is
         // dropped, in which case we don't care about the error
-        let _ = inlet.try_send((keycard.root(), connection));
+        let _ = inlet.try_send((keycard.identity(), connection));
 
         Ok(())
     }
@@ -122,7 +122,7 @@ impl TestListener {
 
 #[async_trait]
 impl Listener for TestListener {
-    async fn accept(&mut self) -> Result<(PublicKey, SecureConnection), Stack> {
+    async fn accept(&mut self) -> Result<(Identity, SecureConnection), Stack> {
         // `inlet` is dropped only when `fuse` burns: if `outlet.recv()`
         // returned `None`, it would mean that the `Listener` was dropped,
         // which is impossible since `NetListener::accept` is being called

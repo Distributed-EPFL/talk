@@ -1,5 +1,5 @@
 use crate::{
-    crypto::{primitives::sign::PublicKey, KeyCard},
+    crypto::{Identity, KeyCard},
     link::rendezvous::ShardId,
 };
 
@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 #[repr(u8)]
 pub(in crate::link::rendezvous) enum Request {
     PublishCard(KeyCard, Option<ShardId>),
-    AdvertisePort(PublicKey, u16),
+    AdvertisePort(Identity, u16),
 
     GetShard(ShardId),
-    GetCard(PublicKey),
-    GetAddress(PublicKey),
+    GetCard(Identity),
+    GetAddress(Identity),
 }

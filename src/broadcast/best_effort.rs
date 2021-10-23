@@ -1,6 +1,6 @@
 use crate::{
     broadcast::BestEffortSettings,
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     unicast::{Message, Sender},
 };
 
@@ -9,8 +9,8 @@ use futures::stream::{FuturesUnordered, Stream, StreamExt};
 use std::pin::Pin;
 
 pub struct BestEffort {
-    stream: Pin<Box<dyn Stream<Item = PublicKey> + Send + Sync>>,
-    completed: Vec<PublicKey>,
+    stream: Pin<Box<dyn Stream<Item = Identity> + Send + Sync>>,
+    completed: Vec<Identity>,
 }
 
 impl BestEffort {
@@ -22,7 +22,7 @@ impl BestEffort {
     ) -> Self
     where
         M: Message + Clone,
-        R: IntoIterator<Item = PublicKey>,
+        R: IntoIterator<Item = Identity>,
     {
         let unordered = remotes
             .into_iter()
@@ -44,7 +44,7 @@ impl BestEffort {
         BestEffort { stream, completed }
     }
 
-    pub fn completed(&self) -> &[PublicKey] {
+    pub fn completed(&self) -> &[Identity] {
         self.completed.as_slice()
     }
 

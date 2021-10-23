@@ -1,11 +1,11 @@
 use crate::{
-    crypto::primitives::sign::PublicKey,
+    crypto::Identity,
     net::test::System as NetSystem,
     unicast::{Message as UnicastMessage, Receiver, Sender},
 };
 
 pub struct UnicastSystem<Message: UnicastMessage> {
-    pub keys: Vec<PublicKey>,
+    pub keys: Vec<Identity>,
     pub senders: Vec<Sender<Message>>,
     pub receivers: Vec<Receiver<Message>>,
 }
@@ -15,7 +15,7 @@ where
     Message: UnicastMessage,
 {
     pub fn new(
-        keys: Vec<PublicKey>,
+        keys: Vec<Identity>,
         senders: Vec<Sender<Message>>,
         receivers: Vec<Receiver<Message>>,
     ) -> Self {
