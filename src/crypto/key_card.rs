@@ -8,53 +8,29 @@ use crate::crypto::{
             PublicKey as SignPublicKey, SignError, Signature as SignSignature,
         },
     },
-    KeyChain, Scope, Statement, TalkHeader,
+    KeyChain, Statement,
 };
 
-use doomstack::{here, Doom, ResultExt, Top};
+use doomstack::Top;
 
-use serde::de::Error as DeError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self")]
-pub struct KeyCard {
-    keys: PublicKeys,
-    signature: SignSignature,
-}
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct PublicKeys {
+pub struct KeyCard {
     sign: SignPublicKey,
     multi: MultiPublicKey,
 }
 
-#[derive(Doom)]
-pub enum KeyCardError {
-    #[doom(description("Malformed keycard"))]
-    MalformedKeyCard,
-}
-
 impl KeyCard {
     pub fn from_keychain(keychain: &KeyChain) -> Self {
-        let keys = PublicKeys {
+        KeyCard {
             sign: keychain.keypairs.sign.public(),
             multi: keychain.keypairs.multi.public(),
-        };
-
-        let signature = keychain.sign(&keys).unwrap();
-
-        KeyCard { keys, signature }
+        }
     }
 
     pub fn root(&self) -> SignPublicKey {
-        self.keys.sign
-    }
-
-    fn check(&self) -> Result<(), Top<KeyCardError>> {
-        self.signature
-            .verify(&self, &self.keys)
-            .pot(KeyCardError::MalformedKeyCard, here!())
+        self.sign
     }
 }
 
@@ -67,7 +43,7 @@ impl SignSignature {
     where
         S: Statement,
     {
-        self.verify_raw(keycard.keys.sign, &(S::SCOPE, S::HEADER, message))
+        self.verify_raw(keycard.sign, &(S::SCOPE, S::HEADER, message))
     }
 }
 
@@ -82,40 +58,8 @@ impl MultiSignature {
         S: Statement,
     {
         self.verify_raw(
-            cards.into_iter().map(|card| card.keys.multi),
+            cards.into_iter().map(|card| card.multi),
             &(S::SCOPE, S::HEADER, message),
         )
     }
-}
-
-impl PartialEq for KeyCard {
-    fn eq(&self, rho: &KeyCard) -> bool {
-        self.keys == rho.keys
-    }
-}
-
-impl Serialize for KeyCard {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        KeyCard::serialize(&self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for KeyCard {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let card = KeyCard::deserialize(deserializer)?;
-        card.check().map_err(|err| DeError::custom(err))?;
-        Ok(card)
-    }
-}
-
-impl Statement for PublicKeys {
-    const SCOPE: Scope = Scope::talk();
-    type Header = TalkHeader;
-    const HEADER: TalkHeader = TalkHeader::KeyCardPublicKeys;
 }

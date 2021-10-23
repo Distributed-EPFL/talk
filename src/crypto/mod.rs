@@ -9,7 +9,6 @@ pub mod primitives;
 pub(crate) use talk_header::TalkHeader;
 
 pub use key_card::KeyCard;
-pub use key_card::KeyCardError;
 pub use key_chain::KeyChain;
 pub use scope::Scope;
 pub use statement::Statement;
