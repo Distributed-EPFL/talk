@@ -1,3 +1,4 @@
+mod identity;
 mod key_card;
 mod key_chain;
 mod scope;
@@ -8,6 +9,7 @@ pub mod primitives;
 
 pub(crate) use talk_header::TalkHeader;
 
+pub use identity::Identity;
 pub use key_card::KeyCard;
 pub use key_chain::KeyChain;
 pub use scope::Scope;
