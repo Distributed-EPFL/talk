@@ -4,6 +4,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
 
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
@@ -125,6 +126,18 @@ impl Debug for Hash {
         } else {
             write!(f, "Hash({})", bytes)
         }
+    }
+}
+
+impl PartialOrd for Hash {
+    fn partial_cmp(&self, rho: &Hash) -> Option<Ordering> {
+        Some(self.cmp(&rho))
+    }
+}
+
+impl Ord for Hash {
+    fn cmp(&self, rho: &Hash) -> Ordering {
+        self.to_bytes().cmp(&rho.to_bytes())
     }
 }
 
