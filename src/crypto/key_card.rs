@@ -16,6 +16,8 @@ use doomstack::Top;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use std::hash::{Hash, Hasher};
+
 #[derive(Debug, Clone)]
 pub struct KeyCard {
     identity: Identity,
@@ -85,6 +87,15 @@ impl PartialEq for KeyCard {
 }
 
 impl Eq for KeyCard {}
+
+impl Hash for KeyCard {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.identity.hash(state)
+    }
+}
 
 impl Serialize for KeyCard {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
