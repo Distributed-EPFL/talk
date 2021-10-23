@@ -11,6 +11,10 @@ use std::fmt::{Debug, Formatter};
 pub struct Identity(Hash);
 
 impl Identity {
+    pub(in crate::crypto) fn from_hash(hash: Hash) -> Self {
+        Identity(hash)
+    }
+
     pub fn from_bytes(bytes: [u8; HASH_LENGTH]) -> Self {
         Identity(Hash::from_bytes(bytes))
     }
