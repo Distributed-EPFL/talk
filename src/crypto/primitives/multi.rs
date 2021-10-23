@@ -12,6 +12,7 @@ use rand::RngCore;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -314,6 +315,18 @@ impl Hash for Signature {
         H: Hasher,
     {
         self.0.to_bytes().hash(state)
+    }
+}
+
+impl PartialOrd for PublicKey {
+    fn partial_cmp(&self, rho: &PublicKey) -> Option<Ordering> {
+        Some(self.cmp(&rho))
+    }
+}
+
+impl Ord for PublicKey {
+    fn cmp(&self, rho: &PublicKey) -> Ordering {
+        self.to_bytes().cmp(&rho.to_bytes())
     }
 }
 
