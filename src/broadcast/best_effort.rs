@@ -1,12 +1,17 @@
 use crate::{
     broadcast::BestEffortSettings,
     crypto::Identity,
+    sync::fuse::{FuseError, Relay},
     unicast::{Message, Sender},
 };
+
+use doomstack::Top;
 
 use futures::stream::{FuturesUnordered, Stream, StreamExt};
 
 use std::pin::Pin;
+
+use tokio::task::JoinHandle;
 
 pub struct BestEffort {
     stream: Pin<Box<dyn Stream<Item = Identity> + Send + Sync>>,
@@ -60,6 +65,13 @@ impl BestEffort {
 
     pub async fn complete(self) {
         self.stream.collect::<Vec<_>>().await;
+    }
+
+    pub fn spawn(
+        self,
+        mut relay: Relay,
+    ) -> JoinHandle<Result<(), Top<FuseError>>> {
+        tokio::spawn(async move { relay.map(self.complete()).await })
     }
 }
 
