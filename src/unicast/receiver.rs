@@ -25,12 +25,6 @@ pub struct Receiver<Message: UnicastMessage> {
 }
 
 #[derive(Doom)]
-enum ListenError {
-    #[doom(description("`listen` interrupted"))]
-    ListenInterrupted,
-}
-
-#[derive(Doom)]
 enum DriveInError {
     #[doom(description("`drive_in` interrupted"))]
     DriveInInterrupted,
@@ -58,11 +52,9 @@ where
             mpsc::channel(settings.message_channel_capacity);
 
         let fuse = Fuse::new();
-        let relay = fuse.relay();
 
-        tokio::spawn(async move {
-            let _ = Receiver::listen(listener, message_inlet, settings, relay)
-                .await;
+        fuse.spawn(async move {
+            let _ = Receiver::listen(listener, message_inlet, settings).await;
         });
 
         Receiver {
@@ -82,19 +74,13 @@ where
         mut listener: L,
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
-        mut relay: Relay,
-    ) -> Result<(), Top<ListenError>>
-    where
+    ) where
         L: Listener,
     {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((remote, connection)) = relay
-                .map(listener.accept())
-                .await
-                .pot(ListenError::ListenInterrupted, here!())?
-            {
+            if let Ok((remote, connection)) = listener.accept().await {
                 let message_inlet = message_inlet.clone();
                 let settings = settings.clone();
                 let relay = fuse.relay();

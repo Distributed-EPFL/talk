@@ -7,7 +7,7 @@ use crate::{
         traits::TcpConnect, Listener as NetListener, PlainConnection,
         SecureConnection,
     },
-    sync::fuse::{Fuse, Relay},
+    sync::fuse::Fuse,
 };
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
@@ -26,15 +26,7 @@ pub struct Listener {
 }
 
 #[derive(Doom)]
-enum ListenError {
-    #[doom(description("`listen` interrupted"))]
-    ListenInterrupted,
-}
-
-#[derive(Doom)]
 enum ServeError {
-    #[doom(description("`serve` interrupted"))]
-    ServeInterrupted,
     #[doom(description("Failed to `secure` the connection"))]
     SecureFailed,
     #[doom(description("Failed to `authenticate` the connection"))]
@@ -60,12 +52,11 @@ impl Listener {
         let port = listener.local_addr().unwrap().port();
 
         let fuse = Fuse::new();
-        let relay = fuse.relay();
 
         let (inlet, outlet) = mpsc::channel(settings.channel_capacity);
 
-        tokio::spawn(async move {
-            let _ = Listener::listen(keychain, listener, inlet, relay).await;
+        fuse.spawn(async move {
+            let _ = Listener::listen(keychain, listener, inlet).await;
         });
 
         let client = Client::new(server, settings.client_settings);
@@ -81,25 +72,18 @@ impl Listener {
         keychain: KeyChain,
         listener: TcpListener,
         inlet: Sender<(Identity, SecureConnection)>,
-        mut relay: Relay,
-    ) -> Result<(), Top<ListenError>> {
+    ) {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, _)) = relay
-                .map(listener.accept())
-                .await
-                .pot(ListenError::ListenInterrupted, here!())?
-            {
+            if let Ok((stream, _)) = listener.accept().await {
                 let connection = stream.into();
 
                 let keychain = keychain.clone();
                 let inlet = inlet.clone();
-                let relay = fuse.relay();
 
-                tokio::spawn(async move {
-                    let _ = Listener::serve(connection, keychain, inlet, relay)
-                        .await;
+                fuse.spawn(async move {
+                    let _ = Listener::serve(connection, keychain, inlet).await;
                 });
             }
         }
@@ -109,18 +93,15 @@ impl Listener {
         connection: PlainConnection,
         keychain: KeyChain,
         inlet: Sender<(Identity, SecureConnection)>,
-        mut relay: Relay,
     ) -> Result<(), Top<ServeError>> {
-        let mut connection = relay
-            .map(connection.secure())
+        let mut connection = connection
+            .secure()
             .await
-            .pot(ServeError::ServeInterrupted, here!())?
             .pot(ServeError::SecureFailed, here!())?;
 
-        let keycard = relay
-            .map(connection.authenticate(&keychain))
+        let keycard = connection
+            .authenticate(&keychain)
             .await
-            .pot(ServeError::ServeInterrupted, here!())?
             .pot(ServeError::AuthenticateFailed, here!())?;
 
         // This can only fail if the (local) receiving end is

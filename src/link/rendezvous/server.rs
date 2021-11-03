@@ -2,7 +2,7 @@ use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::{Request, Response, ServerSettings, ShardId},
     net::PlainConnection,
-    sync::fuse::{Fuse, Relay},
+    sync::fuse::Fuse,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -26,15 +26,7 @@ pub enum ServerError {
 }
 
 #[derive(Doom)]
-enum ListenError {
-    #[doom(description("`listen` interrupted"))]
-    ListenInterrupted,
-}
-
-#[derive(Doom)]
 enum ServeError {
-    #[doom(description("`serve` interrupted"))]
-    ServeInterrupted,
     #[doom(description("connection error"))]
     ConnectionError,
 }
@@ -66,7 +58,6 @@ impl Server {
         }));
 
         let fuse = Fuse::new();
-        let relay = fuse.relay();
 
         let listener = TcpListener::bind(address)
             .await
@@ -74,8 +65,8 @@ impl Server {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        tokio::spawn(async move {
-            let _ = Server::listen(settings, database, listener, relay).await;
+        fuse.spawn(async move {
+            let _ = Server::listen(settings, database, listener).await;
         });
 
         Ok(Server { _fuse: fuse })
@@ -85,27 +76,20 @@ impl Server {
         settings: ServerSettings,
         database: Arc<Mutex<Database>>,
         listener: TcpListener,
-        mut relay: Relay,
-    ) -> Result<(), Top<ListenError>> {
+    ) {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, address)) = relay
-                .map(listener.accept())
-                .await
-                .pot(ListenError::ListenInterrupted, here!())?
-            {
+            if let Ok((stream, address)) = listener.accept().await {
                 let settings = settings.clone();
                 let database = database.clone();
 
                 let connection: PlainConnection = stream.into();
-                let relay = fuse.relay();
 
-                tokio::spawn(async move {
-                    let _ = Server::serve(
-                        settings, database, connection, address, relay,
-                    )
-                    .await;
+                fuse.spawn(async move {
+                    let _ =
+                        Server::serve(settings, database, connection, address)
+                            .await;
                 });
             }
 
@@ -118,12 +102,10 @@ impl Server {
         database: Arc<Mutex<Database>>,
         mut connection: PlainConnection,
         mut address: SocketAddr,
-        mut relay: Relay,
     ) -> Result<(), Top<ServeError>> {
-        let request: Request = relay
-            .map(connection.receive())
+        let request: Request = connection
+            .receive()
             .await
-            .pot(ServeError::ServeInterrupted, here!())?
             .pot(ServeError::ConnectionError, here!())?;
 
         let response = {

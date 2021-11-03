@@ -4,7 +4,7 @@ use crate::{
         ContextId, ListenDispatcherSettings, Listener, Request, Response,
     },
     net::{Listener as NetListener, SecureConnection},
-    sync::fuse::{Fuse, Relay},
+    sync::fuse::Fuse,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -28,15 +28,7 @@ pub(in crate::link::context) struct Database {
 }
 
 #[derive(Doom)]
-enum ListenError {
-    #[doom(description("`listen` interrupted"))]
-    ListenInterrupted,
-}
-
-#[derive(Doom)]
 enum ServeError {
-    #[doom(description("`serve` interrupted"))]
-    ServeInterrupted,
     #[doom(description("Failed to receive context"))]
     ReceiveFailed,
     #[doom(description("Failed to send context acknowledgement"))]
@@ -58,11 +50,9 @@ impl ListenDispatcher {
 
         {
             let database = database.clone();
-            let relay = fuse.relay();
 
-            tokio::spawn(async move {
-                let _ =
-                    ListenDispatcher::listen(listener, database, relay).await;
+            fuse.spawn(async move {
+                let _ = ListenDispatcher::listen(listener, database).await;
             });
         }
 
@@ -91,30 +81,20 @@ impl ListenDispatcher {
         Listener::new(context, outlet, self.database.clone(), self.fuse.clone())
     }
 
-    async fn listen<L>(
-        mut listener: L,
-        database: Arc<Mutex<Database>>,
-        mut relay: Relay,
-    ) -> Result<(), Top<ListenError>>
+    async fn listen<L>(mut listener: L, database: Arc<Mutex<Database>>)
     where
         L: NetListener,
     {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((remote, connection)) = relay
-                .map(listener.accept())
-                .await
-                .pot(ListenError::ListenInterrupted, here!())?
-            {
-                let relay = fuse.relay();
+            if let Ok((remote, connection)) = listener.accept().await {
                 let database = database.clone();
 
-                tokio::spawn(async move {
-                    let _ = ListenDispatcher::serve(
-                        remote, connection, database, relay,
-                    )
-                    .await;
+                fuse.spawn(async move {
+                    let _ =
+                        ListenDispatcher::serve(remote, connection, database)
+                            .await;
                 });
             }
         }
@@ -124,12 +104,10 @@ impl ListenDispatcher {
         remote: Identity,
         mut connection: SecureConnection,
         database: Arc<Mutex<Database>>,
-        mut relay: Relay,
     ) -> Result<(), Top<ServeError>> {
-        let Request::Context(context) = relay
-            .map(connection.receive())
+        let Request::Context(context) = connection
+            .receive()
             .await
-            .pot(ServeError::ServeInterrupted, here!())?
             .pot(ServeError::ReceiveFailed, here!())?;
 
         let inlet = database
@@ -141,10 +119,9 @@ impl ListenDispatcher {
 
         match inlet {
             Some(inlet) => {
-                relay
-                    .map(connection.send(&Response::ContextAccepted))
+                connection
+                    .send(&Response::ContextAccepted)
                     .await
-                    .pot(ServeError::ServeInterrupted, here!())?
                     .pot(ServeError::SendFailed, here!())?;
 
                 // This can only fail if the (local) receiving end is
@@ -154,10 +131,9 @@ impl ListenDispatcher {
                 Ok(())
             }
             None => {
-                relay
-                    .map(connection.send(&Response::ContextRefused))
+                connection
+                    .send(&Response::ContextRefused)
                     .await
-                    .pot(ServeError::ServeInterrupted, here!())?
                     .pot(ServeError::SendFailed, here!())?;
 
                 ServeError::MissingContext { context }.fail().spot(here!())

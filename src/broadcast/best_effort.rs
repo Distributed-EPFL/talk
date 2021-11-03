@@ -67,11 +67,8 @@ impl BestEffort {
         self.stream.collect::<Vec<_>>().await;
     }
 
-    pub fn spawn(
-        self,
-        mut relay: Relay,
-    ) -> JoinHandle<Result<(), Top<FuseError>>> {
-        tokio::spawn(async move { relay.map(self.complete()).await })
+    pub fn spawn(self, relay: Relay) -> JoinHandle<Result<(), Top<FuseError>>> {
+        relay.run(async move { self.complete().await })
     }
 }
 

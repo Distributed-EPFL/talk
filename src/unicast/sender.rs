@@ -1,7 +1,7 @@
 use crate::{
     crypto::Identity,
     net::Connector,
-    sync::fuse::{Fuse, Relay},
+    sync::fuse::Fuse,
     unicast::{
         Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated,
         Message as UnicastMessage, PushSettings, Request, SenderSettings,
@@ -44,12 +44,6 @@ pub enum SenderError {
     SendFailed,
 }
 
-#[derive(Doom)]
-enum KeepAliveError {
-    #[doom(description("`keep_alive` interrupted"))]
-    KeepAliveInterrupted,
-}
-
 impl<Message> Sender<Message>
 where
     Message: UnicastMessage,
@@ -69,10 +63,9 @@ where
         {
             let database = database.clone();
             let settings = settings.clone();
-            let relay = fuse.relay();
 
-            tokio::spawn(async move {
-                let _ = Sender::keep_alive(database, relay, settings).await;
+            fuse.spawn(async move {
+                let _ = Sender::keep_alive(database, settings).await;
             });
         }
 
@@ -150,22 +143,15 @@ where
 
     async fn keep_alive(
         database: Arc<Mutex<Database<Message>>>,
-        mut relay: Relay,
         settings: SenderSettings,
-    ) -> Result<(), Top<KeepAliveError>> {
+    ) {
         loop {
             database.lock().unwrap().links.retain(|_, link| {
-                if link.last_message.elapsed() > settings.link_timeout {
-                    false
-                } else {
-                    link.caster.post(Request::KeepAlive).is_ok()
-                }
+                (link.last_message.elapsed() <= settings.link_timeout)
+                    && link.caster.post(Request::KeepAlive).is_ok()
             });
 
-            relay
-                .map(time::sleep(settings.keepalive_interval))
-                .await
-                .pot(KeepAliveError::KeepAliveInterrupted, here!())?;
+            time::sleep(settings.keepalive_interval).await;
         }
     }
 }
