@@ -1,7 +1,5 @@
 use crate::sync::fuse::Relay;
 
-use doomstack::{Doom, Top};
-
 use std::future::Future;
 
 use tokio::sync::broadcast;
@@ -10,12 +8,6 @@ use tokio::task::JoinHandle;
 
 pub struct Fuse {
     sender: Sender<()>,
-}
-
-#[derive(Doom)]
-pub enum FuseError {
-    #[doom(description("Fuse burned"))]
-    FuseBurned,
 }
 
 impl Fuse {
@@ -28,10 +20,7 @@ impl Fuse {
         Relay::new(self.sender.subscribe())
     }
 
-    pub fn spawn<F>(
-        &self,
-        future: F,
-    ) -> JoinHandle<Result<F::Output, Top<FuseError>>>
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<Option<F::Output>>
     where
         F: 'static + Send + Future,
         F::Output: 'static + Send,
@@ -106,7 +95,7 @@ mod tests {
 
         fuse.burn();
 
-        assert!(relay.map(r).await.is_err());
+        assert!(relay.map(r).await.is_none());
     }
 
     #[tokio::test]
@@ -131,8 +120,8 @@ mod tests {
 
         fuse.burn();
 
-        assert!(relay.map(r2).await.is_err());
-        assert!(relay.map(r3).await.is_err());
+        assert!(relay.map(r2).await.is_none());
+        assert!(relay.map(r3).await.is_none());
     }
 
     #[tokio::test]
@@ -158,9 +147,9 @@ mod tests {
 
         // Fuse is already burned here
 
-        assert!(relay.map(r0).await.is_err());
-        assert!(relay.map(r1).await.is_err());
-        assert!(relay.map(r2).await.is_err());
-        assert!(relay.map(r3).await.is_err());
+        assert!(relay.map(r0).await.is_none());
+        assert!(relay.map(r1).await.is_none());
+        assert!(relay.map(r2).await.is_none());
+        assert!(relay.map(r3).await.is_none());
     }
 }

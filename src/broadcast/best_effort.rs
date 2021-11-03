@@ -1,11 +1,9 @@
 use crate::{
     broadcast::BestEffortSettings,
     crypto::Identity,
-    sync::fuse::{FuseError, Relay},
+    sync::fuse::Relay,
     unicast::{Message, Sender},
 };
-
-use doomstack::Top;
 
 use futures::stream::{FuturesUnordered, Stream, StreamExt};
 
@@ -67,7 +65,7 @@ impl BestEffort {
         self.stream.collect::<Vec<_>>().await;
     }
 
-    pub fn spawn(self, relay: Relay) -> JoinHandle<Result<(), Top<FuseError>>> {
+    pub fn spawn(self, relay: Relay) -> JoinHandle<Option<()>> {
         relay.run(async move { self.complete().await })
     }
 }

@@ -1,7 +1,3 @@
-use crate::sync::fuse::FuseError;
-
-use doomstack::{here, Doom, ResultExt, Top};
-
 use std::future::Future;
 
 use tokio::sync::broadcast::Receiver;
@@ -23,10 +19,7 @@ impl Relay {
         }
     }
 
-    pub fn run<F>(
-        mut self,
-        future: F,
-    ) -> JoinHandle<Result<F::Output, Top<FuseError>>>
+    pub fn run<F>(mut self, future: F) -> JoinHandle<Option<F::Output>>
     where
         F: 'static + Send + Future,
         F::Output: 'static + Send,
@@ -34,10 +27,7 @@ impl Relay {
         tokio::spawn(async move { self.map(future).await })
     }
 
-    pub async fn map<F>(
-        &mut self,
-        future: F,
-    ) -> Result<F::Output, Top<FuseError>>
+    pub async fn map<F>(&mut self, future: F) -> Option<F::Output>
     where
         F: Future,
     {
@@ -45,10 +35,10 @@ impl Relay {
             biased;
 
             _ = self.wait() => {
-                FuseError::FuseBurned.fail().spot(here!())
+                None
             },
             result = future => {
-                Ok(result)
+                Some(result)
             }
         }
     }
