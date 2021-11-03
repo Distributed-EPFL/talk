@@ -5,6 +5,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::future::Future;
 
 use tokio::sync::broadcast::Receiver;
+use tokio::task::JoinHandle;
 
 pub struct Relay {
     state: State,
@@ -20,6 +21,17 @@ impl Relay {
         Relay {
             state: State::On(receiver),
         }
+    }
+
+    pub fn run<F>(
+        mut self,
+        future: F,
+    ) -> JoinHandle<Result<F::Output, Top<FuseError>>>
+    where
+        F: 'static + Send + Future,
+        F::Output: 'static + Send,
+    {
+        tokio::spawn(async move { self.map(future).await })
     }
 
     pub async fn map<F>(

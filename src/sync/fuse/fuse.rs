@@ -1,9 +1,12 @@
 use crate::sync::fuse::Relay;
 
-use doomstack::Doom;
+use doomstack::{Doom, Top};
+
+use std::future::Future;
 
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
+use tokio::task::JoinHandle;
 
 pub struct Fuse {
     sender: Sender<()>,
@@ -23,6 +26,17 @@ impl Fuse {
 
     pub fn relay(&self) -> Relay {
         Relay::new(self.sender.subscribe())
+    }
+
+    pub fn spawn<F>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<F::Output, Top<FuseError>>>
+    where
+        F: 'static + Send + Future,
+        F::Output: 'static + Send,
+    {
+        self.relay().run(future)
     }
 
     pub fn burn(self) {
