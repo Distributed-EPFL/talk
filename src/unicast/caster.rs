@@ -1,14 +1,14 @@
 use crate::{
     crypto::Identity,
     net::{Connector, SecureReceiver, SecureSender},
-    sync::fuse::{Fuse, Relay, Tether},
+    sync::fuse::Fuse,
     unicast::{
         Acknowledgement, CasterSettings, Message as UnicastMessage, Request,
         Response,
     },
 };
 
-use doomstack::{here, Doom, ResultExt, Stack, Top};
+use doomstack::{here, Doom, ResultExt, Top};
 
 use std::sync::{Arc, Mutex};
 
@@ -54,29 +54,22 @@ pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(
 pub(in crate::unicast) enum CasterError {
     #[doom(description("Failed to connect"))]
     ConnectFailed,
-    #[doom(description("Interrupted while connecting"))]
-    ConnectInterrupted,
     #[doom(description("`Caster` congested"))]
     CasterCongested,
-    #[doom(description("`Caster` terminated"))]
-    CasterTerminated {
-        result_in: Result<(), Stack>,
-        result_out: Result<(), Stack>,
-    },
+    #[doom(description("`drive_in` failed"))]
+    DriveInFailed,
+    #[doom(description("`drive_out` failed"))]
+    DriveOutFailed,
 }
 
 #[derive(Clone, Doom)]
 enum DriveInError {
-    #[doom(description("`drive_in` interrupted"))]
-    DriveInInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
 
 #[derive(Clone, Doom)]
 enum DriveOutError {
-    #[doom(description("`drive_out` interrupted"))]
-    DriveOutInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
@@ -99,11 +92,8 @@ where
         {
             let state = state.clone();
 
-            let relay = fuse.relay();
-
-            tokio::spawn(async move {
-                Caster::run(connector, remote, request_outlet, state, relay)
-                    .await;
+            fuse.spawn(async move {
+                Caster::run(connector, remote, request_outlet, state).await;
             });
         }
 
@@ -150,46 +140,37 @@ where
         remote: Identity,
         mut request_outlet: RequestOutlet<Message>,
         state: Arc<Mutex<State<Message>>>,
-        mut relay: Relay,
     ) {
         let database = Arc::new(Mutex::new(Database {
             acknowledgement_inlets: HashMap::new(),
         }));
 
         let result: Result<(), Top<CasterError>> = async {
-            let connection = relay
-                .map(connector.connect(remote))
+            let connection = connector
+                .connect(remote)
                 .await
-                .pot(CasterError::ConnectInterrupted, here!())?
                 .pot(CasterError::ConnectFailed, here!())?;
 
             let (sender, receiver) = connection.split();
 
-            let database_in = database.clone();
-            let database_out = database.clone();
-
-            let tether_in = Tether::new();
-            let tether_out = tether_in.try_clone().unwrap();
-
-            tether_in.depend(relay);
-
-            let future_in =
-                Caster::<Message>::drive_in(database_in, receiver, tether_in);
-
-            let future_out = Caster::<Message>::drive_out(
-                database_out,
-                sender,
-                &mut request_outlet,
-                tether_out,
+            let result = tokio::try_join!(
+                async {
+                    Caster::<Message>::drive_in(&*database, receiver)
+                        .await
+                        .pot(CasterError::DriveInFailed, here!())
+                },
+                async {
+                    Caster::<Message>::drive_out(
+                        &*database,
+                        sender,
+                        &mut request_outlet,
+                    )
+                    .await
+                    .pot(CasterError::DriveOutFailed, here!())
+                }
             );
 
-            let (result_in, result_out) = tokio::join!(future_in, future_out);
-
-            CasterError::CasterTerminated {
-                result_in: result_in.map_err(Into::into),
-                result_out: result_out.map_err(Into::into),
-            }
-            .fail()
+            result.map(|_| ())
         }
         .await;
 
@@ -200,15 +181,13 @@ where
     }
 
     async fn drive_in(
-        database: Arc<Mutex<Database>>,
+        database: &Mutex<Database>,
         mut receiver: SecureReceiver,
-        mut tether: Tether,
     ) -> Result<(), Top<DriveInError>> {
         loop {
-            let response = tether
-                .map(receiver.receive())
+            let response = receiver
+                .receive()
                 .await
-                .pot(DriveInError::DriveInInterrupted, here!())?
                 .pot(DriveInError::ConnectionError, here!())?;
 
             match response {
@@ -227,16 +206,13 @@ where
     }
 
     async fn drive_out(
-        database: Arc<Mutex<Database>>,
+        database: &Mutex<Database>,
         mut sender: SecureSender,
         request_outlet: &mut RequestOutlet<Message>,
-        mut tether: Tether,
     ) -> Result<(), Top<DriveOutError>> {
         for sequence in 0..u32::MAX {
-            if let Some((request, acknowledgement_inlet)) = tether
-                .map(request_outlet.recv())
-                .await
-                .pot(DriveOutError::DriveOutInterrupted, here!())?
+            if let Some((request, acknowledgement_inlet)) =
+                request_outlet.recv().await
             {
                 database
                     .lock()
@@ -244,10 +220,9 @@ where
                     .acknowledgement_inlets
                     .insert(sequence, acknowledgement_inlet);
 
-                tether
-                    .map(sender.send(&request))
+                sender
+                    .send(&request)
                     .await
-                    .pot(DriveOutError::DriveOutInterrupted, here!())?
                     .pot(DriveOutError::ConnectionError, here!())?;
             }
         }
