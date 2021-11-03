@@ -1,7 +1,7 @@
 use crate::{
     crypto::Identity,
     net::{Listener, SecureConnection, SecureReceiver, SecureSender},
-    sync::fuse::{Fuse, Relay, Tether},
+    sync::fuse::Fuse,
     unicast::{
         Acknowledgement, Acknowledger, Message as UnicastMessage,
         ReceiverSettings, Request, Response,
@@ -25,17 +25,21 @@ pub struct Receiver<Message: UnicastMessage> {
 }
 
 #[derive(Doom)]
+enum ServeError {
+    #[doom(description("`drive_in` failed"))]
+    DriveInFailed,
+    #[doom(description("`drive_out` failed"))]
+    DriveOutFailed,
+}
+
+#[derive(Doom)]
 enum DriveInError {
-    #[doom(description("`drive_in` interrupted"))]
-    DriveInInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
 
 #[derive(Doom)]
 enum DriveOutError {
-    #[doom(description("`drive_out` interrupted"))]
-    DriveOutInterrupted,
     #[doom(description("Connection error"))]
     ConnectionError,
 }
@@ -83,15 +87,13 @@ where
             if let Ok((remote, connection)) = listener.accept().await {
                 let message_inlet = message_inlet.clone();
                 let settings = settings.clone();
-                let relay = fuse.relay();
 
-                tokio::spawn(async move {
-                    Receiver::serve(
+                fuse.spawn(async move {
+                    let _ = Receiver::serve(
                         remote,
                         connection,
                         message_inlet,
                         settings,
-                        relay,
                     )
                     .await;
                 });
@@ -104,30 +106,31 @@ where
         connection: SecureConnection,
         message_inlet: MessageInlet<Message>,
         settings: ReceiverSettings,
-        relay: Relay,
-    ) {
+    ) -> Result<(), Top<ServeError>> {
         let (sender, receiver) = connection.split();
 
         let (response_inlet, response_outlet) =
             mpsc::channel::<Response>(settings.response_channel_capacity);
 
-        let tether_in = Tether::new();
-        let tether_out = tether_in.try_clone().unwrap();
-
-        tether_in.depend(relay);
-
-        let future_in = Receiver::<Message>::drive_in(
-            remote,
-            receiver,
-            message_inlet,
-            response_inlet,
-            tether_in,
+        let result = tokio::try_join!(
+            async {
+                Receiver::<Message>::drive_in(
+                    remote,
+                    receiver,
+                    message_inlet,
+                    response_inlet,
+                )
+                .await
+                .pot(ServeError::DriveInFailed, here!())
+            },
+            async {
+                Receiver::<Message>::drive_out(sender, response_outlet)
+                    .await
+                    .pot(ServeError::DriveOutFailed, here!())
+            }
         );
 
-        let future_out =
-            Receiver::<Message>::drive_out(sender, response_outlet, tether_out);
-
-        let _ = tokio::join!(future_in, future_out);
+        result.map(|_| ())
     }
 
     async fn drive_in(
@@ -135,13 +138,11 @@ where
         mut receiver: SecureReceiver,
         message_inlet: MessageInlet<Message>,
         response_inlet: ResponseInlet,
-        mut tether: Tether,
     ) -> Result<(), Top<DriveInError>> {
         for sequence in 0..u32::MAX {
-            let request: Request<Message> = tether
-                .map(receiver.receive())
+            let request: Request<Message> = receiver
+                .receive()
                 .await
-                .pot(DriveInError::DriveInInterrupted, here!())?
                 .pot(DriveInError::ConnectionError, here!())?;
 
             match request {
@@ -167,18 +168,12 @@ where
     async fn drive_out(
         mut sender: SecureSender,
         mut response_outlet: ResponseOutlet,
-        mut tether: Tether,
     ) -> Result<(), Top<DriveOutError>> {
         loop {
-            if let Some(response) = tether
-                .map(response_outlet.recv())
-                .await
-                .pot(DriveOutError::DriveOutInterrupted, here!())?
-            {
-                tether
-                    .map(sender.send(&response))
+            if let Some(response) = response_outlet.recv().await {
+                sender
+                    .send(&response)
                     .await
-                    .pot(DriveOutError::DriveOutInterrupted, here!())?
                     .pot(DriveOutError::ConnectionError, here!())?;
             }
         }
