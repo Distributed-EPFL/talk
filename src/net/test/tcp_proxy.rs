@@ -1,0 +1,180 @@
+use crate::sync::fuse::Fuse;
+
+use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+
+use tokio::io;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::sync::watch;
+use tokio::sync::watch::{Receiver, Sender};
+use tokio::sync::RwLock;
+
+type StateInlet = Sender<State>;
+type StateOutlet = Receiver<State>;
+
+pub struct TcpProxy {
+    address: SocketAddr,
+    state_inlet: StateInlet,
+    on_lock: Arc<RwLock<()>>,
+    off_lock: Arc<RwLock<()>>,
+    _fuse: Fuse,
+}
+
+#[derive(Clone, Copy)]
+enum State {
+    On,
+    Off,
+}
+
+impl TcpProxy {
+    pub async fn new<A>(server: A) -> Self
+    where
+        A: 'static + Send + Sync + Clone + ToSocketAddrs,
+    {
+        let listener =
+            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
+
+        let address = listener.local_addr().unwrap();
+
+        let (state_inlet, state_outlet) = watch::channel(State::On);
+
+        let on_lock = Arc::new(RwLock::new(()));
+        let off_lock = Arc::new(RwLock::new(()));
+
+        let fuse = Fuse::new();
+
+        {
+            let on_lock = on_lock.clone();
+            let off_lock = off_lock.clone();
+
+            fuse.spawn(async move {
+                let _ = TcpProxy::listen(
+                    listener,
+                    server,
+                    state_outlet,
+                    on_lock,
+                    off_lock,
+                )
+                .await;
+            });
+        }
+
+        Self {
+            address,
+            state_inlet,
+            on_lock,
+            off_lock,
+            _fuse: fuse,
+        }
+    }
+
+    pub fn address(&self) -> SocketAddr {
+        self.address
+    }
+
+    pub async fn start(&mut self) {
+        let _ = self.state_inlet.send(State::On);
+        self.off_lock.write().await;
+    }
+
+    pub async fn stop(&mut self) {
+        let _ = self.state_inlet.send(State::Off);
+        self.on_lock.write().await;
+    }
+
+    async fn listen<A>(
+        listener: TcpListener,
+        server: A,
+        state_outlet: StateOutlet,
+        on_lock: Arc<RwLock<()>>,
+        off_lock: Arc<RwLock<()>>,
+    ) where
+        A: 'static + Send + Sync + Clone + ToSocketAddrs,
+    {
+        let fuse = Fuse::new();
+
+        loop {
+            if let Ok((stream, _)) = listener.accept().await {
+                let server = server.clone();
+
+                let on_lock = on_lock.clone();
+                let off_lock = off_lock.clone();
+
+                let state_outlet = state_outlet.clone();
+
+                fuse.spawn(async move {
+                    let _ = TcpProxy::forward(
+                        stream,
+                        server,
+                        state_outlet,
+                        on_lock,
+                        off_lock,
+                    )
+                    .await;
+                });
+            }
+        }
+    }
+
+    async fn forward<A>(
+        mut client: TcpStream,
+        server: A,
+        mut state_outlet: StateOutlet,
+        on_lock: Arc<RwLock<()>>,
+        off_lock: Arc<RwLock<()>>,
+    ) -> Result<(), io::Error>
+    where
+        A: 'static + Send + Sync + Clone + ToSocketAddrs,
+    {
+        let mut server = TcpStream::connect(server).await.unwrap();
+
+        let (mut client_read, mut client_write) = client.split();
+        let (mut server_read, mut server_write) = server.split();
+
+        let mut client_buffer = [0u8; 1024];
+        let mut server_buffer = [0u8; 1024];
+
+        let mut _on_guard = Some(on_lock.read().await);
+        let mut _off_guard = Some(off_lock.read().await);
+
+        loop {
+            let state = *state_outlet.borrow_and_update();
+
+            match state {
+                State::On => {
+                    _off_guard = None;
+
+                    loop {
+                        tokio::select! {
+                            biased;
+
+                            _ = state_outlet.changed() => {
+                                break;
+                            },
+
+                            result = client_read.read(&mut client_buffer) => {
+                                let written = result?;
+                                server_write.write_all(&client_buffer[0..written]).await?;
+                            }
+
+                            result = server_read.read(&mut server_buffer) => {
+                                let written = result?;
+                                client_write.write_all(&server_buffer[0..written]).await?;
+                            }
+                        }
+                    }
+
+                    _off_guard = Some(off_lock.read().await);
+                }
+                State::Off => {
+                    _on_guard = None;
+
+                    let _ = state_outlet.changed().await;
+
+                    _on_guard = Some(on_lock.read().await);
+                }
+            };
+        }
+    }
+}
