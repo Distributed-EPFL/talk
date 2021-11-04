@@ -6,16 +6,22 @@ use std::sync::Arc;
 use tokio::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
 use tokio::sync::watch;
-use tokio::sync::watch::{Receiver, Sender};
+use tokio::sync::watch::{Receiver as WatchReceiver, Sender as WatchSender};
 use tokio::sync::RwLock;
 
-type StateInlet = Sender<State>;
-type StateOutlet = Receiver<State>;
+type StateInlet = WatchSender<State>;
+type StateOutlet = WatchReceiver<State>;
+
+type ResetInlet = MpscSender<()>;
+type ResetOutlet = MpscReceiver<()>;
 
 pub struct TcpProxy {
     address: SocketAddr,
     state_inlet: StateInlet,
+    reset_inlet: ResetInlet,
     on_lock: Arc<RwLock<()>>,
     off_lock: Arc<RwLock<()>>,
     _fuse: Fuse,
@@ -38,6 +44,7 @@ impl TcpProxy {
         let address = listener.local_addr().unwrap();
 
         let (state_inlet, state_outlet) = watch::channel(State::On);
+        let (reset_inlet, reset_outlet) = mpsc::channel(32); // TODO: Add settings
 
         let on_lock = Arc::new(RwLock::new(()));
         let off_lock = Arc::new(RwLock::new(()));
@@ -53,6 +60,7 @@ impl TcpProxy {
                     listener,
                     server,
                     state_outlet,
+                    reset_outlet,
                     on_lock,
                     off_lock,
                 )
@@ -63,6 +71,7 @@ impl TcpProxy {
         Self {
             address,
             state_inlet,
+            reset_inlet,
             on_lock,
             off_lock,
             _fuse: fuse,
@@ -83,36 +92,49 @@ impl TcpProxy {
         self.on_lock.write().await;
     }
 
+    pub async fn reset(&mut self) {
+        let _ = self.reset_inlet.send(()).await;
+    }
+
     async fn listen<A>(
         listener: TcpListener,
         server: A,
         state_outlet: StateOutlet,
+        mut reset_outlet: ResetOutlet,
         on_lock: Arc<RwLock<()>>,
         off_lock: Arc<RwLock<()>>,
     ) where
         A: 'static + Send + Sync + Clone + ToSocketAddrs,
     {
-        let fuse = Fuse::new();
+        let mut fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, _)) = listener.accept().await {
-                let server = server.clone();
+            tokio::select! {
+                biased;
+                
+                _ = reset_outlet.recv() => {
+                    fuse = Fuse::new()
+                }
 
-                let on_lock = on_lock.clone();
-                let off_lock = off_lock.clone();
+                Ok((stream, _)) = listener.accept() => {
+                    let server = server.clone();
 
-                let state_outlet = state_outlet.clone();
+                    let on_lock = on_lock.clone();
+                    let off_lock = off_lock.clone();
 
-                fuse.spawn(async move {
-                    let _ = TcpProxy::forward(
-                        stream,
-                        server,
-                        state_outlet,
-                        on_lock,
-                        off_lock,
-                    )
-                    .await;
-                });
+                    let state_outlet = state_outlet.clone();
+
+                    fuse.spawn(async move {
+                        let _ = TcpProxy::forward(
+                            stream,
+                            server,
+                            state_outlet,
+                            on_lock,
+                            off_lock,
+                        )
+                        .await;
+                    });
+                }
             }
         }
     }
