@@ -15,6 +15,7 @@ mod unit_sender;
 
 pub mod sockets;
 pub mod traits;
+pub mod utils;
 
 #[cfg(test)]
 pub mod test;
