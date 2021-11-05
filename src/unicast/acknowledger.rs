@@ -27,6 +27,11 @@ impl Acknowledger {
         // `Drop::drop` is called here
     }
 
+    pub fn expand(mut self) {
+        self.acknowledgement = Acknowledgement::Expand;
+        // `Drop::drop` is called here
+    }
+
     pub fn strong(mut self) {
         self.acknowledgement = Acknowledgement::Strong;
         // `Drop::drop` is called here
