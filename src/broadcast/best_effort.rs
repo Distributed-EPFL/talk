@@ -27,15 +27,58 @@ impl BestEffort {
         M: Message + Clone,
         R: IntoIterator<Item = Identity>,
     {
+        BestEffort::setup(sender, remotes, message, None, settings)
+    }
+
+    pub fn brief<M, R>(
+        sender: Sender<M>,
+        remotes: R,
+        brief: M,
+        expanded: M,
+        settings: BestEffortSettings,
+    ) -> Self
+    where
+        M: Message + Clone,
+        R: IntoIterator<Item = Identity>,
+    {
+        BestEffort::setup(sender, remotes, brief, Some(expanded), settings)
+    }
+
+    fn setup<M, R>(
+        sender: Sender<M>,
+        remotes: R,
+        message: M,
+        fallback: Option<M>,
+        settings: BestEffortSettings,
+    ) -> Self
+    where
+        M: Message + Clone,
+        R: IntoIterator<Item = Identity>,
+    {
         let unordered = remotes
             .into_iter()
             .map(|remote| {
                 let sender = sender.clone();
                 let message = message.clone();
+                let fallback = fallback.clone();
                 let settings = settings.clone();
 
                 async move {
-                    sender.push(remote, message, settings.push_settings).await;
+                    if let Some(fallback) = fallback {
+                        sender
+                            .push_brief(
+                                remote,
+                                message,
+                                fallback,
+                                settings.push_settings,
+                            )
+                            .await;
+                    } else {
+                        sender
+                            .push(remote, message, settings.push_settings)
+                            .await;
+                    }
+
                     remote
                 }
             })
