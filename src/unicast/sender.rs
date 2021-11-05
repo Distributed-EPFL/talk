@@ -96,6 +96,30 @@ where
     ) where
         Message: Clone,
     {
+        self.drive(remote, message, None, settings).await;
+    }
+
+    pub async fn push_brief(
+        &self,
+        remote: Identity,
+        brief: Message,
+        expanded: Message,
+        settings: PushSettings,
+    ) where
+        Message: Clone,
+    {
+        self.drive(remote, brief, Some(expanded), settings).await;
+    }
+
+    pub async fn drive(
+        &self,
+        remote: Identity,
+        mut message: Message,
+        mut fallback: Option<Message>,
+        settings: PushSettings,
+    ) where
+        Message: Clone,
+    {
         let mut sleep_agent = settings.retry_schedule.agent();
 
         loop {
@@ -104,6 +128,10 @@ where
             {
                 if acknowledgement >= settings.stop_condition {
                     break;
+                }
+
+                if acknowledgement == Acknowledgement::Expand {
+                    message = fallback.take().unwrap_or(message);
                 }
             }
 

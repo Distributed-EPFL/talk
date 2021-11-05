@@ -6,6 +6,7 @@ use std::cmp::{Ord, Ordering, PartialOrd};
 #[repr(u8)]
 pub enum Acknowledgement {
     Weak,
+    Expand,
     Strong,
 }
 
@@ -17,12 +18,14 @@ impl PartialOrd for Acknowledgement {
 
 impl Ord for Acknowledgement {
     fn cmp(&self, rho: &Self) -> Ordering {
-        match (self, rho) {
-            (Acknowledgement::Weak, Acknowledgement::Strong) => Ordering::Less,
-            (Acknowledgement::Strong, Acknowledgement::Weak) => {
-                Ordering::Greater
+        fn score(acknowledgement: &Acknowledgement) -> u8 {
+            match acknowledgement {
+                Acknowledgement::Weak => 0,
+                Acknowledgement::Expand => 1,
+                Acknowledgement::Strong => 2,
             }
-            _ => Ordering::Equal,
         }
+
+        score(self).cmp(&score(rho))
     }
 }

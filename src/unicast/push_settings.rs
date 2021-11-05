@@ -15,7 +15,7 @@ pub struct PushSettings {
 impl Default for PushSettings {
     fn default() -> Self {
         PushSettings {
-            stop_condition: Acknowledgement::Weak,
+            stop_condition: Acknowledgement::Strong,
             retry_schedule: Arc::new(CappedExponential::new(
                 Duration::from_secs(5),
                 2.,
