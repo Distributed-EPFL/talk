@@ -180,4 +180,59 @@ mod unicast {
 
         join([handle]).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn constant_one_to_one_push_brief_ok() {
+        let UnicastSystem {
+            keys,
+            mut senders,
+            mut receivers,
+        } = UnicastSystem::<u32>::setup(1).await.into();
+
+        let mut receiver = receivers.remove(0);
+        let sender = senders.remove(0);
+
+        let handle = tokio::spawn(async move {
+            let (_, message, acknowledger) = receiver.receive().await;
+
+            assert_eq!(message, 42);
+            acknowledger.strong();
+        });
+
+        sender
+            .push_brief(keys[0], 42, 43, PushSettings::strong_constant())
+            .await;
+
+        join([handle]).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn constant_one_to_one_push_brief_expand() {
+        let UnicastSystem {
+            keys,
+            mut senders,
+            mut receivers,
+        } = UnicastSystem::<u32>::setup(1).await.into();
+
+        let mut receiver = receivers.remove(0);
+        let sender = senders.remove(0);
+
+        let handle = tokio::spawn(async move {
+            let (_, message, acknowledger) = receiver.receive().await;
+
+            assert_eq!(message, 42);
+            acknowledger.expand();
+
+            let (_, message, acknowledger) = receiver.receive().await;
+
+            assert_eq!(message, 43);
+            acknowledger.strong();
+        });
+
+        sender
+            .push_brief(keys[0], 42, 43, PushSettings::strong_constant())
+            .await;
+
+        join([handle]).await.unwrap();
+    }
 }
