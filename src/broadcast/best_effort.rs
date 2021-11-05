@@ -1,7 +1,7 @@
 use crate::{
     broadcast::BestEffortSettings,
     crypto::Identity,
-    sync::fuse::Relay,
+    sync::fuse::{Fuse, Relay},
     unicast::{Message, Sender},
 };
 
@@ -65,8 +65,12 @@ impl BestEffort {
         self.stream.collect::<Vec<_>>().await;
     }
 
-    pub fn spawn(self, relay: Relay) -> JoinHandle<Option<()>> {
+    pub fn run(self, relay: Relay) -> JoinHandle<Option<()>> {
         relay.run(async move { self.complete().await })
+    }
+
+    pub fn spawn(self, fuse: &Fuse) -> JoinHandle<Option<()>> {
+        self.run(fuse.relay())
     }
 }
 
