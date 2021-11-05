@@ -111,7 +111,7 @@ impl TcpProxy {
         loop {
             tokio::select! {
                 biased;
-                
+
                 _ = reset_outlet.recv() => {
                     fuse = Fuse::new()
                 }
