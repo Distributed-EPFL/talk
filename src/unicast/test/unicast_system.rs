@@ -1,5 +1,5 @@
 use crate::{
-    crypto::Identity,
+    crypto::{Identity, KeyChain},
     net::test::System as NetSystem,
     unicast::{Message as UnicastMessage, Receiver, Sender},
 };
@@ -27,11 +27,19 @@ where
     }
 
     pub async fn setup(peers: usize) -> UnicastSystem<Message> {
+        UnicastSystem::setup_with_keychains((0..peers).map(|_| KeyChain::random()))
+            .await
+    }
+
+    pub async fn setup_with_keychains<I>(keychains: I) -> UnicastSystem<Message>
+    where
+        I: IntoIterator<Item = KeyChain>,
+    {
         let NetSystem {
             keys,
             connectors,
             listeners,
-        } = NetSystem::setup(peers).await;
+        } = NetSystem::setup_with_keychains(keychains).await;
 
         let senders = connectors
             .into_iter()
