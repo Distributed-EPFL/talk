@@ -131,7 +131,10 @@ where
                 }
 
                 if acknowledgement == Acknowledgement::Expand {
-                    message = fallback.take().unwrap_or(message);
+                    if let Some(fallback) = fallback.take() {
+                        message = fallback;
+                        continue;
+                    }
                 }
             }
 
