@@ -27,8 +27,10 @@ where
     }
 
     pub async fn setup(peers: usize) -> UnicastSystem<Message> {
-        UnicastSystem::setup_with_keychains((0..peers).map(|_| KeyChain::random()))
-            .await
+        UnicastSystem::setup_with_keychains(
+            (0..peers).map(|_| KeyChain::random()),
+        )
+        .await
     }
 
     pub async fn setup_with_keychains<I>(keychains: I) -> UnicastSystem<Message>
