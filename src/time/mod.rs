@@ -2,7 +2,7 @@ mod sleep_agent;
 mod sleep_schedule;
 mod timeout;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test_utilities"))]
 pub mod test;
 
 pub mod sleep_schedules;
