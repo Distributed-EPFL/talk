@@ -32,8 +32,15 @@ impl System {
     }
 
     pub async fn setup(peers: usize) -> System {
-        let keychains =
-            (0..peers).map(|_| KeyChain::random()).collect::<Vec<_>>();
+        System::setup_with_keychains((0..peers).map(|_| KeyChain::random()))
+            .await
+    }
+
+    pub async fn setup_with_keychains<I>(keychains: I) -> System
+    where
+        I: IntoIterator<Item = KeyChain>,
+    {
+        let keychains = keychains.into_iter().collect::<Vec<_>>();
 
         let identities = keychains
             .iter()
