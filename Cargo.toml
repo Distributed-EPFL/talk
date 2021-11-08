@@ -5,6 +5,9 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+test_utilities = []
+
 [dependencies]
 serde = { version = "~1.0", features = [ "derive" ] }
 bincode = { version = "~1.3" }

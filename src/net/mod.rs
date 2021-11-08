@@ -15,9 +15,8 @@ mod unit_sender;
 
 pub mod sockets;
 pub mod traits;
-pub mod utils;
 
-#[cfg(test)]
+#[cfg(any(test, target_feature = "test_utilities"))]
 pub mod test;
 
 use unit_receiver::UnitReceiver;

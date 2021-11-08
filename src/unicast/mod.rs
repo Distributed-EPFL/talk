@@ -11,7 +11,7 @@ mod response;
 mod sender;
 mod sender_settings;
 
-#[cfg(test)]
+#[cfg(any(test, target_feature = "test_utilities"))]
 pub mod test;
 
 use caster::Caster;
