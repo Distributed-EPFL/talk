@@ -39,7 +39,7 @@ impl TcpProxy {
         A: 'static + Send + Sync + Clone + ToSocketAddrs,
     {
         let listener =
-            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
 
         let address = listener.local_addr().unwrap();
 

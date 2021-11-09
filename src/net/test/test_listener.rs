@@ -34,7 +34,7 @@ enum ServeError {
 impl TestListener {
     pub async fn new(keychain: KeyChain) -> (Self, SocketAddr) {
         let listener =
-            TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
+            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
 
         let address = listener.local_addr().unwrap();
 

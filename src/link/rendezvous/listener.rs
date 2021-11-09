@@ -43,7 +43,7 @@ impl Listener {
         S: 'static + TcpConnect,
     {
         let listener = TcpListener::bind(
-            (Ipv4Addr::UNSPECIFIED, 0), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
+            (Ipv4Addr::LOCALHOST, 0), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
         )
         .await
         .unwrap();
