@@ -1,7 +1,7 @@
 use crate::{
     crypto::Identity,
     net::Connector,
-    sync::fuse::Fuse,
+    sync::fuse::{Fuse, Relay},
     unicast::{
         Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated,
         Message as UnicastMessage, PushSettings, Request, SenderSettings,
@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use tokio::sync::oneshot::Receiver;
+use tokio::task::JoinHandle;
 use tokio::time;
 
 type AcknowledgementOutlet =
@@ -99,6 +100,33 @@ where
         self.drive(remote, message, None, settings).await;
     }
 
+    pub fn run_push(
+        &self,
+        remote: Identity,
+        message: Message,
+        settings: PushSettings,
+        relay: Relay,
+    ) -> JoinHandle<Option<()>>
+    where
+        Message: Clone,
+    {
+        let sender = self.clone();
+        relay.run(async move { sender.push(remote, message, settings).await })
+    }
+
+    pub fn spawn_push(
+        &self,
+        remote: Identity,
+        message: Message,
+        settings: PushSettings,
+        fuse: &Fuse,
+    ) -> JoinHandle<Option<()>>
+    where
+        Message: Clone,
+    {
+        self.run_push(remote, message, settings, fuse.relay())
+    }
+
     pub async fn push_brief(
         &self,
         remote: Identity,
@@ -109,6 +137,37 @@ where
         Message: Clone,
     {
         self.drive(remote, brief, Some(expanded), settings).await;
+    }
+
+    pub fn run_push_brief(
+        &self,
+        remote: Identity,
+        brief: Message,
+        expanded: Message,
+        settings: PushSettings,
+        relay: Relay,
+    ) -> JoinHandle<Option<()>>
+    where
+        Message: Clone,
+    {
+        let sender = self.clone();
+        relay.run(async move {
+            sender.push_brief(remote, brief, expanded, settings).await
+        })
+    }
+
+    pub fn spawn_push_brief(
+        &self,
+        remote: Identity,
+        brief: Message,
+        expanded: Message,
+        settings: PushSettings,
+        fuse: &Fuse,
+    ) -> JoinHandle<Option<()>>
+    where
+        Message: Clone,
+    {
+        self.run_push_brief(remote, brief, expanded, settings, fuse.relay())
     }
 
     pub async fn drive(
