@@ -89,6 +89,28 @@ where
             .pot(SenderError::SendFailed, here!())
     }
 
+    pub fn run_send(
+        &self,
+        remote: Identity,
+        message: Message,
+        relay: Relay,
+    ) -> JoinHandle<Option<Result<Acknowledgement, Top<SenderError>>>> {
+        let post = self.post(remote, Request::Message(message));
+
+        relay.run(async move {
+            post.await.unwrap().pot(SenderError::SendFailed, here!())
+        })
+    }
+
+    pub fn spawn_send(
+        &self,
+        remote: Identity,
+        message: Message,
+        fuse: &Fuse,
+    ) -> JoinHandle<Option<Result<Acknowledgement, Top<SenderError>>>> {
+        self.run_send(remote, message, fuse.relay())
+    }
+
     pub async fn push(
         &self,
         remote: Identity,
