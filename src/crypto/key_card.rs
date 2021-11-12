@@ -16,6 +16,7 @@ use doomstack::Top;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
@@ -87,6 +88,18 @@ impl PartialEq for KeyCard {
 }
 
 impl Eq for KeyCard {}
+
+impl PartialOrd for KeyCard {
+    fn partial_cmp(&self, rho: &Self) -> Option<Ordering> {
+        Some(self.cmp(&rho))
+    }
+}
+
+impl Ord for KeyCard {
+    fn cmp(&self, rho: &Self) -> Ordering {
+        self.identity.cmp(&rho.identity)
+    }
+}
 
 impl Hash for KeyCard {
     fn hash<H>(&self, state: &mut H)
