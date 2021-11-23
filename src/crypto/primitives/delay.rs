@@ -1,3 +1,5 @@
+use crate::crypto::Statement;
+
 use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
@@ -23,7 +25,17 @@ pub enum DelayError {
 }
 
 impl Delay {
-    pub fn new<T>(difficulty: u64, message: &T) -> Result<Self, Top<DelayError>>
+    pub fn new<S>(difficulty: u64, message: &S) -> Result<Self, Top<DelayError>>
+    where
+        S: Statement,
+    {
+        Delay::new_raw(difficulty, &(S::SCOPE, S::HEADER, message))
+    }
+
+    pub fn new_raw<T>(
+        difficulty: u64,
+        message: &T,
+    ) -> Result<Self, Top<DelayError>>
     where
         T: Serialize,
     {
@@ -40,7 +52,18 @@ impl Delay {
         Ok(Delay(solution))
     }
 
-    pub fn verify<T>(
+    pub fn verify<S>(
+        &self,
+        difficulty: u64,
+        message: &S,
+    ) -> Result<(), Top<DelayError>>
+    where
+        S: Statement,
+    {
+        self.verify_raw(difficulty, &(S::SCOPE, S::HEADER, message))
+    }
+
+    pub fn verify_raw<T>(
         &self,
         difficulty: u64,
         message: &T,
@@ -68,14 +91,14 @@ mod tests {
 
     #[test]
     fn brief() {
-        let delay = Delay::new(100, &42u32).unwrap();
-        delay.verify(100, &42u32).unwrap();
+        let delay = Delay::new_raw(100, &42u32).unwrap();
+        delay.verify_raw(100, &42u32).unwrap();
     }
 
     #[test]
     #[ignore]
     fn long() {
-        let delay = Delay::new(100000, &42u32).unwrap();
-        delay.verify(100000, &42u32).unwrap();
+        let delay = Delay::new_raw(100000, &42u32).unwrap();
+        delay.verify_raw(100000, &42u32).unwrap();
     }
 }
