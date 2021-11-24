@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use std::convert::TryInto;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Work(u64);
 
 #[derive(Doom)]
