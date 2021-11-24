@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Error as FmtError, Formatter};
 
 use x25519_dalek::{
-    EphemeralSecret as XEphemeralSecret, PublicKey as XPublicKey,
-    SharedSecret as XSharedSecret,
+    EphemeralSecret as XEphemeralSecret, PublicKey as XPublicKey, SharedSecret as XSharedSecret,
 };
 
 pub const PUBLIC_KEY_LENGTH: usize = 32;
@@ -91,9 +90,7 @@ impl Debug for PublicKey {
 }
 
 impl SharedKey {
-    pub(in crate::crypto::primitives) fn to_bytes(
-        &self,
-    ) -> [u8; SHARED_KEY_LENGTH] {
+    pub(in crate::crypto::primitives) fn to_bytes(&self) -> [u8; SHARED_KEY_LENGTH] {
         self.0.to_bytes()
     }
 }

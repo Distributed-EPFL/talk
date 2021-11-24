@@ -79,8 +79,7 @@ impl SecureConnection {
 
         // Create channel
 
-        let (channel_sender, channel_receiver) =
-            channel::channel(shared_key, role);
+        let (channel_sender, channel_receiver) = channel::channel(shared_key, role);
 
         // Create Secure Sender and Receiver
 
@@ -137,20 +136,14 @@ impl SecureConnection {
         Ok(keycard)
     }
 
-    pub async fn send<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<SecureConnectionError>>
+    pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.sender.send(message).await
     }
 
-    pub async fn send_plain<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<SecureConnectionError>>
+    pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
@@ -164,9 +157,7 @@ impl SecureConnection {
         self.receiver.receive().await
     }
 
-    pub async fn receive_plain<M>(
-        &mut self,
-    ) -> Result<M, Top<SecureConnectionError>>
+    pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -204,8 +195,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             bob_connection.secure().await.unwrap();
         });
@@ -229,13 +219,11 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 
-            let remote_keycard =
-                bob_connection.authenticate(&bob_keychain).await.unwrap();
+            let remote_keycard = bob_connection.authenticate(&bob_keychain).await.unwrap();
 
             assert_eq!(remote_keycard, alice_keycard);
         });
@@ -265,8 +253,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 
@@ -301,8 +288,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 
@@ -338,8 +324,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 
@@ -376,16 +361,14 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 
             bob_connection.authenticate(&bob_keychain).await.unwrap();
 
             for expected in 0..32 {
-                let message: u32 =
-                    bob_connection.receive_plain().await.unwrap();
+                let message: u32 = bob_connection.receive_plain().await.unwrap();
                 assert_eq!(message, expected);
             }
         });
@@ -415,8 +398,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let mut bob_connection = bob_connection.secure().await.unwrap();
 

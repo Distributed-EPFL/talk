@@ -31,10 +31,7 @@ impl SecureSender {
         self.settings = settings;
     }
 
-    pub async fn send<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<SecureConnectionError>>
+    pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
@@ -42,21 +39,15 @@ impl SecureSender {
             .encrypt_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::EncryptFailed, here!())?;
 
-        time::optional_timeout(
-            self.settings.send_timeout,
-            self.unit_sender.flush(),
-        )
-        .await
-        .pot(SecureConnectionError::SendTimeout, here!())?
-        .map_err(SecureConnectionError::write_failed)
-        .map_err(Doom::into_top)
-        .spot(here!())
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(SecureConnectionError::SendTimeout, here!())?
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
-    pub async fn send_plain<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<SecureConnectionError>>
+    pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
@@ -64,14 +55,11 @@ impl SecureSender {
             .authenticate_into(message, self.unit_sender.as_vec())
             .pot(SecureConnectionError::MacComputeFailed, here!())?;
 
-        time::optional_timeout(
-            self.settings.send_timeout,
-            self.unit_sender.flush(),
-        )
-        .await
-        .pot(SecureConnectionError::SendTimeout, here!())?
-        .map_err(SecureConnectionError::write_failed)
-        .map_err(Doom::into_top)
-        .spot(here!())
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(SecureConnectionError::SendTimeout, here!())?
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 }

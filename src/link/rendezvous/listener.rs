@@ -3,10 +3,7 @@ use async_trait::async_trait;
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ListenerSettings},
-    net::{
-        traits::TcpConnect, Listener as NetListener, PlainConnection,
-        SecureConnection,
-    },
+    net::{traits::TcpConnect, Listener as NetListener, PlainConnection, SecureConnection},
     sync::fuse::Fuse,
 };
 
@@ -14,9 +11,13 @@ use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::net::Ipv4Addr;
 
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::{
+    net::TcpListener,
+    sync::{
+        mpsc,
+        mpsc::{Receiver, Sender},
+    },
+};
 
 type Outlet = Receiver<(Identity, SecureConnection)>;
 
@@ -34,11 +35,7 @@ enum ServeError {
 }
 
 impl Listener {
-    pub async fn new<S>(
-        server: S,
-        keychain: KeyChain,
-        settings: ListenerSettings,
-    ) -> Self
+    pub async fn new<S>(server: S, keychain: KeyChain, settings: ListenerSettings) -> Self
     where
         S: 'static + TcpConnect,
     {

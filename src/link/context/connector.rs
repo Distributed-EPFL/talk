@@ -2,9 +2,7 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::Identity,
-    link::context::{
-        connect_dispatcher::Database, ContextId, Request, Response,
-    },
+    link::context::{connect_dispatcher::Database, ContextId, Request, Response},
     net::{Connector as NetConnector, SecureConnection},
 };
 
@@ -44,10 +42,7 @@ impl Connector {
 
 #[async_trait]
 impl NetConnector for Connector {
-    async fn connect(
-        &self,
-        remote: Identity,
-    ) -> Result<SecureConnection, Stack> {
+    async fn connect(&self, remote: Identity) -> Result<SecureConnection, Stack> {
         let mut connection = self
             .connector
             .connect(remote)

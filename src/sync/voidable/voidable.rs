@@ -1,5 +1,7 @@
-use std::ops::{Deref, DerefMut};
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Mutex, MutexGuard},
+};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
@@ -18,9 +20,7 @@ impl<Inner> Voidable<Inner> {
         Voidable(Mutex::new(Some(inner)))
     }
 
-    pub fn lock<'v>(
-        &'v self,
-    ) -> Result<VoidableGuard<'v, Inner>, Top<VoidableError>> {
+    pub fn lock<'v>(&'v self) -> Result<VoidableGuard<'v, Inner>, Top<VoidableError>> {
         let guard = self.0.lock().unwrap();
         if guard.is_some() {
             Ok(VoidableGuard(guard))

@@ -1,7 +1,9 @@
 use crate::net::{ReceiverSettings, SenderSettings};
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 #[derive(Debug, Clone)]
 pub struct ConnectionSettings {
@@ -65,9 +67,7 @@ impl ConnectionSettings {
             0
         };
 
-        let receive_timeout = if let Some(receive_timeout) =
-            settings.receive_timeout
-        {
+        let receive_timeout = if let Some(receive_timeout) = settings.receive_timeout {
             let receive_timeout = receive_timeout.as_micros() as u64;
 
             if receive_timeout > 0 {

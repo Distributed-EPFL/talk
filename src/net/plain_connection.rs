@@ -1,6 +1,5 @@
 use crate::net::{
-    ConnectionSettings, PlainReceiver, PlainSender, SecureConnection,
-    SecureConnectionError, Socket,
+    ConnectionSettings, PlainReceiver, PlainSender, SecureConnection, SecureConnectionError, Socket,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -74,10 +73,7 @@ impl PlainConnection {
         self.receiver.configure(receiver_settings);
     }
 
-    pub async fn send<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<PlainConnectionError>>
+    pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
     {
@@ -95,9 +91,7 @@ impl PlainConnection {
         (self.sender, self.receiver)
     }
 
-    pub async fn secure(
-        self,
-    ) -> Result<SecureConnection, Top<SecureConnectionError>> {
+    pub async fn secure(self) -> Result<SecureConnection, Top<SecureConnectionError>> {
         SecureConnection::new(self).await
     }
 }
@@ -139,8 +133,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let mut bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let mut bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             let message: String = bob_connection.receive().await.unwrap();
 
@@ -160,8 +153,7 @@ mod tests {
         let (bob_listener, bob_address) = new_listener().await;
 
         let bob_task = tokio::spawn(async move {
-            let mut bob_connection: PlainConnection =
-                bob_listener.accept().await.unwrap().0.into();
+            let mut bob_connection: PlainConnection = bob_listener.accept().await.unwrap().0.into();
 
             for expected in 0..32 {
                 let message: u32 = bob_connection.receive().await.unwrap();

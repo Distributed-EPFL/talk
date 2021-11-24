@@ -10,17 +10,15 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
-use tokio::sync::oneshot::Receiver;
-use tokio::task::JoinHandle;
-use tokio::time;
+use tokio::{sync::oneshot::Receiver, task::JoinHandle, time};
 
-type AcknowledgementOutlet =
-    Receiver<Result<Acknowledgement, Top<CasterError>>>;
+type AcknowledgementOutlet = Receiver<Result<Acknowledgement, Top<CasterError>>>;
 
 #[derive(Clone)]
 pub struct Sender<Message: UnicastMessage> {
@@ -97,9 +95,7 @@ where
     ) -> JoinHandle<Option<Result<Acknowledgement, Top<SenderError>>>> {
         let post = self.post(remote, Request::Message(message));
 
-        relay.run(async move {
-            post.await.unwrap().pot(SenderError::SendFailed, here!())
-        })
+        relay.run(async move { post.await.unwrap().pot(SenderError::SendFailed, here!()) })
     }
 
     pub fn spawn_send(
@@ -111,12 +107,8 @@ where
         self.run_send(remote, message, fuse.relay())
     }
 
-    pub async fn push(
-        &self,
-        remote: Identity,
-        message: Message,
-        settings: PushSettings,
-    ) where
+    pub async fn push(&self, remote: Identity, message: Message, settings: PushSettings)
+    where
         Message: Clone,
     {
         self.drive(remote, message, None, settings).await;
@@ -173,9 +165,7 @@ where
         Message: Clone,
     {
         let sender = self.clone();
-        relay.run(async move {
-            sender.push_brief(remote, brief, expanded, settings).await
-        })
+        relay.run(async move { sender.push_brief(remote, brief, expanded, settings).await })
     }
 
     pub fn spawn_push_brief(
@@ -204,9 +194,7 @@ where
         let mut sleep_agent = settings.retry_schedule.agent();
 
         loop {
-            if let Ok(acknowledgement) =
-                self.send(remote, message.clone()).await
-            {
+            if let Ok(acknowledgement) = self.send(remote, message.clone()).await {
                 if acknowledgement >= settings.stop_condition {
                     break;
                 }
@@ -223,11 +211,7 @@ where
         }
     }
 
-    fn post(
-        &self,
-        remote: Identity,
-        mut request: Request<Message>,
-    ) -> AcknowledgementOutlet {
+    fn post(&self, remote: Identity, mut request: Request<Message>) -> AcknowledgementOutlet {
         let mut database = self.database.lock().unwrap();
 
         loop {
@@ -253,10 +237,7 @@ where
         }
     }
 
-    async fn keep_alive(
-        database: Arc<Mutex<Database<Message>>>,
-        settings: SenderSettings,
-    ) {
+    async fn keep_alive(database: Arc<Mutex<Database<Message>>>, settings: SenderSettings) {
         loop {
             database.lock().unwrap().links.retain(|_, link| {
                 (link.last_message.elapsed() <= settings.link_timeout)

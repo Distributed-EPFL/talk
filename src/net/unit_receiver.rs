@@ -2,8 +2,10 @@ use crate::net::Socket;
 
 use std::mem;
 
-use tokio::io;
-use tokio::io::{AsyncReadExt, ReadHalf};
+use tokio::{
+    io,
+    io::{AsyncReadExt, ReadHalf},
+};
 
 pub(in crate::net) struct UnitReceiver {
     read_half: ReadHalf<Box<dyn Socket>>,

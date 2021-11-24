@@ -1,17 +1,16 @@
 use crate::{
     crypto::Identity,
-    link::context::{
-        ContextId, ListenDispatcherSettings, Listener, Request, Response,
-    },
+    link::context::{ContextId, ListenDispatcherSettings, Listener, Request, Response},
     net::{Listener as NetListener, SecureConnection},
     sync::fuse::Fuse,
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::{Arc, Mutex},
+};
 
 use tokio::sync::mpsc::{self, Sender};
 
@@ -92,9 +91,7 @@ impl ListenDispatcher {
                 let database = database.clone();
 
                 fuse.spawn(async move {
-                    let _ =
-                        ListenDispatcher::serve(remote, connection, database)
-                            .await;
+                    let _ = ListenDispatcher::serve(remote, connection, database).await;
                 });
             }
         }

@@ -3,8 +3,7 @@ use crate::{
     unicast::Acknowledgement,
 };
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub struct PushSettings {
@@ -35,9 +34,7 @@ mod test {
         pub fn strong_constant() -> Self {
             PushSettings {
                 stop_condition: Acknowledgement::Strong,
-                retry_schedule: Arc::new(Constant::new(Duration::from_millis(
-                    100,
-                ))),
+                retry_schedule: Arc::new(Constant::new(Duration::from_millis(100))),
             }
         }
     }

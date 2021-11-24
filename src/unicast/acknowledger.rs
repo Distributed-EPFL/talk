@@ -11,10 +11,7 @@ pub struct Acknowledger {
 }
 
 impl Acknowledger {
-    pub(in crate::unicast) fn new(
-        sequence: u32,
-        response_inlet: ResponseInlet,
-    ) -> Self {
+    pub(in crate::unicast) fn new(sequence: u32, response_inlet: ResponseInlet) -> Self {
         Acknowledger {
             sequence,
             acknowledgement: Acknowledgement::Weak,

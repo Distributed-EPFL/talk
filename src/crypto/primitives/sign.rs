@@ -1,18 +1,20 @@
 use doomstack::{here, Doom, ResultExt, Top};
 
 use ed25519_dalek::{
-    Keypair as EdKeyPair, PublicKey as EdPublicKey, Signature as EdSignature,
-    Signer as EdSigner, Verifier as EdVerifier,
+    Keypair as EdKeyPair, PublicKey as EdPublicKey, Signature as EdSignature, Signer as EdSigner,
+    Verifier as EdVerifier,
 };
 
 use rand::rngs::OsRng;
 
 use serde::{Deserialize, Serialize};
 
-use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-use std::hash::{Hash, Hasher};
+use std::{
+    cmp::{Ord, Ordering, PartialOrd},
+    fmt,
+    fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
+};
 
 pub use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
@@ -100,9 +102,7 @@ impl KeyPair {
 /// Used to validate a signature on a message. See the documentation
 /// for [`Signature`] for details.
 impl PublicKey {
-    pub fn from_bytes(
-        bytes: [u8; PUBLIC_KEY_LENGTH],
-    ) -> Result<Self, Top<SignError>> {
+    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Result<Self, Top<SignError>> {
         let public_key = EdPublicKey::from_bytes(&bytes)
             .map_err(SignError::malformed_public_key)
             .map_err(Doom::into_top)
@@ -152,11 +152,7 @@ impl Signature {
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn verify_raw<M>(
-        &self,
-        public_key: PublicKey,
-        message: &M,
-    ) -> Result<(), Top<SignError>>
+    pub fn verify_raw<M>(&self, public_key: PublicKey, message: &M) -> Result<(), Top<SignError>>
     where
         M: Serialize,
     {
@@ -237,14 +233,10 @@ impl Signature {
             .map(|signature| signature.0)
             .collect::<Vec<_>>();
 
-        ed25519_dalek::verify_batch(
-            &messages[..],
-            &signatures[..],
-            &public_keys[..],
-        )
-        .map_err(SignError::verify_failed)
-        .map_err(Doom::into_top)
-        .spot(here!())
+        ed25519_dalek::verify_batch(&messages[..], &signatures[..], &public_keys[..])
+            .map_err(SignError::verify_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 }
 

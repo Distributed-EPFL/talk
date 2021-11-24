@@ -3,15 +3,17 @@ use crate::{
     net::{Listener, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::Fuse,
     unicast::{
-        Acknowledgement, Acknowledger, Message as UnicastMessage,
-        ReceiverSettings, Request, Response,
+        Acknowledgement, Acknowledger, Message as UnicastMessage, ReceiverSettings, Request,
+        Response,
     },
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
+use tokio::sync::{
+    mpsc,
+    mpsc::{Receiver as TokioReceiver, Sender as TokioSender},
+};
 
 type MessageInlet<Message> = TokioSender<(Identity, Message, Acknowledger)>;
 type MessageOutlet<Message> = TokioReceiver<(Identity, Message, Acknowledger)>;
@@ -52,8 +54,7 @@ where
     where
         L: Listener,
     {
-        let (message_inlet, message_outlet) =
-            mpsc::channel(settings.message_channel_capacity);
+        let (message_inlet, message_outlet) = mpsc::channel(settings.message_channel_capacity);
 
         let fuse = Fuse::new();
 
@@ -89,13 +90,7 @@ where
                 let settings = settings.clone();
 
                 fuse.spawn(async move {
-                    let _ = Receiver::serve(
-                        remote,
-                        connection,
-                        message_inlet,
-                        settings,
-                    )
-                    .await;
+                    let _ = Receiver::serve(remote, connection, message_inlet, settings).await;
                 });
             }
         }
@@ -114,14 +109,9 @@ where
 
         let result = tokio::try_join!(
             async {
-                Receiver::<Message>::drive_in(
-                    remote,
-                    receiver,
-                    message_inlet,
-                    response_inlet,
-                )
-                .await
-                .pot(ServeError::DriveInFailed, here!())
+                Receiver::<Message>::drive_in(remote, receiver, message_inlet, response_inlet)
+                    .await
+                    .pot(ServeError::DriveInFailed, here!())
             },
             async {
                 Receiver::<Message>::drive_out(sender, response_outlet)
@@ -147,17 +137,13 @@ where
 
             match request {
                 Request::Message(message) => {
-                    let acknowledger =
-                        Acknowledger::new(sequence, response_inlet.clone());
+                    let acknowledger = Acknowledger::new(sequence, response_inlet.clone());
 
-                    let _ =
-                        message_inlet.try_send((remote, message, acknowledger));
+                    let _ = message_inlet.try_send((remote, message, acknowledger));
                 }
                 Request::KeepAlive => {
-                    let _ = response_inlet.try_send(Response::Acknowledgement(
-                        sequence,
-                        Acknowledgement::Weak,
-                    ));
+                    let _ = response_inlet
+                        .try_send(Response::Acknowledgement(sequence, Acknowledgement::Weak));
                 }
             }
         }

@@ -7,15 +7,16 @@ use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::{rngs::OsRng, RngCore};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-use std::hash::{Hash, Hasher};
+use std::{
+    cmp::{Ord, Ordering, PartialOrd},
+    fmt,
+    fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
+};
 
 pub const KEYPAIR_LENGTH: usize = 128;
 pub const PUBLIC_KEY_LENGTH: usize = 96;
@@ -106,9 +107,7 @@ impl KeyPair {
 }
 
 impl PublicKey {
-    pub fn from_bytes(
-        bytes: [u8; PUBLIC_KEY_LENGTH],
-    ) -> Result<Self, Top<MultiError>> {
+    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Result<Self, Top<MultiError>> {
         let public_key = BlstPublicKey::from_bytes(&bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_public_key)
@@ -124,9 +123,7 @@ impl PublicKey {
 }
 
 impl Signature {
-    pub fn from_bytes(
-        bytes: [u8; SIGNATURE_LENGTH],
-    ) -> Result<Self, Top<MultiError>> {
+    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Result<Self, Top<MultiError>> {
         let signature = BlstSignature::from_bytes(&bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_signature)
@@ -180,12 +177,11 @@ impl Signature {
             .map(|signature| &signature.0)
             .collect::<Vec<_>>();
 
-        let signature =
-            BlstAggregateSignature::aggregate(&signatures[..], true)
-                .map_err(Into::<BlstError>::into)
-                .map_err(MultiError::aggregate_failed)
-                .map_err(Doom::into_top)
-                .spot(here!())?;
+        let signature = BlstAggregateSignature::aggregate(&signatures[..], true)
+            .map_err(Into::<BlstError>::into)
+            .map_err(MultiError::aggregate_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
 
         let signature = signature.to_signature();
         Ok(Signature(signature))
@@ -226,11 +222,7 @@ impl Signature {
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn verify_raw<P, M>(
-        &self,
-        signers: P,
-        message: &M,
-    ) -> Result<(), Top<MultiError>>
+    pub fn verify_raw<P, M>(&self, signers: P, message: &M) -> Result<(), Top<MultiError>>
     where
         P: IntoIterator<Item = PublicKey>,
         M: Serialize,
@@ -444,9 +436,7 @@ mod tests {
 
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
-            assert!(signature
-                .verify_raw([keypair.public()], &message,)
-                .is_err());
+            assert!(signature.verify_raw([keypair.public()], &message,).is_err());
         }
     }
 
@@ -462,12 +452,8 @@ mod tests {
         let bob_signature = bob.sign_raw(&message).unwrap();
         let carl_signature = carl.sign_raw(&message).unwrap();
 
-        let signature = Signature::aggregate([
-            alice_signature,
-            bob_signature,
-            carl_signature,
-        ])
-        .unwrap();
+        let signature =
+            Signature::aggregate([alice_signature, bob_signature, carl_signature]).unwrap();
 
         signature
             .verify_raw([alice.public(), bob.public(), carl.public()], &message)
@@ -486,23 +472,14 @@ mod tests {
         let bob_signature = bob.sign_raw(&message).unwrap();
         let carl_signature = carl.sign_raw(&message).unwrap();
 
-        let signature = Signature::aggregate([
-            alice_signature,
-            bob_signature,
-            carl_signature,
-        ])
-        .unwrap();
+        let signature =
+            Signature::aggregate([alice_signature, bob_signature, carl_signature]).unwrap();
 
         let message: u32 = 1235;
 
-        assert!(
-            signature
-                .verify_raw(
-                    [alice.public(), bob.public(), carl.public()],
-                    &message,
-                )
-                .is_err()
-        );
+        assert!(signature
+            .verify_raw([alice.public(), bob.public(), carl.public()], &message,)
+            .is_err());
     }
 
     #[test]
@@ -517,12 +494,8 @@ mod tests {
         let bob_signature = bob.sign_raw(&message).unwrap();
         let carl_signature = carl.sign_raw(&message).unwrap();
 
-        let signature = Signature::aggregate([
-            alice_signature,
-            bob_signature,
-            carl_signature,
-        ])
-        .unwrap();
+        let signature =
+            Signature::aggregate([alice_signature, bob_signature, carl_signature]).unwrap();
 
         let mut signature = bincode::serialize(&signature).unwrap();
         signature[10] = signature[10].wrapping_add(1);
@@ -531,10 +504,7 @@ mod tests {
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
             assert!(signature
-                .verify_raw(
-                    [alice.public(), bob.public(), carl.public()],
-                    &message,
-                )
+                .verify_raw([alice.public(), bob.public(), carl.public()], &message,)
                 .is_err());
         }
     }

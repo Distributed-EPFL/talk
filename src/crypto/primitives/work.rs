@@ -25,10 +25,7 @@ impl Work {
         Work::new_raw(difficulty, &(S::SCOPE, S::HEADER, message))
     }
 
-    pub fn new_raw<T>(
-        difficulty: u64,
-        message: &T,
-    ) -> Result<Self, Top<WorkError>>
+    pub fn new_raw<T>(difficulty: u64, message: &T) -> Result<Self, Top<WorkError>>
     where
         T: Serialize,
     {
@@ -51,22 +48,14 @@ impl Work {
         unreachable!()
     }
 
-    pub fn verify<S>(
-        &self,
-        difficulty: u64,
-        message: &S,
-    ) -> Result<(), Top<WorkError>>
+    pub fn verify<S>(&self, difficulty: u64, message: &S) -> Result<(), Top<WorkError>>
     where
         S: Statement,
     {
         self.verify_raw(difficulty, &(S::SCOPE, S::HEADER, message))
     }
 
-    pub fn verify_raw<T>(
-        &self,
-        difficulty: u64,
-        message: &T,
-    ) -> Result<(), Top<WorkError>>
+    pub fn verify_raw<T>(&self, difficulty: u64, message: &T) -> Result<(), Top<WorkError>>
     where
         T: Serialize,
     {

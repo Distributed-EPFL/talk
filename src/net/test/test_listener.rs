@@ -8,11 +8,15 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
 
-use std::{net::Ipv4Addr, net::SocketAddr};
+use std::net::{Ipv4Addr, SocketAddr};
 
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::{
+    net::TcpListener,
+    sync::{
+        mpsc,
+        mpsc::{Receiver, Sender},
+    },
+};
 
 const CHANNEL_CAPACITY: usize = 32;
 
@@ -33,8 +37,7 @@ enum ServeError {
 
 impl TestListener {
     pub async fn new(keychain: KeyChain) -> (Self, SocketAddr) {
-        let listener =
-            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
 
         let address = listener.local_addr().unwrap();
 
@@ -70,8 +73,7 @@ impl TestListener {
                 let inlet = inlet.clone();
 
                 fuse.spawn(async move {
-                    let _ =
-                        TestListener::serve(connection, keychain, inlet).await;
+                    let _ = TestListener::serve(connection, keychain, inlet).await;
                 });
             }
         }

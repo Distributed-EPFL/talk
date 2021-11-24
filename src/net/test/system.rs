@@ -9,8 +9,7 @@ use crate::{
 
 use futures::stream::{FuturesOrdered, StreamExt};
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 pub struct System {
     pub keys: Vec<Identity>,
@@ -32,8 +31,7 @@ impl System {
     }
 
     pub async fn setup(peers: usize) -> System {
-        System::setup_with_keychains((0..peers).map(|_| KeyChain::random()))
-            .await
+        System::setup_with_keychains((0..peers).map(|_| KeyChain::random())).await
     }
 
     pub async fn setup_with_keychains<I>(keychains: I) -> System
@@ -47,17 +45,14 @@ impl System {
             .map(|keychain| keychain.keycard().identity())
             .collect::<Vec<_>>();
 
-        let (listeners, addresses): (Vec<TestListener>, Vec<SocketAddr>) =
-            keychains
-                .iter()
-                .map(|keychain| async move {
-                    TestListener::new(keychain.clone()).await
-                })
-                .collect::<FuturesOrdered<_>>()
-                .collect::<Vec<_>>()
-                .await
-                .into_iter()
-                .unzip();
+        let (listeners, addresses): (Vec<TestListener>, Vec<SocketAddr>) = keychains
+            .iter()
+            .map(|keychain| async move { TestListener::new(keychain.clone()).await })
+            .collect::<FuturesOrdered<_>>()
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .unzip();
 
         let peers: HashMap<Identity, SocketAddr> = identities
             .clone()
@@ -73,17 +68,11 @@ impl System {
         System::new(identities, connectors, listeners)
     }
 
-    pub async fn connect(
-        &mut self,
-        source: usize,
-        destination: usize,
-    ) -> ConnectionPair {
-        let source_future =
-            self.connectors[source].connect(self.keys[destination]);
+    pub async fn connect(&mut self, source: usize, destination: usize) -> ConnectionPair {
+        let source_future = self.connectors[source].connect(self.keys[destination]);
         let destination_future = self.listeners[destination].accept();
 
-        let (source, destination) =
-            futures::join!(source_future, destination_future);
+        let (source, destination) = futures::join!(source_future, destination_future);
 
         ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }

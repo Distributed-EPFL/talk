@@ -2,35 +2,27 @@ use crate::{
     crypto::Identity,
     net::{Connector, SecureReceiver, SecureSender},
     sync::fuse::Fuse,
-    unicast::{
-        Acknowledgement, CasterSettings, Message as UnicastMessage, Request,
-        Response,
-    },
+    unicast::{Acknowledgement, CasterSettings, Message as UnicastMessage, Request, Response},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
 
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::{
-    Receiver as OneshotReceiver, Sender as OneshotSender,
+use tokio::sync::{
+    mpsc,
+    mpsc::{error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
+    oneshot,
+    oneshot::{Receiver as OneshotReceiver, Sender as OneshotSender},
 };
 
 use std::collections::HashMap;
 
-type RequestInlet<Message> =
-    MpscSender<(Request<Message>, AcknowledgementInlet)>;
-type RequestOutlet<Message> =
-    MpscReceiver<(Request<Message>, AcknowledgementInlet)>;
+type RequestInlet<Message> = MpscSender<(Request<Message>, AcknowledgementInlet)>;
+type RequestOutlet<Message> = MpscReceiver<(Request<Message>, AcknowledgementInlet)>;
 
-type AcknowledgementInlet =
-    OneshotSender<Result<Acknowledgement, Top<CasterError>>>;
-type AcknowledgementOutlet =
-    OneshotReceiver<Result<Acknowledgement, Top<CasterError>>>;
+type AcknowledgementInlet = OneshotSender<Result<Acknowledgement, Top<CasterError>>>;
+type AcknowledgementOutlet = OneshotReceiver<Result<Acknowledgement, Top<CasterError>>>;
 
 pub(in crate::unicast) struct Caster<Message: UnicastMessage> {
     state: Arc<Mutex<State<Message>>>,
@@ -46,9 +38,7 @@ struct Database {
     acknowledgement_inlets: HashMap<u32, AcknowledgementInlet>,
 }
 
-pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(
-    pub Request<Message>,
-);
+pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(pub Request<Message>);
 
 #[derive(Clone, Doom)]
 pub(in crate::unicast) enum CasterError {
@@ -78,13 +68,8 @@ impl<Message> Caster<Message>
 where
     Message: UnicastMessage,
 {
-    pub fn new(
-        connector: Arc<dyn Connector>,
-        remote: Identity,
-        settings: CasterSettings,
-    ) -> Self {
-        let (request_inlet, request_outlet) =
-            mpsc::channel(settings.request_channel_capacity);
+    pub fn new(connector: Arc<dyn Connector>, remote: Identity, settings: CasterSettings) -> Self {
+        let (request_inlet, request_outlet) = mpsc::channel(settings.request_channel_capacity);
 
         let state = Arc::new(Mutex::new(State::Running(request_inlet)));
         let fuse = Fuse::new();
@@ -106,16 +91,13 @@ where
     ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
         match &*self.state.lock().unwrap() {
             State::Running(request_inlet) => {
-                let (acknowledgement_inlet, acknowledgement_outlet) =
-                    oneshot::channel();
+                let (acknowledgement_inlet, acknowledgement_outlet) = oneshot::channel();
 
                 match request_inlet.try_send((request, acknowledgement_inlet)) {
                     Ok(()) => {}
                     Err(error) => {
                         let acknowledgement_inlet = match error {
-                            TrySendError::Full((_, acknowledgement_inlet)) => {
-                                acknowledgement_inlet
-                            }
+                            TrySendError::Full((_, acknowledgement_inlet)) => acknowledgement_inlet,
                             TrySendError::Closed(_) => {
                                 // This is unreachable because `acknowledgement_outlet` is owned by `self`:
                                 // if `acknowledgement_outlet` was dropped, it would be impossible to call
@@ -124,8 +106,7 @@ where
                             }
                         };
 
-                        let _ = acknowledgement_inlet
-                            .send(CasterError::CasterCongested.fail());
+                        let _ = acknowledgement_inlet.send(CasterError::CasterCongested.fail());
                     }
                 }
 
@@ -160,13 +141,9 @@ where
                         .pot(CasterError::DriveInFailed, here!())
                 },
                 async {
-                    Caster::<Message>::drive_out(
-                        &*database,
-                        sender,
-                        &mut request_outlet,
-                    )
-                    .await
-                    .pot(CasterError::DriveOutFailed, here!())
+                    Caster::<Message>::drive_out(&*database, sender, &mut request_outlet)
+                        .await
+                        .pot(CasterError::DriveOutFailed, here!())
                 }
             );
 
@@ -211,9 +188,7 @@ where
         request_outlet: &mut RequestOutlet<Message>,
     ) -> Result<(), Top<DriveOutError>> {
         for sequence in 0..u32::MAX {
-            if let Some((request, acknowledgement_inlet)) =
-                request_outlet.recv().await
-            {
+            if let Some((request, acknowledgement_inlet)) = request_outlet.recv().await {
                 database
                     .lock()
                     .unwrap()
@@ -237,9 +212,7 @@ where
     ) {
         let mut database = database.lock().unwrap();
 
-        for (_, acknowledgement_inlet) in
-            database.acknowledgement_inlets.drain()
-        {
+        for (_, acknowledgement_inlet) in database.acknowledgement_inlets.drain() {
             let _ = acknowledgement_inlet.send(Err(error.clone()));
         }
 

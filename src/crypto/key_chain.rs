@@ -1,8 +1,6 @@
 use crate::crypto::{
     primitives::{
-        multi::{
-            KeyPair as MultiKeyPair, MultiError, Signature as MultiSignature,
-        },
+        multi::{KeyPair as MultiKeyPair, MultiError, Signature as MultiSignature},
         sign::{KeyPair as SignKeyPair, SignError, Signature as SignSignature},
     },
     KeyCard, Statement,
@@ -36,17 +34,11 @@ impl KeyChain {
         KeyCard::from_keychain(&self)
     }
 
-    pub fn sign<S: Statement>(
-        &self,
-        message: &S,
-    ) -> Result<SignSignature, Top<SignError>> {
+    pub fn sign<S: Statement>(&self, message: &S) -> Result<SignSignature, Top<SignError>> {
         self.keypairs.sign.sign_raw(&(S::SCOPE, S::HEADER, message))
     }
 
-    pub fn multisign<S: Statement>(
-        &self,
-        message: &S,
-    ) -> Result<MultiSignature, Top<MultiError>> {
+    pub fn multisign<S: Statement>(&self, message: &S) -> Result<MultiSignature, Top<MultiError>> {
         self.keypairs
             .multi
             .sign_raw(&(S::SCOPE, S::HEADER, message))

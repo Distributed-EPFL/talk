@@ -1,7 +1,6 @@
 use std::future::Future;
 
-use tokio::sync::broadcast::Receiver;
-use tokio::task::JoinHandle;
+use tokio::{sync::broadcast::Receiver, task::JoinHandle};
 
 pub struct Relay {
     state: State,

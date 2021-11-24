@@ -7,9 +7,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack};
 
-use std::collections::HashMap;
-use std::io;
-use std::net::SocketAddr;
+use std::{collections::HashMap, io, net::SocketAddr};
 
 pub struct TestConnector {
     pub keychain: KeyChain,
@@ -32,20 +30,14 @@ pub enum TestConnectorError {
 }
 
 impl TestConnector {
-    pub fn new(
-        keychain: KeyChain,
-        peers: HashMap<Identity, SocketAddr>,
-    ) -> Self {
+    pub fn new(keychain: KeyChain, peers: HashMap<Identity, SocketAddr>) -> Self {
         TestConnector { keychain, peers }
     }
 }
 
 #[async_trait]
 impl Connector for TestConnector {
-    async fn connect(
-        &self,
-        identity: Identity,
-    ) -> Result<SecureConnection, Stack> {
+    async fn connect(&self, identity: Identity) -> Result<SecureConnection, Stack> {
         let address = self
             .peers
             .get(&identity)

@@ -8,10 +8,12 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
 
-use std::collections::HashMap;
-use std::io;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    io,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 pub struct Connector {
     client: Client,
@@ -39,11 +41,7 @@ pub enum ConnectorError {
 }
 
 impl Connector {
-    pub fn new<S>(
-        server: S,
-        keychain: KeyChain,
-        settings: ConnectorSettings,
-    ) -> Self
+    pub fn new<S>(server: S, keychain: KeyChain, settings: ConnectorSettings) -> Self
     where
         S: 'static + TcpConnect,
     {
@@ -60,10 +58,7 @@ impl Connector {
         }
     }
 
-    async fn attempt(
-        &self,
-        identity: Identity,
-    ) -> Result<SecureConnection, Top<ConnectorError>> {
+    async fn attempt(&self, identity: Identity) -> Result<SecureConnection, Top<ConnectorError>> {
         let address = self
             .get_address(identity)
             .ok_or(ConnectorError::AddressUnknown.into_top())
@@ -132,10 +127,7 @@ impl Connector {
 
 #[async_trait]
 impl NetConnector for Connector {
-    async fn connect(
-        &self,
-        identity: Identity,
-    ) -> Result<SecureConnection, Stack> {
+    async fn connect(&self, identity: Identity) -> Result<SecureConnection, Stack> {
         loop {
             let result = self.attempt(identity).await.map_err(Into::into);
 
@@ -168,22 +160,18 @@ mod tests {
         let alice_identity = alice_keychain.keycard().identity();
         let bob_identity = bob_keychain.keycard().identity();
 
-        let mut alice_listener =
-            Listener::new(SERVER, alice_keychain, Default::default()).await;
+        let mut alice_listener = Listener::new(SERVER, alice_keychain, Default::default()).await;
 
-        let bob_connector =
-            Connector::new(SERVER, bob_keychain, Default::default());
+        let bob_connector = Connector::new(SERVER, bob_keychain, Default::default());
 
         let alice_task = tokio::spawn(async move {
-            let (remote, mut connection) =
-                alice_listener.accept().await.unwrap();
+            let (remote, mut connection) = alice_listener.accept().await.unwrap();
 
             assert_eq!(remote, bob_identity);
             assert_eq!(connection.receive::<String>().await.unwrap(), MESSAGE);
         });
 
-        let mut connection =
-            bob_connector.connect(alice_identity).await.unwrap();
+        let mut connection = bob_connector.connect(alice_identity).await.unwrap();
 
         connection.send(&String::from(MESSAGE)).await.unwrap();
 

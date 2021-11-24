@@ -2,12 +2,12 @@ use crate::crypto::primitives::hash::{Hash, HASH_LENGTH};
 
 use serde::{Deserialize, Serialize};
 
-use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::{
+    fmt,
+    fmt::{Debug, Formatter},
+};
 
-#[derive(
-    Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Identity(Hash);
 
 impl Identity {

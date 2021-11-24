@@ -6,8 +6,5 @@ use doomstack::Stack;
 
 #[async_trait]
 pub trait Connector: 'static + Send + Sync {
-    async fn connect(
-        &self,
-        remote: Identity,
-    ) -> Result<SecureConnection, Stack>;
+    async fn connect(&self, remote: Identity) -> Result<SecureConnection, Stack>;
 }

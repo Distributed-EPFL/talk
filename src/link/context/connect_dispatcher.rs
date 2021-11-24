@@ -3,8 +3,10 @@ use crate::{
     net::Connector as NetConnector,
 };
 
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 pub struct ConnectDispatcher {
     connector: Arc<dyn NetConnector>,
@@ -40,11 +42,7 @@ impl ConnectDispatcher {
             .contexts
             .insert(context.clone())
         {
-            Connector::new(
-                context,
-                self.connector.clone(),
-                self.database.clone(),
-            )
+            Connector::new(context, self.connector.clone(), self.database.clone())
         } else {
             panic!("called `register` twice for the same `context`");
         }

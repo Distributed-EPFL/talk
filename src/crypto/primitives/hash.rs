@@ -4,9 +4,11 @@ use doomstack::{here, Doom, ResultExt, Top};
 
 use serde::{Deserialize, Serialize};
 
-use std::cmp::{Ord, Ordering, PartialOrd};
-use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::{
+    cmp::{Ord, Ordering, PartialOrd},
+    fmt,
+    fmt::{Debug, Formatter},
+};
 
 pub const HASH_LENGTH: usize = blake3::OUT_LEN;
 
@@ -143,9 +145,7 @@ impl Ord for Hash {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "BlakeHash")]
-struct SerdeBlakeHash(
-    #[serde(getter = "BlakeHash::as_bytes")] [u8; HASH_LENGTH],
-);
+struct SerdeBlakeHash(#[serde(getter = "BlakeHash::as_bytes")] [u8; HASH_LENGTH]);
 
 impl Into<BlakeHash> for SerdeBlakeHash {
     fn into(self) -> BlakeHash {

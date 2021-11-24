@@ -1,7 +1,9 @@
 use crate::net::Socket;
 
-use tokio::io;
-use tokio::io::{AsyncWriteExt, WriteHalf};
+use tokio::{
+    io,
+    io::{AsyncWriteExt, WriteHalf},
+};
 
 pub(in crate::net) struct UnitSender {
     write_half: WriteHalf<Box<dyn Socket>>,

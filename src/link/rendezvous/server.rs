@@ -7,12 +7,16 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
-use tokio::io;
-use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::{
+    io,
+    net::{TcpListener, ToSocketAddrs},
+};
 
 pub struct Server {
     _fuse: Fuse,
@@ -39,10 +43,7 @@ struct Database {
 }
 
 impl Server {
-    pub async fn new<A>(
-        address: A,
-        settings: ServerSettings,
-    ) -> Result<Self, Top<ServerError>>
+    pub async fn new<A>(address: A, settings: ServerSettings) -> Result<Self, Top<ServerError>>
     where
         A: ToSocketAddrs,
     {
@@ -87,9 +88,7 @@ impl Server {
                 let connection: PlainConnection = stream.into();
 
                 fuse.spawn(async move {
-                    let _ =
-                        Server::serve(settings, database, connection, address)
-                            .await;
+                    let _ = Server::serve(settings, database, connection, address).await;
                 });
             }
 
@@ -152,9 +151,7 @@ impl Server {
                     Response::AcknowledgePort
                 }
 
-                Request::GetShard(shard)
-                    if (shard as usize) >= database.shards.len() =>
-                {
+                Request::GetShard(shard) if (shard as usize) >= database.shards.len() => {
                     Response::ShardIdInvalid
                 }
                 Request::GetShard(shard)

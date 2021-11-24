@@ -1,13 +1,8 @@
 use crate::crypto::{
     primitives::{
         hash,
-        multi::{
-            MultiError, PublicKey as MultiPublicKey,
-            Signature as MultiSignature,
-        },
-        sign::{
-            PublicKey as SignPublicKey, SignError, Signature as SignSignature,
-        },
+        multi::{MultiError, PublicKey as MultiPublicKey, Signature as MultiSignature},
+        sign::{PublicKey as SignPublicKey, SignError, Signature as SignSignature},
     },
     Identity, KeyChain, Statement,
 };
@@ -16,8 +11,10 @@ use doomstack::Top;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use std::cmp::{Ord, Ordering, PartialOrd};
-use std::hash::{Hash, Hasher};
+use std::{
+    cmp::{Ord, Ordering, PartialOrd},
+    hash::{Hash, Hasher},
+};
 
 #[derive(Debug, Clone)]
 pub struct KeyCard {
@@ -52,11 +49,7 @@ impl KeyCard {
 }
 
 impl SignSignature {
-    pub fn verify<S>(
-        &self,
-        keycard: &KeyCard,
-        message: &S,
-    ) -> Result<(), Top<SignError>>
+    pub fn verify<S>(&self, keycard: &KeyCard, message: &S) -> Result<(), Top<SignError>>
     where
         S: Statement,
     {
@@ -65,11 +58,7 @@ impl SignSignature {
 }
 
 impl MultiSignature {
-    pub fn verify<'c, C, S>(
-        &self,
-        cards: C,
-        message: &S,
-    ) -> Result<(), Top<MultiError>>
+    pub fn verify<'c, C, S>(&self, cards: C, message: &S) -> Result<(), Top<MultiError>>
     where
         C: IntoIterator<Item = &'c KeyCard>,
         S: Statement,

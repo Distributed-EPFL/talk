@@ -1,7 +1,6 @@
 use crate::time::SleepAgent;
 
-use std::fmt::Debug;
-use std::time::Duration;
+use std::{fmt::Debug, time::Duration};
 
 pub trait SleepSchedule: Debug + Send + Sync {
     fn base(&self) -> Duration;

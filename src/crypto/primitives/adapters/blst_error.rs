@@ -1,8 +1,10 @@
 use blst::BLST_ERROR;
 
-use std::error::Error;
-use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::{
+    error::Error,
+    fmt,
+    fmt::{Display, Formatter},
+};
 
 #[derive(Debug)]
 pub struct BlstError(BLST_ERROR);

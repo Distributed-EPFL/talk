@@ -6,9 +6,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::io;
-use std::net::SocketAddr;
-use std::vec::Vec;
+use std::{io, net::SocketAddr, vec::Vec};
 
 pub struct Client {
     server: Box<dyn TcpConnect>,
@@ -61,9 +59,7 @@ impl Client {
             Response::AlreadyPublished(shard) => {
                 ClientError::AlreadyPublished { shard }.fail().spot(here!())
             }
-            Response::ShardIdInvalid => {
-                ClientError::ShardIdInvalid.fail().spot(here!())
-            }
+            Response::ShardIdInvalid => ClientError::ShardIdInvalid.fail().spot(here!()),
             Response::ShardFull => ClientError::ShardFull.fail().spot(here!()),
             response => {
                 panic!("unexpected response to `publish_card`: {:?}", response)
@@ -74,55 +70,35 @@ impl Client {
     pub async fn advertise_port(&self, identity: Identity, port: u16) {
         match self.perform(&Request::AdvertisePort(identity, port)).await {
             Response::AcknowledgePort => (),
-            response => panic!(
-                "unexpected response to `advertise_port`: {:?}",
-                response
-            ),
+            response => panic!("unexpected response to `advertise_port`: {:?}", response),
         }
     }
 
-    pub async fn get_shard(
-        &self,
-        shard: ShardId,
-    ) -> Result<Vec<KeyCard>, Top<ClientError>> {
+    pub async fn get_shard(&self, shard: ShardId) -> Result<Vec<KeyCard>, Top<ClientError>> {
         match self.perform(&Request::GetShard(shard)).await {
             Response::Shard(shard) => Ok(shard),
-            Response::ShardIdInvalid => {
-                ClientError::ShardIdInvalid.fail().spot(here!())
-            }
-            Response::ShardIncomplete => {
-                ClientError::ShardIncomplete.fail().spot(here!())
-            }
+            Response::ShardIdInvalid => ClientError::ShardIdInvalid.fail().spot(here!()),
+            Response::ShardIncomplete => ClientError::ShardIncomplete.fail().spot(here!()),
             response => {
                 panic!("unexpected response to `get_shard`: {:?}", response)
             }
         }
     }
 
-    pub async fn get_card(
-        &self,
-        identity: Identity,
-    ) -> Result<KeyCard, Top<ClientError>> {
+    pub async fn get_card(&self, identity: Identity) -> Result<KeyCard, Top<ClientError>> {
         match self.perform(&Request::GetCard(identity)).await {
             Response::Card(card) => Ok(card),
-            Response::CardUnknown => {
-                ClientError::CardUnknown.fail().spot(here!())
-            }
+            Response::CardUnknown => ClientError::CardUnknown.fail().spot(here!()),
             response => {
                 panic!("unexpected response to `get_card`: {:?}", response)
             }
         }
     }
 
-    pub async fn get_address(
-        &self,
-        identity: Identity,
-    ) -> Result<SocketAddr, Top<ClientError>> {
+    pub async fn get_address(&self, identity: Identity) -> Result<SocketAddr, Top<ClientError>> {
         match self.perform(&Request::GetAddress(identity)).await {
             Response::Address(address) => Ok(address),
-            Response::AddressUnknown => {
-                ClientError::AddressUnknown.fail().spot(here!())
-            }
+            Response::AddressUnknown => ClientError::AddressUnknown.fail().spot(here!()),
             response => {
                 panic!("unexpected response to `get_address`: {:?}", response)
             }
@@ -141,10 +117,7 @@ impl Client {
         }
     }
 
-    async fn attempt(
-        &self,
-        request: &Request,
-    ) -> Result<Response, Top<AttemptError>> {
+    async fn attempt(&self, request: &Request) -> Result<Response, Top<AttemptError>> {
         let mut connection = self
             .server
             .connect()
@@ -180,10 +153,7 @@ mod tests {
 
     use tokio::time;
 
-    async fn setup_server(
-        address: &'static str,
-        shard_sizes: Vec<usize>,
-    ) -> Server {
+    async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {
         Server::new(address, ServerSettings { shard_sizes })
             .await
             .unwrap()
@@ -193,8 +163,7 @@ mod tests {
         address: &'static str,
         clients: usize,
     ) -> (Vec<KeyChain>, Vec<KeyCard>, Vec<Identity>, Vec<Client>) {
-        let keychains =
-            (0..clients).map(|_| KeyChain::random()).collect::<Vec<_>>();
+        let keychains = (0..clients).map(|_| KeyChain::random()).collect::<Vec<_>>();
 
         let keycards = keychains
             .iter()
@@ -225,8 +194,7 @@ mod tests {
         Vec<Client>,
     ) {
         let server = setup_server(address, shard_sizes).await;
-        let (keychains, keycards, identities, clients) =
-            setup_clients(address, clients).await;
+        let (keychains, keycards, identities, clients) = setup_clients(address, clients).await;
 
         (server, keychains, keycards, identities, clients)
     }
@@ -241,18 +209,12 @@ mod tests {
             for c in 0..clients.len() {
                 match clients[c].get_shard(0).await.unwrap_err().top() {
                     ClientError::ShardIncomplete => (),
-                    error => panic!(
-                        "unexpected error upon querying shard: {}",
-                        error
-                    ),
+                    error => panic!("unexpected error upon querying shard: {}", error),
                 }
 
                 for d in 0..j {
                     assert_eq!(
-                        clients[c]
-                            .get_card(identities[d].clone())
-                            .await
-                            .unwrap(),
+                        clients[c].get_card(identities[d].clone()).await.unwrap(),
                         keycards[d]
                     );
                 }
@@ -265,10 +227,7 @@ mod tests {
                         .top()
                     {
                         ClientError::CardUnknown => (),
-                        error => panic!(
-                            "unexpected error upon querying card: {}",
-                            error
-                        ),
+                        error => panic!("unexpected error upon querying card: {}", error),
                     }
                 }
             }
@@ -309,8 +268,7 @@ mod tests {
         const CLIENTS: usize = 3;
         const SHARD_SIZES: &[usize] = &[3];
 
-        let (_keychains, keycards, identities, clients) =
-            setup_clients(ADDRESS, CLIENTS).await;
+        let (_keychains, keycards, identities, clients) = setup_clients(ADDRESS, CLIENTS).await;
 
         let fill = tokio::spawn(async move {
             keycard_fill(0, keycards, identities, clients).await;
@@ -341,8 +299,7 @@ mod tests {
         let clients_gamma = clients_beta.split_off(3);
 
         let alpha = tokio::spawn(async move {
-            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha)
-                .await;
+            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha).await;
         });
 
         let beta = tokio::spawn(async move {
@@ -350,8 +307,7 @@ mod tests {
         });
 
         let gamma = tokio::spawn(async move {
-            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma)
-                .await;
+            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma).await;
         });
 
         alpha.await.unwrap();
@@ -366,8 +322,7 @@ mod tests {
         const CLIENTS: usize = 9;
         const SHARD_SIZES: &[usize] = &[3, 3, 3];
 
-        let (_keychains, keycards, identities, clients) =
-            setup_clients(ADDRESS, CLIENTS).await;
+        let (_keychains, keycards, identities, clients) = setup_clients(ADDRESS, CLIENTS).await;
 
         let mut keycards_alpha = keycards;
         let mut keycards_beta = keycards_alpha.split_off(3);
@@ -382,8 +337,7 @@ mod tests {
         let clients_gamma = clients_beta.split_off(3);
 
         let alpha = tokio::spawn(async move {
-            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha)
-                .await;
+            keycard_fill(0, keycards_alpha, identities_alpha, clients_alpha).await;
         });
 
         let beta = tokio::spawn(async move {
@@ -391,8 +345,7 @@ mod tests {
         });
 
         let gamma = tokio::spawn(async move {
-            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma)
-                .await;
+            keycard_fill(2, keycards_gamma, identities_gamma, clients_gamma).await;
         });
 
         time::sleep(Duration::from_secs(5)).await;

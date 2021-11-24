@@ -4,8 +4,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 
 use std::time::Duration;
 
-use tokio::task::JoinHandle;
-use tokio::time;
+use tokio::{task::JoinHandle, time};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 

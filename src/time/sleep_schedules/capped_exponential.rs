@@ -1,7 +1,6 @@
 use crate::time::SleepSchedule;
 
-use std::cmp;
-use std::time::Duration;
+use std::{cmp, time::Duration};
 
 #[derive(Debug)]
 pub struct CappedExponential {

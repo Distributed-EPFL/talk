@@ -1,16 +1,22 @@
 use crate::sync::fuse::Fuse;
 
-use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::Arc;
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
-use tokio::io;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
-use tokio::sync::watch;
-use tokio::sync::watch::{Receiver as WatchReceiver, Sender as WatchSender};
-use tokio::sync::RwLock;
+use tokio::{
+    io,
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream, ToSocketAddrs},
+    sync::{
+        mpsc,
+        mpsc::{Receiver as MpscReceiver, Sender as MpscSender},
+        watch,
+        watch::{Receiver as WatchReceiver, Sender as WatchSender},
+        RwLock,
+    },
+};
 
 type StateInlet = WatchSender<State>;
 type StateOutlet = WatchReceiver<State>;
@@ -38,8 +44,7 @@ impl TcpProxy {
     where
         A: 'static + Send + Sync + Clone + ToSocketAddrs,
     {
-        let listener =
-            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
 
         let address = listener.local_addr().unwrap();
 

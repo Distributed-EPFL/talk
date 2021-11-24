@@ -1,7 +1,6 @@
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::future::Future;
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 
 use tokio::time;
 
@@ -9,10 +8,7 @@ use tokio::time;
 #[doom(description("Operation timed out"))]
 pub struct Timeout;
 
-pub async fn timeout<F, T>(
-    duration: Duration,
-    future: F,
-) -> Result<T, Top<Timeout>>
+pub async fn timeout<F, T>(duration: Duration, future: F) -> Result<T, Top<Timeout>>
 where
     F: Future<Output = T>,
 {

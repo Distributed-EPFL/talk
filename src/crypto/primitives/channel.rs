@@ -1,10 +1,7 @@
 use blake3::{Hash, Hasher};
 
-use chacha20poly1305::aead::{
-    Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace,
-    NewAead as ChaChaNewAead,
-};
 use chacha20poly1305::{
+    aead::{Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace, NewAead as ChaChaNewAead},
     ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
 };
 
@@ -53,10 +50,7 @@ pub enum ChannelError {
 }
 
 impl Sender {
-    pub fn encrypt<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<Vec<u8>, Top<ChannelError>>
+    pub fn encrypt<M>(&mut self, message: &M) -> Result<Vec<u8>, Top<ChannelError>>
     where
         M: Serialize,
     {
@@ -92,10 +86,7 @@ impl Sender {
         Ok(())
     }
 
-    pub fn authenticate<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<Vec<u8>, Top<ChannelError>>
+    pub fn authenticate<M>(&mut self, message: &M) -> Result<Vec<u8>, Top<ChannelError>>
     where
         M: Serialize,
     {
@@ -132,10 +123,7 @@ impl Sender {
 }
 
 impl Receiver {
-    pub fn decrypt<M>(
-        &mut self,
-        ciphertext: &[u8],
-    ) -> Result<M, Top<ChannelError>>
+    pub fn decrypt<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -154,10 +142,7 @@ impl Receiver {
             .spot(here!()) // Deserialize `message`
     }
 
-    pub fn decrypt_in_place<M>(
-        &mut self,
-        ciphertext: &mut Vec<u8>,
-    ) -> Result<M, Top<ChannelError>>
+    pub fn decrypt_in_place<M>(&mut self, ciphertext: &mut Vec<u8>) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -180,10 +165,7 @@ impl Receiver {
             .spot(here!()) // Deserialize `plaintext`
     }
 
-    pub fn authenticate<M>(
-        &mut self,
-        ciphertext: &[u8],
-    ) -> Result<M, Top<ChannelError>>
+    pub fn authenticate<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
@@ -193,8 +175,7 @@ impl Receiver {
             // If `ciphertext` is shorter than `HASH_LENGTH`..
             ChannelError::AuthenticateFailed.fail().spot(here!()) // .. then it cannot contain an authentication tag
         } else {
-            let (message, tag) =
-                ciphertext.split_at(ciphertext.len() - HASH_LENGTH); // Split `ciphertext` into `message` and `tag` (`tag` is always second and `HASH_LENGTH` long)
+            let (message, tag) = ciphertext.split_at(ciphertext.len() - HASH_LENGTH); // Split `ciphertext` into `message` and `tag` (`tag` is always second and `HASH_LENGTH` long)
 
             let tag: [u8; HASH_LENGTH] = tag.try_into().unwrap(); // This is guaranteed to work because `message.len() >= HASH_LENGTH`
             let tag: Hash = tag.into(); // Wrap `tag` into a `Hash`
@@ -220,8 +201,7 @@ impl Receiver {
 
 impl State {
     fn nonce(&mut self) -> [u8; NONCE_LENGTH] {
-        let mut nonce: [u8; NONCE_LENGTH] = self.nonce.to_be_bytes()
-            [16 - NONCE_LENGTH..]
+        let mut nonce: [u8; NONCE_LENGTH] = self.nonce.to_be_bytes()[16 - NONCE_LENGTH..]
             .try_into()
             .unwrap(); // Initialize `nonce` to the `NONCE_LENGTH` least significant bytes of `self.nonce` (in Little Endian representation)
 
@@ -276,8 +256,7 @@ mod tests {
         let alice_public_key = alice_keypair.public();
         let bob_public_key = bob_keypair.public();
 
-        let (alice_shared_key, alice_role) =
-            alice_keypair.exchange(bob_public_key);
+        let (alice_shared_key, alice_role) = alice_keypair.exchange(bob_public_key);
 
         let (bob_shared_key, bob_role) = bob_keypair.exchange(alice_public_key);
 
@@ -290,10 +269,7 @@ mod tests {
 
     #[test]
     fn encrypt_correct() {
-        let (
-            (mut alice_sender, mut alice_receiver),
-            (mut bob_sender, mut bob_receiver),
-        ) = setup();
+        let ((mut alice_sender, mut alice_receiver), (mut bob_sender, mut bob_receiver)) = setup();
 
         for message in 0..128u32 {
             let ciphertext = alice_sender.encrypt(&message).unwrap();
@@ -302,8 +278,7 @@ mod tests {
             assert_eq!(plaintext, message);
 
             let ciphertext = bob_sender.encrypt(&message).unwrap();
-            let plaintext: u32 =
-                alice_receiver.decrypt(&ciphertext[..]).unwrap();
+            let plaintext: u32 = alice_receiver.decrypt(&ciphertext[..]).unwrap();
 
             assert_eq!(plaintext, message);
         }
@@ -336,21 +311,16 @@ mod tests {
 
     #[test]
     fn authenticate_correct() {
-        let (
-            (mut alice_sender, mut alice_receiver),
-            (mut bob_sender, mut bob_receiver),
-        ) = setup();
+        let ((mut alice_sender, mut alice_receiver), (mut bob_sender, mut bob_receiver)) = setup();
 
         for message in 0..128u32 {
             let ciphertext = alice_sender.authenticate(&message).unwrap();
-            let plaintext: u32 =
-                bob_receiver.authenticate(&ciphertext[..]).unwrap();
+            let plaintext: u32 = bob_receiver.authenticate(&ciphertext[..]).unwrap();
 
             assert_eq!(plaintext, message);
 
             let ciphertext = bob_sender.authenticate(&message).unwrap();
-            let plaintext: u32 =
-                alice_receiver.authenticate(&ciphertext[..]).unwrap();
+            let plaintext: u32 = alice_receiver.authenticate(&ciphertext[..]).unwrap();
 
             assert_eq!(plaintext, message);
         }
@@ -376,8 +346,7 @@ mod tests {
         let _ = bob_receiver.authenticate::<u32>(&ciphertext[..]);
 
         let ciphertext = alice_sender.authenticate(&34u32).unwrap();
-        let plaintext: u32 =
-            bob_receiver.authenticate(&ciphertext[..]).unwrap();
+        let plaintext: u32 = bob_receiver.authenticate(&ciphertext[..]).unwrap();
 
         assert_eq!(plaintext, 34u32);
     }

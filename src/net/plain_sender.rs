@@ -1,8 +1,6 @@
 use crate::{
     crypto::primitives::channel::Sender as ChannelSender,
-    net::{
-        PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender,
-    },
+    net::{PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender},
     time,
 };
 
@@ -36,10 +34,7 @@ impl PlainSender {
         self.unit_sender.write_half()
     }
 
-    pub async fn send<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<(), Top<PlainConnectionError>>
+    pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
     {
@@ -48,21 +43,15 @@ impl PlainSender {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        time::optional_timeout(
-            self.settings.send_timeout,
-            self.unit_sender.flush(),
-        )
-        .await
-        .pot(PlainConnectionError::SendTimeout, here!())?
-        .map_err(PlainConnectionError::write_failed)
-        .map_err(Doom::into_top)
-        .spot(here!())
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(PlainConnectionError::SendTimeout, here!())?
+            .map_err(PlainConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
     }
 
-    pub(in crate::net) fn secure(
-        self,
-        channel_sender: ChannelSender,
-    ) -> SecureSender {
+    pub(in crate::net) fn secure(self, channel_sender: ChannelSender) -> SecureSender {
         SecureSender::new(self.unit_sender, channel_sender, self.settings)
     }
 }

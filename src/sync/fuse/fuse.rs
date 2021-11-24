@@ -2,9 +2,10 @@ use crate::sync::fuse::Relay;
 
 use std::future::Future;
 
-use tokio::sync::broadcast;
-use tokio::sync::broadcast::Sender;
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::{broadcast, broadcast::Sender},
+    task::JoinHandle,
+};
 
 pub struct Fuse {
     sender: Sender<()>,

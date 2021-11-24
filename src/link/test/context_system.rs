@@ -58,16 +58,12 @@ impl ContextSystem {
         let source_future = connector.connect(self.keys[destination]);
         let destination_future = listener.accept();
 
-        let (source, destination) =
-            futures::join!(source_future, destination_future);
+        let (source, destination) = futures::join!(source_future, destination_future);
 
         ConnectionPair::new(source.unwrap(), destination.unwrap().1)
     }
 
-    pub async fn connection_matrix(
-        &mut self,
-        context: ContextId,
-    ) -> Vec<Vec<ConnectionPair>> {
+    pub async fn connection_matrix(&mut self, context: ContextId) -> Vec<Vec<ConnectionPair>> {
         let mut matrix = Vec::with_capacity(self.keys.len());
 
         for sender in 0..self.keys.len() {

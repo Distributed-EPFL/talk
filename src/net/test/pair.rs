@@ -10,20 +10,14 @@ pub struct ConnectionPair {
 }
 
 impl ConnectionPair {
-    pub fn new(
-        source: SecureConnection,
-        destination: SecureConnection,
-    ) -> Self {
+    pub fn new(source: SecureConnection, destination: SecureConnection) -> Self {
         ConnectionPair {
             source,
             destination,
         }
     }
 
-    pub async fn transmit<M>(
-        &mut self,
-        message: &M,
-    ) -> Result<M, Top<SecureConnectionError>>
+    pub async fn transmit<M>(&mut self, message: &M) -> Result<M, Top<SecureConnectionError>>
     where
         M: Serialize + for<'de> Deserialize<'de>,
     {

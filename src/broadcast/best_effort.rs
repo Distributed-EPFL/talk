@@ -66,17 +66,10 @@ impl BestEffort {
                 async move {
                     if let Some(fallback) = fallback {
                         sender
-                            .push_brief(
-                                remote,
-                                message,
-                                fallback,
-                                settings.push_settings,
-                            )
+                            .push_brief(remote, message, fallback, settings.push_settings)
                             .await;
                     } else {
-                        sender
-                            .push(remote, message, settings.push_settings)
-                            .await;
+                        sender.push(remote, message, settings.push_settings).await;
                     }
 
                     remote
@@ -97,9 +90,10 @@ impl BestEffort {
     pub async fn until(&mut self, threshold: usize) {
         while self.completed.len() < threshold {
             self.completed.push(
-                self.stream.next().await.expect(
-                    "Called `BestEffort::until` beyond maximum number of recipients",
-                ),
+                self.stream
+                    .next()
+                    .await
+                    .expect("Called `BestEffort::until` beyond maximum number of recipients"),
             )
         }
     }
@@ -154,15 +148,10 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let best_effort = BestEffort::new(
-            sender,
-            keys,
-            42u32,
-            BestEffortSettings::strong_constant(),
-        );
+        let best_effort =
+            BestEffort::new(sender, keys, 42u32, BestEffortSettings::strong_constant());
 
-        let best_effort_handle =
-            tokio::spawn(async move { best_effort.complete().await });
+        let best_effort_handle = tokio::spawn(async move { best_effort.complete().await });
 
         join([best_effort_handle]).await.unwrap();
         join(handles).await.unwrap();
@@ -188,8 +177,7 @@ mod tests {
                         assert_eq!(message, 42);
                     }
                     loop {
-                        let (_, message, acknowledger) =
-                            receiver.receive().await;
+                        let (_, message, acknowledger) = receiver.receive().await;
                         assert_eq!(message, 42);
                         acknowledger.strong();
                     }
@@ -236,8 +224,7 @@ mod tests {
             .map(|(i, mut receiver)| {
                 tokio::spawn(async move {
                     loop {
-                        let (_, message, acknowledger) =
-                            receiver.receive().await;
+                        let (_, message, acknowledger) = receiver.receive().await;
                         assert_eq!(message, 42);
                         if i < FAULTY {
                             acknowledger.weak();
@@ -290,8 +277,7 @@ mod tests {
             .map(|(i, mut receiver)| {
                 tokio::spawn(async move {
                     loop {
-                        let (_, message, acknowledger) =
-                            receiver.receive().await;
+                        let (_, message, acknowledger) = receiver.receive().await;
                         assert_eq!(message, 42);
                         if i < FAULTY {
                             acknowledger.weak();

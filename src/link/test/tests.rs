@@ -109,9 +109,8 @@ mod context {
             mut listeners,
         } = NetSystem::setup(2).await.into();
 
-        let mut listener =
-            ListenDispatcher::new(listeners.remove(1), Default::default())
-                .register(format!("Context"));
+        let mut listener = ListenDispatcher::new(listeners.remove(1), Default::default())
+            .register(format!("Context"));
 
         let accept_handle = tokio::spawn(async move {
             let _connection = listener.accept().await.unwrap();
@@ -120,8 +119,7 @@ mod context {
         let slow_loris = SlowLoris(connectors.remove(0));
         let _slow_connection = slow_loris.connect(keys[1]).await;
 
-        let connector = ConnectDispatcher::new(connectors.remove(0))
-            .register(format!("Context"));
+        let connector = ConnectDispatcher::new(connectors.remove(0)).register(format!("Context"));
 
         let connect_handle = tokio::spawn(async move {
             let _connection = connector.connect(keys[1]).await.unwrap();

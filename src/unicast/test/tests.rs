@@ -118,8 +118,7 @@ mod unicast {
             .map(|mut receiver| {
                 tokio::spawn(async move {
                     for _ in 0..PEERS {
-                        let (_, message, acknowledger) =
-                            receiver.receive().await;
+                        let (_, message, acknowledger) = receiver.receive().await;
 
                         assert_eq!(message, 42);
                         acknowledger.strong();

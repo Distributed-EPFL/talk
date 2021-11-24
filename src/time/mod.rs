@@ -9,6 +9,4 @@ pub mod sleep_schedules;
 
 pub use sleep_agent::SleepAgent;
 pub use sleep_schedule::SleepSchedule;
-pub use timeout::optional_timeout;
-pub use timeout::timeout;
-pub use timeout::Timeout;
+pub use timeout::{optional_timeout, timeout, Timeout};
