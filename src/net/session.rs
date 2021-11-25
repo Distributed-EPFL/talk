@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
-type ReturnInlet = Sender<(crate::crypto::Identity, SecureConnection)>;
+type ReturnInlet = Sender<(Identity, SecureConnection)>;
 
 pub struct Session {
     remote: Identity,
