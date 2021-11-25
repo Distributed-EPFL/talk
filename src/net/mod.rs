@@ -11,6 +11,7 @@ mod secure_sender;
 mod sender_settings;
 mod session;
 mod session_connector;
+mod session_control;
 mod session_listener;
 mod socket;
 mod unit_receiver;
@@ -22,6 +23,7 @@ pub mod traits;
 #[cfg(any(test, feature = "test_utilities"))]
 pub mod test;
 
+use session_control::SessionControl;
 use unit_receiver::UnitReceiver;
 use unit_sender::UnitSender;
 

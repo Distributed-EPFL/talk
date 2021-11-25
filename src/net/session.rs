@@ -1,4 +1,7 @@
-use crate::net::{ConnectionSettings, SecureConnection, SecureConnectionError};
+use crate::{
+    crypto::Identity,
+    net::{ConnectionSettings, SecureConnection, SecureConnectionError},
+};
 
 use doomstack::Top;
 
@@ -6,16 +9,22 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
-type ReturnInlet = Sender<SecureConnection>;
+type ReturnInlet = Sender<(crate::crypto::Identity, SecureConnection)>;
 
 pub struct Session {
+    remote: Identity,
     connection: Option<SecureConnection>,
     return_inlet: ReturnInlet,
 }
 
 impl Session {
-    pub(in crate::net) fn new(connection: SecureConnection, return_inlet: ReturnInlet) -> Self {
+    pub(in crate::net) fn new(
+        remote: Identity,
+        connection: SecureConnection,
+        return_inlet: ReturnInlet,
+    ) -> Self {
         Session {
+            remote,
             connection: Some(connection),
             return_inlet,
         }
@@ -56,6 +65,8 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = self.return_inlet.try_send(self.connection.take().unwrap());
+        let _ = self
+            .return_inlet
+            .try_send((self.remote, self.connection.take().unwrap()));
     }
 }
