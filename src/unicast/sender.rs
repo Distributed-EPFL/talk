@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::{Arc},
+    sync::Arc,
     time::Instant,
 };
 

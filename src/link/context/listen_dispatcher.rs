@@ -109,11 +109,7 @@ impl ListenDispatcher {
             .await
             .pot(ServeError::ReceiveFailed, here!())?;
 
-        let inlet = database
-            .lock()
-            .inlets
-            .get(&context)
-            .map(Clone::clone);
+        let inlet = database.lock().inlets.get(&context).map(Clone::clone);
 
         match inlet {
             Some(inlet) => {

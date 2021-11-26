@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 
 use std::{
     collections::HashMap,
-    sync::{Arc},
+    sync::Arc,
     time::{Duration, Instant},
 };
 

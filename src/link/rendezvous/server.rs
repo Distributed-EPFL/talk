@@ -12,7 +12,7 @@ use parking_lot::Mutex;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    sync::{Arc},
+    sync::Arc,
 };
 
 use tokio::{
