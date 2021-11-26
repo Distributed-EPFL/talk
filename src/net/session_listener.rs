@@ -104,7 +104,7 @@ impl SessionListener {
             }
 
             let control = connection
-                .receive()
+                .receive_raw()
                 .await
                 .pot(PreserveError::ConnectionError, here!())?;
 

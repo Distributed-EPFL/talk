@@ -111,7 +111,7 @@ impl SessionConnector {
         };
 
         let connection = if let Some(mut connection) = connection {
-            connection.send(&SessionControl::Connect).await?;
+            connection.send_raw(&SessionControl::Connect).await?;
             connection
         } else {
             self.connector.connect(remote).await?
@@ -169,7 +169,7 @@ impl SessionConnector {
 
             let result = async {
                 connection
-                    .send_plain(&SessionControl::KeepAlive)
+                    .send_raw(&SessionControl::KeepAlive)
                     .await
                     .pot(KeepAliveError::ConnectionError, here!())?;
 
