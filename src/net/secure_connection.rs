@@ -33,6 +33,9 @@ pub enum SecureConnectionError {
     AuthenticateFailed,
     #[doom(description("Failed to decrypt message"))]
     DecryptFailed,
+    #[doom(description("Failed to deserialize: {}", source))]
+    #[doom(wrap(deserialize_failed))]
+    DeserializeFailed { source: bincode::Error },
     #[doom(description("Failed to encrypt message"))]
     EncryptFailed,
     #[doom(description("Failed to compute message authentication code"))]
@@ -48,6 +51,9 @@ pub enum SecureConnectionError {
     SecureFailed,
     #[doom(description("Timed out while `send`ing"))]
     SendTimeout,
+    #[doom(description("Failed to serialize: {}", source))]
+    #[doom(wrap(serialize_failed))]
+    SerializeFailed { source: bincode::Error },
     #[doom(description("Failed to write: {}", source))]
     #[doom(wrap(write_failed))]
     WriteFailed { source: io::Error },
@@ -147,7 +153,14 @@ impl SecureConnection {
     where
         M: Serialize,
     {
-        self.sender.send(message).await
+        self.sender.send_plain(message).await
+    }
+
+    pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
+    where
+        M: Serialize,
+    {
+        self.sender.send_raw(message).await
     }
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
@@ -161,7 +174,14 @@ impl SecureConnection {
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.receiver.receive().await
+        self.receiver.receive_plain().await
+    }
+
+    pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        self.receiver.receive_raw().await
     }
 
     pub fn split(self) -> (SecureSender, SecureReceiver) {

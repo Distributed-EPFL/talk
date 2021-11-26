@@ -48,6 +48,13 @@ impl Session {
         self.connection.as_mut().unwrap().send_plain(message).await
     }
 
+    pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
+    where
+        M: Serialize,
+    {
+        self.connection.as_mut().unwrap().send_raw(message).await
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
@@ -60,6 +67,13 @@ impl Session {
         M: for<'de> Deserialize<'de>,
     {
         self.connection.as_mut().unwrap().receive_plain().await
+    }
+
+    pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
+    where
+        M: for<'de> Deserialize<'de>,
+    {
+        self.connection.as_mut().unwrap().receive_raw().await
     }
 }
 

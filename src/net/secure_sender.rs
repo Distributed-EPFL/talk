@@ -62,4 +62,21 @@ impl SecureSender {
             .map_err(Doom::into_top)
             .spot(here!())
     }
+
+    pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
+    where
+        M: Serialize,
+    {
+        bincode::serialize_into(self.unit_sender.as_vec(), &message)
+            .map_err(SecureConnectionError::serialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(SecureConnectionError::SendTimeout, here!())?
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
+    }
 }
