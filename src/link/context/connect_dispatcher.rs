@@ -3,9 +3,11 @@ use crate::{
     net::Connector as NetConnector,
 };
 
+use parking_lot::Mutex;
+
 use std::{
     collections::HashSet,
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 pub struct ConnectDispatcher {
@@ -38,7 +40,6 @@ impl ConnectDispatcher {
         if self
             .database
             .lock()
-            .unwrap()
             .contexts
             .insert(context.clone())
         {

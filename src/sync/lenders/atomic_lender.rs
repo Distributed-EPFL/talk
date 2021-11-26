@@ -41,6 +41,18 @@ impl<Inner> AtomicLender<Inner> {
         }
     }
 
+    pub fn try_take(self: &Arc<Self>) -> Option<Inner> {
+        let mut guard = self.state.lock().unwrap();
+
+        let mut state = State::Lent;
+        mem::swap(guard.deref_mut(), &mut state);
+
+        match state {
+            State::Available(inner) => Some(inner),
+            State::Lent => None,
+        }
+    }
+
     pub fn restore(self: &Arc<Self>, inner: Inner) {
         let mut guard = self.state.lock().unwrap();
         if let State::Lent = *guard {
@@ -66,13 +78,22 @@ mod tests {
         let lender = Arc::new(AtomicLender::new(1));
 
         let threads: Vec<JoinHandle<()>> = (0..32)
-            .map(|_| {
+            .map(|index| {
                 let lender = lender.clone();
                 thread::spawn(move || {
-                    for _ in 0..10 {
-                        let thing = lender.take();
-                        thread::sleep(Duration::from_millis(1));
-                        lender.restore(thing);
+                    if index < 16 {
+                        for _ in 0..10 {
+                            let thing = lender.take();
+                            thread::sleep(Duration::from_millis(1));
+                            lender.restore(thing);
+                        }
+                    } else {
+                        for _ in 0..10 {
+                            if let Some(thing) = lender.try_take() {
+                                thread::sleep(Duration::from_millis(1));
+                                lender.restore(thing);
+                            }
+                        }
                     }
                 })
             })
