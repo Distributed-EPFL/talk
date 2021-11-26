@@ -6,6 +6,8 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
+use std::time::{Duration, Instant};
+
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 type ConnectionInlet = Sender<(Identity, SecureConnection)>;
@@ -21,6 +23,8 @@ pub struct SessionListener {
 enum PreserveError {
     #[doom(description("Connection error"))]
     ConnectionError,
+    #[doom(description("Unused connection timed out"))]
+    Timeout,
 }
 
 impl SessionListener {
@@ -92,7 +96,13 @@ impl SessionListener {
         mut connection: SecureConnection,
         connection_inlet: ConnectionInlet,
     ) -> Result<(), Top<PreserveError>> {
+        let start = Instant::now();
+
         loop {
+            if start.elapsed() > Duration::from_secs(1800) {
+                return PreserveError::Timeout.fail().spot(here!());
+            }
+
             let control = connection
                 .receive()
                 .await

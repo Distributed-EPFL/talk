@@ -9,19 +9,19 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
-type ReturnInlet = Sender<(Identity, SecureConnection)>;
+type ConnectionInlet = Sender<(Identity, SecureConnection)>;
 
 pub struct Session {
     remote: Identity,
     connection: Option<SecureConnection>,
-    return_inlet: ReturnInlet,
+    return_inlet: ConnectionInlet,
 }
 
 impl Session {
     pub(in crate::net) fn new(
         remote: Identity,
         connection: SecureConnection,
-        return_inlet: ReturnInlet,
+        return_inlet: ConnectionInlet,
     ) -> Self {
         Session {
             remote,
@@ -65,8 +65,9 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = self
-            .return_inlet
-            .try_send((self.remote, self.connection.take().unwrap()));
+        let mut connection = self.connection.take().unwrap();
+        connection.configure(Default::default());
+
+        let _ = self.return_inlet.try_send((self.remote, connection));
     }
 }
