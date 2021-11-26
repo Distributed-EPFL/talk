@@ -466,4 +466,39 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
     }
+
+    #[tokio::test]
+    #[ignore]
+    async fn keepalive_sequence() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = SessionConnector::new(connectors.remove(0));
+        let mut listener = SessionListener::new(listeners.remove(1));
+
+        tokio::spawn(async move {
+            for _ in 0..3 {
+                let (_, mut session) = listener.accept().await;
+                assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                session.send(&43u32).await.unwrap();
+            }
+        });
+
+        for _ in 0..3 {
+            {
+                let mut session = connector.connect(keys[1]).await.unwrap();
+                session.send(&42u32).await.unwrap();
+                assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+            }
+
+            time::sleep(Duration::from_secs(100)).await;
+        }
+
+        for connections in connector.pool.lock().unwrap().connections.values() {
+            assert_eq!(connections.len(), 1);
+        }
+    }
 }
