@@ -1,6 +1,8 @@
-use parking_lot::{Condvar, Mutex};
-
-use std::{mem, ops::DerefMut, sync::Arc};
+use std::{
+    mem,
+    ops::DerefMut,
+    sync::{Arc, Condvar, Mutex},
+};
 
 pub struct AtomicLender<Inner> {
     state: Mutex<State<Inner>>,
@@ -21,11 +23,14 @@ impl<Inner> AtomicLender<Inner> {
     }
 
     pub fn take(self: &Arc<Self>) -> Inner {
-        let mut guard = self.state.lock();
-
-        if let State::Lent = *guard {
-            self.condvar.wait(&mut guard);
-        }
+        let guard = self.state.lock().unwrap();
+        let mut guard = (*self)
+            .condvar
+            .wait_while(guard, |state| match state {
+                State::Available(_) => false,
+                State::Lent => true,
+            })
+            .unwrap();
 
         let mut state = State::Lent;
         mem::swap(guard.deref_mut(), &mut state);
@@ -37,7 +42,7 @@ impl<Inner> AtomicLender<Inner> {
     }
 
     pub fn try_take(self: &Arc<Self>) -> Option<Inner> {
-        let mut guard = self.state.lock();
+        let mut guard = self.state.lock().unwrap();
 
         let mut state = State::Lent;
         mem::swap(guard.deref_mut(), &mut state);
@@ -49,8 +54,7 @@ impl<Inner> AtomicLender<Inner> {
     }
 
     pub fn restore(self: &Arc<Self>, inner: Inner) {
-        let mut guard = self.state.lock();
-
+        let mut guard = self.state.lock().unwrap();
         if let State::Lent = *guard {
             *guard = State::Available(inner);
         } else {
