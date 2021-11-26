@@ -77,35 +77,36 @@ impl SessionConnector {
     }
 
     pub async fn connect(&self, remote: Identity) -> Result<Session, Stack> {
-        let mut pool = self.pool.lock().unwrap();
+        let connection = {
+            let mut pool = self.pool.lock().unwrap();
 
-        // Try to get a `Healthy` connection from `pool`
-        let connection = pool
-            .connections
-            .get_mut(&remote)
-            .map(|states| {
-                // This contains the `State`s which could not be `try_take`n
-                // because they're currently being pinged by `keep_alive`
-                let mut restore = Vec::new();
+            // Try to get a `Healthy` connection from `pool`
+            pool.connections
+                .get_mut(&remote)
+                .map(|states| {
+                    // This contains the `State`s which could not be `try_take`n
+                    // because they're currently being pinged by `keep_alive`
+                    let mut restore = Vec::new();
 
-                let connection = loop {
-                    let state = match states.pop() {
-                        Some(state) => state,
-                        None => break None, // `states` exhausted, no connection available
+                    let connection = loop {
+                        let state = match states.pop() {
+                            Some(state) => state,
+                            None => break None, // `states` exhausted, no connection available
+                        };
+
+                        match state.try_take() {
+                            Some(State::Healthy(connection)) => break Some(connection),
+                            Some(State::Broken) => {} // If `state` is `Broken`, garbage collect
+                            None => restore.push(state), // Currently pinging, store in `restore` (see above)
+                        }
                     };
 
-                    match state.try_take() {
-                        Some(State::Healthy(connection)) => break Some(connection),
-                        Some(State::Broken) => {} // If `state` is `Broken`, garbage collect
-                        None => restore.push(state), // Currently pinging, store in `restore` (see above)
-                    }
-                };
-
-                // Flush `restore` back in `states`
-                states.extend(restore);
-                connection
-            })
-            .flatten();
+                    // Flush `restore` back in `states`
+                    states.extend(restore);
+                    connection
+                })
+                .flatten()
+        };
 
         let connection = if let Some(mut connection) = connection {
             connection.send(&SessionControl::Connect).await?;
@@ -195,5 +196,274 @@ impl SessionConnector {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::net::{test::System, SessionListener};
+
+    use futures::stream::{FuturesUnordered, StreamExt};
+
+    #[tokio::test]
+    async fn single() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = SessionConnector::new(connectors.remove(0));
+        let mut listener = SessionListener::new(listeners.remove(1));
+
+        tokio::spawn(async move {
+            let (_, mut session) = listener.accept().await;
+            assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+            session.send(&43u32).await.unwrap();
+        });
+
+        let mut session = connector.connect(keys[1]).await.unwrap();
+        session.send(&42u32).await.unwrap();
+        assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+    }
+
+    #[tokio::test]
+    async fn sequence() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = SessionConnector::new(connectors.remove(0));
+        let mut listener = SessionListener::new(listeners.remove(1));
+
+        tokio::spawn(async move {
+            for _ in 0..10 {
+                let (_, mut session) = listener.accept().await;
+                assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                session.send(&43u32).await.unwrap();
+            }
+        });
+
+        for _ in 0..10 {
+            let mut session = connector.connect(keys[1]).await.unwrap();
+            session.send(&42u32).await.unwrap();
+            assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+        }
+    }
+
+    #[tokio::test]
+    async fn sequence_reuse() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = SessionConnector::new(connectors.remove(0));
+        let mut listener = SessionListener::new(listeners.remove(1));
+
+        tokio::spawn(async move {
+            for _ in 0..10 {
+                let (_, mut session) = listener.accept().await;
+                assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                session.send(&43u32).await.unwrap();
+            }
+        });
+
+        for _ in 0..10 {
+            {
+                let mut session = connector.connect(keys[1]).await.unwrap();
+                session.send(&42u32).await.unwrap();
+                assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+            }
+
+            time::sleep(Duration::from_millis(10)).await;
+        }
+
+        for connections in connector.pool.lock().unwrap().connections.values() {
+            assert_eq!(connections.len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn all_to_one() {
+        let System {
+            connectors,
+            mut listeners,
+            keys,
+        } = System::setup(10).await;
+
+        let connectors = connectors
+            .into_iter()
+            .map(|connector| SessionConnector::new(connector))
+            .collect::<Vec<_>>();
+
+        let mut listener = SessionListener::new(listeners.remove(0));
+
+        tokio::spawn(async move {
+            for _ in 0..(10 * 10) {
+                let (id, mut session) = listener.accept().await;
+                assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                session.send(&id).await.unwrap();
+            }
+        });
+
+        let _ = connectors
+            .into_iter()
+            .zip(keys.clone())
+            .map(|(connector, identity)| {
+                let remote = keys[0].clone();
+
+                async move {
+                    for _ in 0..10 {
+                        {
+                            let mut session = connector.connect(remote).await.unwrap();
+                            session.send(&42u32).await.unwrap();
+                            assert_eq!(session.receive::<Identity>().await.unwrap(), identity);
+                        }
+
+                        time::sleep(Duration::from_millis(10)).await;
+                    }
+
+                    for connections in connector.pool.lock().unwrap().connections.values() {
+                        assert_eq!(connections.len(), 1);
+                    }
+                }
+            })
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await;
+    }
+
+    #[tokio::test]
+    async fn one_to_all() {
+        let System {
+            mut connectors,
+            listeners,
+            keys,
+        } = System::setup(10).await;
+
+        let listeners = listeners
+            .into_iter()
+            .map(|listener| SessionListener::new(listener))
+            .collect::<Vec<_>>();
+
+        tokio::spawn(async move {
+            listeners
+                .into_iter()
+                .map(|mut listener| async move {
+                    for _ in 0..10 {
+                        let (id, mut session) = listener.accept().await;
+                        assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                        session.send(&id).await.unwrap();
+                    }
+                })
+                .collect::<FuturesUnordered<_>>()
+                .collect::<Vec<_>>()
+                .await;
+        });
+
+        let connector = Arc::new(SessionConnector::new(connectors.remove(0)));
+        let identity = keys[0].clone();
+
+        keys.into_iter()
+            .map(|remote| {
+                let connector = connector.clone();
+                async move {
+                    for _ in 0..10 {
+                        {
+                            let mut session = connector.connect(remote).await.unwrap();
+                            session.send(&42u32).await.unwrap();
+                            assert_eq!(session.receive::<Identity>().await.unwrap(), identity);
+                        }
+                        time::sleep(Duration::from_millis(10)).await;
+                    }
+                }
+            })
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await;
+
+        time::sleep(Duration::from_millis(10)).await;
+
+        for connections in connector.pool.lock().unwrap().connections.values() {
+            assert_eq!(connections.len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn all_to_all() {
+        let System {
+            connectors,
+            listeners,
+            keys,
+        } = System::setup(10).await;
+
+        let connectors = connectors
+            .into_iter()
+            .map(|connector| Arc::new(SessionConnector::new(connector)))
+            .collect::<Vec<_>>();
+
+        let listeners = listeners
+            .into_iter()
+            .map(|listener| SessionListener::new(listener))
+            .collect::<Vec<_>>();
+
+        tokio::spawn(async move {
+            listeners
+                .into_iter()
+                .map(|mut listener| async move {
+                    for _ in 0..10 * 10 {
+                        let (id, mut session) = listener.accept().await;
+                        assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
+                        session.send(&id).await.unwrap();
+                    }
+                })
+                .collect::<FuturesUnordered<_>>()
+                .collect::<Vec<_>>()
+                .await;
+        });
+
+        connectors
+            .into_iter()
+            .zip(keys.clone())
+            .map(|(connector, identity)| {
+                let keys = keys.clone();
+
+                async move {
+                    keys.into_iter()
+                        .map(|remote| {
+                            let connector = connector.clone();
+                            async move {
+                                for _ in 0..10 {
+                                    {
+                                        let mut session = connector.connect(remote).await.unwrap();
+                                        session.send(&42u32).await.unwrap();
+                                        assert_eq!(
+                                            session.receive::<Identity>().await.unwrap(),
+                                            identity
+                                        );
+                                    }
+
+                                    time::sleep(Duration::from_millis(50)).await;
+                                }
+                            }
+                        })
+                        .collect::<FuturesUnordered<_>>()
+                        .collect::<Vec<_>>()
+                        .await;
+
+                    for connections in connector.pool.lock().unwrap().connections.values() {
+                        assert_eq!(connections.len(), 1);
+                    }
+                }
+            })
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await;
     }
 }
