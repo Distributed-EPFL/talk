@@ -7,7 +7,9 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+
+use std::sync::Arc;
 
 use tokio::sync::{
     mpsc,
@@ -89,7 +91,7 @@ where
         &self,
         request: Request<Message>,
     ) -> Result<AcknowledgementOutlet, CasterTerminated<Message>> {
-        match &*self.state.lock().unwrap() {
+        match &*self.state.lock() {
             State::Running(request_inlet) => {
                 let (acknowledgement_inlet, acknowledgement_outlet) = oneshot::channel();
 
@@ -152,7 +154,7 @@ where
         .await;
 
         let error = result.unwrap_err();
-        *state.lock().unwrap() = State::Terminated;
+        *state.lock() = State::Terminated;
 
         Caster::<Message>::clean(database, request_outlet, error).await;
     }
@@ -169,11 +171,8 @@ where
 
             match response {
                 Response::Acknowledgement(sequence, acknowledgement) => {
-                    if let Some(acknowledgement_inlet) = database
-                        .lock()
-                        .unwrap()
-                        .acknowledgement_inlets
-                        .remove(&sequence)
+                    if let Some(acknowledgement_inlet) =
+                        database.lock().acknowledgement_inlets.remove(&sequence)
                     {
                         let _ = acknowledgement_inlet.send(Ok(acknowledgement));
                     }
@@ -191,7 +190,6 @@ where
             if let Some((request, acknowledgement_inlet)) = request_outlet.recv().await {
                 database
                     .lock()
-                    .unwrap()
                     .acknowledgement_inlets
                     .insert(sequence, acknowledgement_inlet);
 
@@ -210,7 +208,7 @@ where
         mut request_outlet: RequestOutlet<Message>,
         error: Top<CasterError>,
     ) {
-        let mut database = database.lock().unwrap();
+        let mut database = database.lock();
 
         for (_, acknowledgement_inlet) in database.acknowledgement_inlets.drain() {
             let _ = acknowledgement_inlet.send(Err(error.clone()));

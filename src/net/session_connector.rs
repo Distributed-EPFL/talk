@@ -6,9 +6,11 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
 
+use parking_lot::Mutex;
+
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc},
     time::{Duration, Instant},
 };
 
@@ -78,7 +80,7 @@ impl SessionConnector {
 
     pub async fn connect(&self, remote: Identity) -> Result<Session, Stack> {
         let connection = {
-            let mut pool = self.pool.lock().unwrap();
+            let mut pool = self.pool.lock();
 
             // Try to get a `Healthy` connection from `pool`
             pool.connections
@@ -127,7 +129,7 @@ impl SessionConnector {
 
                 {
                     let state = state.clone();
-                    let mut pool = pool.lock().unwrap();
+                    let mut pool = pool.lock();
 
                     pool.connections
                         .entry(remote)
@@ -284,7 +286,7 @@ mod tests {
             time::sleep(Duration::from_millis(10)).await;
         }
 
-        for connections in connector.pool.lock().unwrap().connections.values() {
+        for connections in connector.pool.lock().connections.values() {
             assert_eq!(connections.len(), 1);
         }
     }
@@ -329,7 +331,7 @@ mod tests {
                         time::sleep(Duration::from_millis(10)).await;
                     }
 
-                    for connections in connector.pool.lock().unwrap().connections.values() {
+                    for connections in connector.pool.lock().connections.values() {
                         assert_eq!(connections.len(), 1);
                     }
                 }
@@ -390,7 +392,7 @@ mod tests {
 
         time::sleep(Duration::from_millis(10)).await;
 
-        for connections in connector.pool.lock().unwrap().connections.values() {
+        for connections in connector.pool.lock().connections.values() {
             assert_eq!(connections.len(), 1);
         }
     }
@@ -457,7 +459,7 @@ mod tests {
                         .collect::<Vec<_>>()
                         .await;
 
-                    for connections in connector.pool.lock().unwrap().connections.values() {
+                    for connections in connector.pool.lock().connections.values() {
                         assert_eq!(connections.len(), 1);
                     }
                 }
@@ -497,7 +499,7 @@ mod tests {
             time::sleep(Duration::from_secs(100)).await;
         }
 
-        for connections in connector.pool.lock().unwrap().connections.values() {
+        for connections in connector.pool.lock().connections.values() {
             assert_eq!(connections.len(), 1);
         }
     }
