@@ -1,6 +1,7 @@
-use parking_lot::{Mutex, MutexGuard};
-
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Mutex, MutexGuard},
+};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
@@ -20,7 +21,7 @@ impl<Inner> Voidable<Inner> {
     }
 
     pub fn lock<'v>(&'v self) -> Result<VoidableGuard<'v, Inner>, Top<VoidableError>> {
-        let guard = self.0.lock();
+        let guard = self.0.lock().unwrap();
         if guard.is_some() {
             Ok(VoidableGuard(guard))
         } else {
@@ -31,6 +32,7 @@ impl<Inner> Voidable<Inner> {
     pub fn void(&self) -> Inner {
         self.0
             .lock()
+            .unwrap()
             .take()
             .expect("called `Voidable::void` on an already voided `Voidable`")
     }

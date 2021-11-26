@@ -3,9 +3,10 @@ use crate::{
     net::Connector as NetConnector,
 };
 
-use parking_lot::Mutex;
-
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 pub struct ConnectDispatcher {
     connector: Arc<dyn NetConnector>,
@@ -34,7 +35,13 @@ impl ConnectDispatcher {
     }
 
     pub fn register(&self, context: ContextId) -> Connector {
-        if self.database.lock().contexts.insert(context.clone()) {
+        if self
+            .database
+            .lock()
+            .unwrap()
+            .contexts
+            .insert(context.clone())
+        {
             Connector::new(context, self.connector.clone(), self.database.clone())
         } else {
             panic!("called `register` twice for the same `context`");

@@ -7,11 +7,9 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use parking_lot::Mutex;
-
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use tokio::sync::mpsc::{self, Sender};
@@ -67,7 +65,7 @@ impl ListenDispatcher {
     pub fn register(&self, context: ContextId) -> Listener {
         let (inlet, outlet) = mpsc::channel(self.settings.channel_capacity);
 
-        let mut database = self.database.lock();
+        let mut database = self.database.lock().unwrap();
 
         match database.inlets.entry(context.clone()) {
             Entry::Vacant(entry) => {
@@ -109,7 +107,12 @@ impl ListenDispatcher {
             .await
             .pot(ServeError::ReceiveFailed, here!())?;
 
-        let inlet = database.lock().inlets.get(&context).map(Clone::clone);
+        let inlet = database
+            .lock()
+            .unwrap()
+            .inlets
+            .get(&context)
+            .map(Clone::clone);
 
         match inlet {
             Some(inlet) => {

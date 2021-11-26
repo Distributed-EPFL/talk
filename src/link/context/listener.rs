@@ -9,9 +9,7 @@ use crate::{
 
 use doomstack::Stack;
 
-use parking_lot::Mutex;
-
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc::Receiver;
 
@@ -53,6 +51,6 @@ impl NetListener for Listener {
 
 impl Drop for Listener {
     fn drop(&mut self) {
-        self.database.lock().inlets.remove(&self.context);
+        self.database.lock().unwrap().inlets.remove(&self.context);
     }
 }

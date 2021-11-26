@@ -8,9 +8,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack};
 
-use parking_lot::Mutex;
-
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct Connector {
     context: ContextId,
@@ -72,6 +70,6 @@ impl NetConnector for Connector {
 
 impl Drop for Connector {
     fn drop(&mut self) {
-        self.database.lock().contexts.remove(&self.context);
+        self.database.lock().unwrap().contexts.remove(&self.context);
     }
 }
