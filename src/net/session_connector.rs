@@ -222,11 +222,13 @@ mod tests {
             let (_, mut session) = listener.accept().await;
             assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
             session.send(&43u32).await.unwrap();
+            session.end();
         });
 
         let mut session = connector.connect(keys[1]).await.unwrap();
         session.send(&42u32).await.unwrap();
         assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+        session.end();
     }
 
     #[tokio::test]
@@ -245,6 +247,7 @@ mod tests {
                 let (_, mut session) = listener.accept().await;
                 assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                 session.send(&43u32).await.unwrap();
+                session.end();
             }
         });
 
@@ -252,6 +255,7 @@ mod tests {
             let mut session = connector.connect(keys[1]).await.unwrap();
             session.send(&42u32).await.unwrap();
             assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+            session.end();
         }
     }
 
@@ -271,6 +275,7 @@ mod tests {
                 let (_, mut session) = listener.accept().await;
                 assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                 session.send(&43u32).await.unwrap();
+                session.end();
             }
         });
 
@@ -279,6 +284,7 @@ mod tests {
                 let mut session = connector.connect(keys[1]).await.unwrap();
                 session.send(&42u32).await.unwrap();
                 assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+                session.end();
             }
 
             time::sleep(Duration::from_millis(10)).await;
@@ -309,6 +315,7 @@ mod tests {
                 let (id, mut session) = listener.accept().await;
                 assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                 session.send(&id).await.unwrap();
+                session.end();
             }
         });
 
@@ -324,6 +331,7 @@ mod tests {
                             let mut session = connector.connect(remote).await.unwrap();
                             session.send(&42u32).await.unwrap();
                             assert_eq!(session.receive::<Identity>().await.unwrap(), identity);
+                            session.end();
                         }
 
                         time::sleep(Duration::from_millis(10)).await;
@@ -360,6 +368,7 @@ mod tests {
                         let (id, mut session) = listener.accept().await;
                         assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                         session.send(&id).await.unwrap();
+                        session.end();
                     }
                 })
                 .collect::<FuturesUnordered<_>>()
@@ -379,6 +388,7 @@ mod tests {
                             let mut session = connector.connect(remote).await.unwrap();
                             session.send(&42u32).await.unwrap();
                             assert_eq!(session.receive::<Identity>().await.unwrap(), identity);
+                            session.end();
                         }
                         time::sleep(Duration::from_millis(10)).await;
                     }
@@ -421,6 +431,7 @@ mod tests {
                         let (id, mut session) = listener.accept().await;
                         assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                         session.send(&id).await.unwrap();
+                        session.end();
                     }
                 })
                 .collect::<FuturesUnordered<_>>()
@@ -447,6 +458,7 @@ mod tests {
                                             session.receive::<Identity>().await.unwrap(),
                                             identity
                                         );
+                                        session.end();
                                     }
 
                                     time::sleep(Duration::from_millis(50)).await;
@@ -484,6 +496,7 @@ mod tests {
                 let (_, mut session) = listener.accept().await;
                 assert_eq!(session.receive::<u32>().await.unwrap(), 42u32);
                 session.send(&43u32).await.unwrap();
+                session.end();
             }
         });
 
@@ -492,6 +505,7 @@ mod tests {
                 let mut session = connector.connect(keys[1]).await.unwrap();
                 session.send(&42u32).await.unwrap();
                 assert_eq!(session.receive::<u32>().await.unwrap(), 43u32);
+                session.end();
             }
 
             time::sleep(Duration::from_secs(100)).await;

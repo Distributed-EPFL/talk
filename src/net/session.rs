@@ -13,7 +13,7 @@ type ConnectionInlet = Sender<(Identity, SecureConnection)>;
 
 pub struct Session {
     remote: Identity,
-    connection: Option<SecureConnection>,
+    connection: SecureConnection,
     return_inlet: ConnectionInlet,
 }
 
@@ -25,63 +25,59 @@ impl Session {
     ) -> Self {
         Session {
             remote,
-            connection: Some(connection),
+            connection,
             return_inlet,
         }
     }
 
     pub fn configure(&mut self, settings: ConnectionSettings) {
-        self.connection.as_mut().unwrap().configure(settings)
+        self.connection.configure(settings)
     }
 
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
-        self.connection.as_mut().unwrap().send(message).await
+        self.connection.send(message).await
     }
 
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
-        self.connection.as_mut().unwrap().send_plain(message).await
+        self.connection.send_plain(message).await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
-        self.connection.as_mut().unwrap().send_raw(message).await
+        self.connection.send_raw(message).await
     }
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.connection.as_mut().unwrap().receive().await
+        self.connection.receive().await
     }
 
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.connection.as_mut().unwrap().receive_plain().await
+        self.connection.receive_plain().await
     }
 
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
-        self.connection.as_mut().unwrap().receive_raw().await
+        self.connection.receive_raw().await
     }
-}
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        let mut connection = self.connection.take().unwrap();
-        connection.configure(Default::default());
-
-        let _ = self.return_inlet.try_send((self.remote, connection));
+    pub fn end(mut self) {
+        self.connection.configure(Default::default());
+        let _ = self.return_inlet.try_send((self.remote, self.connection));
     }
 }
