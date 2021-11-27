@@ -22,7 +22,7 @@ use response::Response;
 pub use acknowledgement::Acknowledgement;
 pub use acknowledger::Acknowledger;
 pub use message::Message;
-pub use push_settings::PushSettings;
+pub use push_settings::{PartialPushSettings, PushSettings};
 pub use receiver::Receiver;
 pub use receiver_settings::ReceiverSettings;
 pub use sender::{Sender, SenderError};

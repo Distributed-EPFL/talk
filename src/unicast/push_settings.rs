@@ -11,6 +11,20 @@ pub struct PushSettings {
     pub retry_schedule: Arc<dyn SleepSchedule>,
 }
 
+#[derive(Debug, Clone)]
+pub struct PartialPushSettings {
+    pub retry_schedule: Arc<dyn SleepSchedule>,
+}
+
+impl PushSettings {
+    pub fn compose(stop_condition: Acknowledgement, partial_push_settings: PartialPushSettings) -> Self {
+        PushSettings {
+            stop_condition,
+            retry_schedule: partial_push_settings.retry_schedule
+        }
+    }
+}
+
 impl Default for PushSettings {
     fn default() -> Self {
         PushSettings {
@@ -20,6 +34,16 @@ impl Default for PushSettings {
                 2.,
                 Duration::from_secs(300),
             )),
+        }
+    }
+}
+
+impl Default for PartialPushSettings {
+    fn default() -> Self {
+        let push_settings = PushSettings::default();
+
+        PartialPushSettings {
+            retry_schedule: push_settings.retry_schedule,
         }
     }
 }
