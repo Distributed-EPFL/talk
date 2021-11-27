@@ -23,7 +23,7 @@ impl SleepSchedule for CappedExponential {
     fn next(&self, current: Duration) -> Duration {
         cmp::min(
             Duration::from_secs_f64(current.as_secs_f64() * self.growth), // Currently, `Duration` cannot be directly multiplied by `f64`
-            self.base,
+            self.cap,
         )
     }
 }
