@@ -17,10 +17,13 @@ pub struct PartialPushSettings {
 }
 
 impl PushSettings {
-    pub fn compose(stop_condition: Acknowledgement, partial_push_settings: PartialPushSettings) -> Self {
+    pub fn compose(
+        stop_condition: Acknowledgement,
+        partial_push_settings: PartialPushSettings,
+    ) -> Self {
         PushSettings {
             stop_condition,
-            retry_schedule: partial_push_settings.retry_schedule
+            retry_schedule: partial_push_settings.retry_schedule,
         }
     }
 }
