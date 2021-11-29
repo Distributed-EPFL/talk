@@ -7,10 +7,12 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
+use parking_lot::Mutex;
+
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use tokio::{
@@ -108,7 +110,7 @@ impl Server {
             .pot(ServeError::ConnectionError, here!())?;
 
         let response = {
-            let mut database = database.lock().unwrap();
+            let mut database = database.lock();
 
             match request {
                 Request::PublishCard(card, shard)
