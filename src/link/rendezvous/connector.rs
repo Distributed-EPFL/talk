@@ -8,12 +8,9 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
 
-use std::{
-    collections::HashMap,
-    io,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+
+use std::{collections::HashMap, io, net::SocketAddr, sync::Arc};
 
 pub struct Connector {
     client: Client,
@@ -110,7 +107,6 @@ impl Connector {
     fn get_address(&self, identity: Identity) -> Option<SocketAddr> {
         self.database
             .lock()
-            .unwrap()
             .cache
             .get(&identity)
             .map(Clone::clone)
@@ -119,7 +115,6 @@ impl Connector {
     fn cache_address(&self, identity: Identity, address: SocketAddr) {
         self.database
             .lock()
-            .unwrap()
             .cache
             .insert(identity, address);
     }

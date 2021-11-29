@@ -10,9 +10,11 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
+use parking_lot::Mutex;
+
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Instant,
 };
 
@@ -212,7 +214,7 @@ where
     }
 
     fn post(&self, remote: Identity, mut request: Request<Message>) -> AcknowledgementOutlet {
-        let mut database = self.database.lock().unwrap();
+        let mut database = self.database.lock();
 
         loop {
             let link = match database.links.entry(remote) {
@@ -239,7 +241,7 @@ where
 
     async fn keep_alive(database: Arc<Mutex<Database<Message>>>, settings: SenderSettings) {
         loop {
-            database.lock().unwrap().links.retain(|_, link| {
+            database.lock().links.retain(|_, link| {
                 (link.last_message.elapsed() <= settings.link_timeout)
                     && link.caster.post(Request::KeepAlive).is_ok()
             });
