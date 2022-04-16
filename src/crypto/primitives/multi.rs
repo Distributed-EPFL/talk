@@ -188,6 +188,48 @@ impl Signature {
         Ok(Signature(signature))
     }
 
+    pub fn fast_aggregate<I>(signatures: I) -> Result<Self, Top<MultiError>>
+    where
+        I: IntoIterator<Item = Signature>,
+    {
+        let signatures = signatures.into_iter().collect::<Vec<_>>();
+
+        let signatures = signatures
+            .iter()
+            .map(|signature| &signature.0)
+            .collect::<Vec<_>>();
+
+        let signature = if signatures.len() > 64 * 10 {
+            let aggregate_sigs = signatures
+                .par_chunks(signatures.len() / 64)
+                .map(|sigs| {
+                    BlstAggregateSignature::aggregate(&sigs, false)
+                        .map_err(Into::<BlstError>::into)
+                        .map_err(MultiError::aggregate_failed)
+                        .map_err(Doom::into_top)
+                        .spot(here!())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            aggregate_sigs
+                .into_iter()
+                .reduce(|mut full_sig, next_sig| {
+                    full_sig.add_aggregate(&next_sig);
+                    next_sig
+                })
+                .unwrap()
+        } else {
+            BlstAggregateSignature::aggregate(&signatures[..], true)
+                .map_err(Into::<BlstError>::into)
+                .map_err(MultiError::aggregate_failed)
+                .map_err(Doom::into_top)
+                .spot(here!())?
+        };
+
+        let signature = signature.to_signature();
+        Ok(Signature(signature))
+    }
+
     /// Verifies the `Signature` of a message against a set of `PublicKey`s.
     ///
     /// Verification succeeds if and only (i) for every PublicKey, the message
