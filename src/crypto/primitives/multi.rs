@@ -315,7 +315,7 @@ impl Signature {
         };
 
         info!(
-            "Multisig: Aggregated {} multisig pkeys in {} ms",
+            "Multisig: Aggregated {} multisig pkeys in {} us",
             num,
             start.elapsed().as_micros()
         );
@@ -336,7 +336,7 @@ impl Signature {
             .spot(here!());
 
         info!(
-            "Multisig: verified multisig for {} in {} ms",
+            "Multisig: verified multisig for {} in {} us",
             num,
             start.elapsed().as_micros()
         );
