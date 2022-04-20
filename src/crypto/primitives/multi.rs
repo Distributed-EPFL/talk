@@ -317,7 +317,7 @@ impl Signature {
         info!(
             "Multisig: Aggregated {} multisig pkeys in {} ms",
             num,
-            start.elapsed().as_millis()
+            start.elapsed().as_micros()
         );
 
         let start = Instant::now();
@@ -338,7 +338,7 @@ impl Signature {
         info!(
             "Multisig: verified multisig for {} in {} ms",
             num,
-            start.elapsed().as_millis()
+            start.elapsed().as_micros()
         );
 
         result
