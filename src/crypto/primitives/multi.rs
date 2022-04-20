@@ -2,6 +2,7 @@ use blst::min_sig::{
     AggregatePublicKey as BlstAggregatePublicKey, AggregateSignature as BlstAggregateSignature,
     PublicKey as BlstPublicKey, SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
+use log::info;
 use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 
 use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
@@ -16,7 +17,7 @@ use std::{
     cmp::{Ord, Ordering, PartialOrd},
     fmt,
     fmt::{Debug, Formatter},
-    hash::{Hash, Hasher},
+    hash::{Hash, Hasher}, time::Instant,
 };
 
 pub const KEYPAIR_LENGTH: usize = 128;
@@ -270,10 +271,14 @@ impl Signature {
         P: IntoIterator<Item = PublicKey>,
         M: Serialize,
     {
+        let start = Instant::now();
+
         let signers = signers
             .into_iter()
             .map(|signer| signer.0)
             .collect::<Vec<_>>();
+
+        let num = signers.len();
 
         let signers = signers.iter().collect::<Vec<_>>();
 
@@ -309,7 +314,16 @@ impl Signature {
                 .spot(here!())?
         };
 
-        self.0
+        info!(
+            "Multisig: Aggregated {} multisig pkeys in {} ms",
+            num,
+            start.elapsed().as_millis()
+        );
+
+        let start = Instant::now();
+    
+
+        let result = self.0
             .fast_aggregate_verify_pre_aggregated(
                 true,
                 &message[..],
@@ -319,7 +333,15 @@ impl Signature {
             .into_result()
             .map_err(MultiError::verify_failed)
             .map_err(Doom::into_top)
-            .spot(here!())
+            .spot(here!());
+
+        info!(
+            "Multisig: verified multisig for {} in {} ms",
+            num,
+            start.elapsed().as_millis()
+        );
+
+        result
     }
 }
 
