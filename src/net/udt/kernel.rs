@@ -1,6 +1,6 @@
 use super::connection::UdtConnection;
 use std::net::SocketAddr;
-use std::time::Duration;
+// use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use udt::Epoll;
 
@@ -23,7 +23,6 @@ impl UdtKernel {
         })
         .await
         .unwrap();
-
         connection
     }
 
