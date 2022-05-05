@@ -1,8 +1,10 @@
 use clap::Parser;
-use utp::{UtpSocket, UtpListener};
 use std::net::SocketAddr;
+use libutp_rs::{UtpContext, UtpSocket};
+use futures::StreamExt;
+use tokio::io::AsyncReadExt;
 
-const MESSAGE_SIZE: usize = 100_000;
+const BUFFER_SIZE: usize = 10_000_000;
 
 #[derive(Parser)]
 struct Args {
@@ -10,28 +12,42 @@ struct Args {
     port: u16
 }
 
-fn handle_client(mut socket: UtpSocket) {
-    let mut buf = vec![0u8; MESSAGE_SIZE];
+async fn handle_client(mut socket: UtpSocket) {
+    let mut buf = Vec::with_capacity(BUFFER_SIZE);
+    let mut total = 0;
     loop {
-        let (received, _addr) = socket.recv_from(&mut buf).expect(
-            &format!("Failed to receive message from {}", socket.peer_addr().unwrap())
+        let read = socket.read_buf(&mut buf).await.expect(
+            &format!("Failed to receive message")
         );
-    }
-}
-
-fn main() {
-    let args = Args::parse();
-
-    let listener = UtpListener::bind(SocketAddr::new("0.0.0.0".parse().unwrap(), args.port))
-        .expect("error binding socket");
-        
-    println!("Listing on {}. Waiting for connections...", listener.local_addr().unwrap());
-    for connection in listener.incoming() {
-        // Spawn a new handler for each new connection
-        if let Ok((socket, _src)) = connection {
-            println!("New connection from {}", socket.peer_addr().unwrap());
-            std::thread::spawn(move || handle_client(socket));
+        if read == 0 {
+            break
+        }
+        total += read;
+        if buf.len() > 100_000 {
+            buf.truncate(0);
         }
     }
+    println!("Bytes read: {}", total);
+}
 
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+
+    let addr = SocketAddr::new("0.0.0.0".parse().unwrap(), args.port);
+
+    let context = UtpContext::bind(addr)
+        .expect("error binding socket");
+
+    let mut listener = context.listener();
+        
+    println!("Listing on {}. Waiting for connections...", addr);
+    loop {
+        let socket = listener.next().await.unwrap().unwrap();
+        // Spawn a new handler for each new connection
+        println!("New connection from {}", socket.peer_addr());
+        tokio::spawn(async move {
+            handle_client(socket).await
+        });
+    }
 }
