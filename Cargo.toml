@@ -26,11 +26,11 @@ tokio = { version = "1.12.0", features = [ "macros", "net", "rt-multi-thread", "
 async-trait = { version = "0.1.51" }
 futures = { version = "0.3" }
 
-udt = { git = "ssh://git@github.com/amatissart/udt-rs.git", branch = "fix-submodule" }
-libudt4-sys = { git = "ssh://git@github.com/amatissart/udt-rs.git", branch = "fix-submodule" }
+udt = { git = "https://github.com/amatissart/udt-rs", branch = "fix-submodule" }
+libudt4-sys = { git = "https://github.com/amatissart/udt-rs", branch = "fix-submodule" }
 
-# utp = {git = "ssh://git@github.com/meqif/rust-utp.git" }
-# utp = {git = "ssh://git@github.com/0xSiO/utp-rs.git" }
+# utp = {git = "https://github.com/meqif/rust-utp" }
+# utp = {git = "https://github.com/0xSiO/utp-rs" }
 clap = { version = "3.1.15", features = ["derive"] }
  
 libutp-rs = "1.0.0"
