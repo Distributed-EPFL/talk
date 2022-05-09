@@ -11,7 +11,10 @@ struct Args {
     server_ip: String,
 
     #[clap(short, default_value_t = 9000)]
-    port: u16
+    port: u16,
+
+    #[clap(long)]
+    mtu: Option<u16>
 }
 
 const NB_MESSAGES: usize = 10_000;
@@ -23,8 +26,12 @@ async fn main() {
     let args = Args::parse();
 
     let remote_addr = SocketAddr::new(args.server_ip.parse().unwrap(), args.port);
-    let mut socket = UtpContext::bind("127.0.0.1:0".parse().unwrap()).unwrap()
-        .connect(remote_addr).await.expect("Error connecting to remote peer");
+
+    let context = UtpContext::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    if let Some(mtu) = args.mtu {
+        context.set_udp_mtu(mtu);
+    }
+    let mut socket = context.connect(remote_addr).await.expect("Error connecting to remote peer");
 
     let start = Instant::now();
 

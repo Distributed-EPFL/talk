@@ -9,7 +9,10 @@ const BUFFER_SIZE: usize = 10_000_000;
 #[derive(Parser)]
 struct Args {
     #[clap(short, default_value_t = 9000)]
-    port: u16
+    port: u16,
+
+    #[clap(long)]
+    mtu: Option<u16>
 }
 
 async fn handle_client(mut socket: UtpSocket) {
@@ -38,6 +41,10 @@ async fn main() {
 
     let context = UtpContext::bind(addr)
         .expect("error binding socket");
+
+    if let Some(mtu) = args.mtu {
+        context.set_udp_mtu(mtu);
+    }
 
     let mut listener = context.listener();
         
