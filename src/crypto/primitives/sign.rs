@@ -16,8 +16,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+pub use ed25519_dalek::{KEYPAIR_LENGTH, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH, SIGNATURE_LENGTH};
 
+#[derive(Serialize, Deserialize)]
 pub struct KeyPair(EdKeyPair);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -349,5 +350,17 @@ mod tests {
         let signature: Signature = bincode::deserialize(&signature).unwrap();
 
         assert!(signature.verify_raw(keypair.public(), &message).is_err());
+    }
+
+    #[test]
+    fn serialize_keypair() {
+        let original = KeyPair::random();
+        let serialized = bincode::serialize(&original).unwrap();
+        let deserialized = bincode::deserialize::<KeyPair>(serialized.as_slice()).unwrap();
+
+        assert_eq!(original.0.to_bytes(), deserialized.0.to_bytes());
+
+        let signature = deserialized.sign_raw(&42u64).unwrap();
+        signature.verify_raw(original.public(), &42u64).unwrap();
     }
 }
