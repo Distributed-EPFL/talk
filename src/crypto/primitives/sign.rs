@@ -360,7 +360,8 @@ mod tests {
 
         assert_eq!(original.0.to_bytes(), deserialized.0.to_bytes());
 
-        let signature = deserialized.sign_raw(&42u64).unwrap();
-        signature.verify_raw(original.public(), &42u64).unwrap();
+        let message = 42u64;
+        let signature = deserialized.sign_raw(&message).unwrap();
+        signature.verify_raw(original.public(), &message).unwrap();
     }
 }

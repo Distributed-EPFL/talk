@@ -579,7 +579,8 @@ mod tests {
         assert_eq!(original.public.to_bytes(), deserialized.public.to_bytes());
         assert_eq!(original.secret.to_bytes(), deserialized.secret.to_bytes());
 
-        let signature = deserialized.sign_raw(&42u64).unwrap();
-        signature.verify_raw([original.public()], &42u64).unwrap();
+        let message = 42u64;
+        let signature = deserialized.sign_raw(&message).unwrap();
+        signature.verify_raw([original.public()], &message).unwrap();
     }
 }
