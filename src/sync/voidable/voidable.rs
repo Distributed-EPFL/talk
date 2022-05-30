@@ -1,8 +1,6 @@
 use parking_lot::{Mutex, MutexGuard};
 
-use std::{
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use doomstack::{here, Doom, ResultExt, Top};
 

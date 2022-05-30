@@ -171,10 +171,8 @@ where
 
             match response {
                 Response::Acknowledgement(sequence, acknowledgement) => {
-                    if let Some(acknowledgement_inlet) = database
-                        .lock()
-                        .acknowledgement_inlets
-                        .remove(&sequence)
+                    if let Some(acknowledgement_inlet) =
+                        database.lock().acknowledgement_inlets.remove(&sequence)
                     {
                         let _ = acknowledgement_inlet.send(Ok(acknowledgement));
                     }
