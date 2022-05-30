@@ -20,6 +20,7 @@ use std::{
 
 pub const KEYPAIR_LENGTH: usize = 128;
 pub const PUBLIC_KEY_LENGTH: usize = 96;
+pub const SECRET_KEY_LENGTH: usize = 32;
 pub const SIGNATURE_LENGTH: usize = 48;
 
 const BLST_DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
@@ -322,6 +323,66 @@ impl Ord for PublicKey {
     }
 }
 
+impl Serialize for KeyPair {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut keypair_bytes = [0u8; (PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH)];
+        let (public_bytes, secret_bytes) = keypair_bytes.split_at_mut(PUBLIC_KEY_LENGTH);
+
+        public_bytes.copy_from_slice(&self.public.to_bytes());
+        secret_bytes.copy_from_slice(&self.secret.to_bytes());
+
+        serializer.serialize_bytes(&keypair_bytes)
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyPair {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{Error, Visitor};
+
+        struct ByteVisitor;
+
+        impl<'de> Visitor<'de> for ByteVisitor {
+            type Value = (BlstPublicKey, BlstSecretKey);
+
+            fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+                f.write_str(
+                    "byte representation of a bls keypair (concatenated public and secret key)",
+                )
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                if v.len() < (PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH) {
+                    return Err(E::custom("insufficient bytes for a bls keypair"));
+                }
+
+                let (public_bytes, secret_bytes) = v.split_at(PUBLIC_KEY_LENGTH);
+
+                let public = BlstPublicKey::from_bytes(public_bytes)
+                    .map_err(Into::<BlstError>::into)
+                    .map_err(E::custom)?;
+
+                let secret = BlstSecretKey::from_bytes(secret_bytes)
+                    .map_err(Into::<BlstError>::into)
+                    .map_err(E::custom)?;
+
+                Ok((public, secret))
+            }
+        }
+
+        let (public, secret) = deserializer.deserialize_bytes(ByteVisitor)?;
+        Ok(Self { public, secret })
+    }
+}
+
 impl Serialize for PublicKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -507,5 +568,18 @@ mod tests {
                 .verify_raw([alice.public(), bob.public(), carl.public()], &message,)
                 .is_err());
         }
+    }
+
+    #[test]
+    fn serialize_keypair() {
+        let original = KeyPair::random();
+        let serialized = bincode::serialize(&original).unwrap();
+        let deserialized = bincode::deserialize::<KeyPair>(serialized.as_slice()).unwrap();
+
+        assert_eq!(original.public.to_bytes(), deserialized.public.to_bytes());
+        assert_eq!(original.secret.to_bytes(), deserialized.secret.to_bytes());
+
+        let signature = deserialized.sign_raw(&42u64).unwrap();
+        signature.verify_raw([original.public()], &42u64).unwrap();
     }
 }
