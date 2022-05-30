@@ -8,6 +8,8 @@ use crate::crypto::{
 
 use doomstack::Top;
 
+use serde::{Deserialize, Serialize};
+
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -15,6 +17,7 @@ pub struct KeyChain {
     pub(in crate::crypto) keypairs: Arc<KeyPairs>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(in crate::crypto) struct KeyPairs {
     pub(in crate::crypto) sign: SignKeyPair,
     pub(in crate::crypto) multi: MultiKeyPair,
