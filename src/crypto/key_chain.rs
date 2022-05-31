@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KeyChain {
     pub(in crate::crypto) keypairs: Arc<KeyPairs>,
 }
