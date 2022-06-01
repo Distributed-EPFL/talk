@@ -18,9 +18,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub const PUBLIC_KEY_LENGTH: usize = 192;
+pub const PUBLIC_KEY_LENGTH: usize = 96;
 pub const SECRET_KEY_LENGTH: usize = 32;
-pub const SIGNATURE_LENGTH: usize = 96;
+pub const SIGNATURE_LENGTH: usize = 48;
 
 pub const KEYPAIR_LENGTH: usize = PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH;
 
@@ -79,13 +79,13 @@ impl KeyPair {
 
         let (public_bytes, secret_bytes) = bytes.split_at(PUBLIC_KEY_LENGTH);
 
-        let public = BlstPublicKey::deserialize(public_bytes)
+        let public = BlstPublicKey::from_bytes(public_bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_public_key)
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        let secret = BlstSecretKey::deserialize(secret_bytes)
+        let secret = BlstSecretKey::from_bytes(secret_bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_secret_key)
             .map_err(Doom::into_top)
@@ -102,8 +102,8 @@ impl KeyPair {
         let mut keypair_bytes = [0u8; KEYPAIR_LENGTH];
         let (public_bytes, secret_bytes) = keypair_bytes.split_at_mut(PUBLIC_KEY_LENGTH);
 
-        public_bytes.copy_from_slice(&self.public.serialize());
-        secret_bytes.copy_from_slice(&self.secret.serialize());
+        public_bytes.copy_from_slice(&self.public.to_bytes());
+        secret_bytes.copy_from_slice(&self.secret.to_bytes());
 
         keypair_bytes
     }
@@ -151,7 +151,7 @@ impl PublicKey {
             return MultiError::IncorrectBufferSize.fail().spot(here!());
         }
 
-        let public_key = BlstPublicKey::deserialize(bytes)
+        let public_key = BlstPublicKey::from_bytes(bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_public_key)
             .map_err(Doom::into_top)
@@ -161,7 +161,7 @@ impl PublicKey {
     }
 
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        self.0.serialize()
+        self.0.to_bytes()
     }
 }
 
@@ -171,7 +171,7 @@ impl Signature {
             return MultiError::IncorrectBufferSize.fail().spot(here!());
         }
 
-        let signature = BlstSignature::deserialize(bytes)
+        let signature = BlstSignature::from_bytes(bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_signature)
             .map_err(Doom::into_top)
@@ -181,7 +181,7 @@ impl Signature {
     }
 
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0.serialize()
+        self.0.to_bytes()
     }
 
     /// Aggregates a set of `Signature`s into a single `Signature`
