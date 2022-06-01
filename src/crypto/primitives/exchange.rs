@@ -67,6 +67,12 @@ impl PublicKey {
     }
 }
 
+impl SharedKey {
+    pub(in crate::crypto::primitives) fn to_bytes(&self) -> [u8; SHARED_KEY_LENGTH] {
+        self.0.to_bytes()
+    }
+}
+
 impl Debug for PublicKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
         let bytes = self
@@ -86,12 +92,6 @@ impl Debug for PublicKey {
         } else {
             write!(f, "PublicKey({})", bytes)
         }
-    }
-}
-
-impl SharedKey {
-    pub(in crate::crypto::primitives) fn to_bytes(&self) -> [u8; SHARED_KEY_LENGTH] {
-        self.0.to_bytes()
     }
 }
 
