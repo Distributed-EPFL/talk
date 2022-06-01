@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
+    convert::TryInto,
     fmt,
     fmt::{Debug, Formatter},
     hash::{Hash, Hasher},
@@ -29,9 +30,16 @@ pub struct Signature(EdSignature);
 
 #[derive(Doom)]
 pub enum SignError {
+    #[doom(description("Incorrect buffer size"))]
+    IncorrectBufferSize,
     #[doom(description("Malformed public key: {}", source))]
     #[doom(wrap(malformed_public_key))]
     MalformedPublicKey {
+        source: ed25519_dalek::SignatureError,
+    },
+    #[doom(description("Malformed keypair: {}", source))]
+    #[doom(wrap(malformed_keypair))]
+    MalformedKeyPair {
         source: ed25519_dalek::SignatureError,
     },
     #[doom(description("Failed to serialize: {}", source))]
@@ -57,9 +65,26 @@ impl KeyPair {
         KeyPair(keypair)
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<SignError>> {
+        if bytes.len() != KEYPAIR_LENGTH {
+            return SignError::IncorrectBufferSize.fail().spot(here!());
+        }
+
+        let keypair = EdKeyPair::from_bytes(bytes)
+            .map_err(SignError::malformed_keypair)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        Ok(KeyPair(keypair))
+    }
+
     /// Returns this `KeyPair`'s `PublicKey`.
     pub fn public(&self) -> PublicKey {
         PublicKey(self.0.public)
+    }
+
+    pub fn to_bytes(&self) -> [u8; KEYPAIR_LENGTH] {
+        self.0.to_bytes()
     }
 
     /// Signs a message using this `KeyPair`.
@@ -103,8 +128,12 @@ impl KeyPair {
 /// Used to validate a signature on a message. See the documentation
 /// for [`Signature`] for details.
 impl PublicKey {
-    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Result<Self, Top<SignError>> {
-        let public_key = EdPublicKey::from_bytes(&bytes)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<SignError>> {
+        if bytes.len() != PUBLIC_KEY_LENGTH {
+            return SignError::IncorrectBufferSize.fail().spot(here!());
+        }
+
+        let public_key = EdPublicKey::from_bytes(bytes)
             .map_err(SignError::malformed_public_key)
             .map_err(Doom::into_top)
             .spot(here!())?;
@@ -119,8 +148,13 @@ impl PublicKey {
 
 /// An ed25519 signature of a message.
 impl Signature {
-    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Self {
-        Signature(bytes.into())
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<SignError>> {
+        Ok(Signature(
+            bytes
+                .try_into()
+                .map_err(|_| SignError::IncorrectBufferSize.into_top())
+                .spot(here!())?,
+        ))
     }
 
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
