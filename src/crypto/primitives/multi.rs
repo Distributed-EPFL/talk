@@ -18,10 +18,11 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub const KEYPAIR_LENGTH: usize = 128;
-pub const PUBLIC_KEY_LENGTH: usize = 96;
+pub const PUBLIC_KEY_LENGTH: usize = 192;
 pub const SECRET_KEY_LENGTH: usize = 32;
-pub const SIGNATURE_LENGTH: usize = 48;
+pub const SIGNATURE_LENGTH: usize = 96;
+
+pub const KEYPAIR_LENGTH: usize = PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH;
 
 const BLST_DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
 
@@ -41,9 +42,14 @@ pub enum MultiError {
     #[doom(description("Failed to `aggregate` signatures: {}", source))]
     #[doom(wrap(aggregate_failed))]
     AggregateFailed { source: BlstError },
+    #[doom(description("Incorrect buffer size"))]
+    IncorrectBufferSize,
     #[doom(description("Malformed public key: {}", source))]
     #[doom(wrap(malformed_public_key))]
     MalformedPublicKey { source: BlstError },
+    #[doom(description("Malformed secret key: {}", source))]
+    #[doom(wrap(malformed_secret_key))]
+    MalformedSecretKey { source: BlstError },
     #[doom(description("Malformed signature: {}", source))]
     #[doom(wrap(malformed_signature))]
     MalformedSignature { source: BlstError },
@@ -66,8 +72,40 @@ impl KeyPair {
         KeyPair { public, secret }
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<MultiError>> {
+        if bytes.len() != KEYPAIR_LENGTH {
+            return MultiError::IncorrectBufferSize.fail().spot(here!());
+        }
+
+        let (public_bytes, secret_bytes) = bytes.split_at(PUBLIC_KEY_LENGTH);
+
+        let public = BlstPublicKey::deserialize(public_bytes)
+            .map_err(Into::<BlstError>::into)
+            .map_err(MultiError::malformed_public_key)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        let secret = BlstSecretKey::deserialize(secret_bytes)
+            .map_err(Into::<BlstError>::into)
+            .map_err(MultiError::malformed_secret_key)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        Ok(KeyPair { public, secret })
+    }
+
     pub fn public(&self) -> PublicKey {
         PublicKey(self.public)
+    }
+
+    pub fn to_bytes(&self) -> [u8; KEYPAIR_LENGTH] {
+        let mut keypair_bytes = [0u8; KEYPAIR_LENGTH];
+        let (public_bytes, secret_bytes) = keypair_bytes.split_at_mut(PUBLIC_KEY_LENGTH);
+
+        public_bytes.copy_from_slice(&self.public.serialize());
+        secret_bytes.copy_from_slice(&self.secret.serialize());
+
+        keypair_bytes
     }
 
     /// Signs a message using this `KeyPair`.
@@ -108,8 +146,12 @@ impl KeyPair {
 }
 
 impl PublicKey {
-    pub fn from_bytes(bytes: [u8; PUBLIC_KEY_LENGTH]) -> Result<Self, Top<MultiError>> {
-        let public_key = BlstPublicKey::from_bytes(&bytes)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<MultiError>> {
+        if bytes.len() != PUBLIC_KEY_LENGTH {
+            return MultiError::IncorrectBufferSize.fail().spot(here!());
+        }
+
+        let public_key = BlstPublicKey::deserialize(bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_public_key)
             .map_err(Doom::into_top)
@@ -119,13 +161,17 @@ impl PublicKey {
     }
 
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        self.0.to_bytes()
+        self.0.serialize()
     }
 }
 
 impl Signature {
-    pub fn from_bytes(bytes: [u8; SIGNATURE_LENGTH]) -> Result<Self, Top<MultiError>> {
-        let signature = BlstSignature::from_bytes(&bytes)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Top<MultiError>> {
+        if bytes.len() != SIGNATURE_LENGTH {
+            return MultiError::IncorrectBufferSize.fail().spot(here!());
+        }
+
+        let signature = BlstSignature::deserialize(bytes)
             .map_err(Into::<BlstError>::into)
             .map_err(MultiError::malformed_signature)
             .map_err(Doom::into_top)
@@ -135,7 +181,7 @@ impl Signature {
     }
 
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0.to_bytes()
+        self.0.serialize()
     }
 
     /// Aggregates a set of `Signature`s into a single `Signature`
@@ -298,7 +344,7 @@ impl Hash for PublicKey {
     where
         H: Hasher,
     {
-        self.0.to_bytes().hash(state)
+        self.to_bytes().hash(state)
     }
 }
 
@@ -307,7 +353,7 @@ impl Hash for Signature {
     where
         H: Hasher,
     {
-        self.0.to_bytes().hash(state)
+        self.to_bytes().hash(state)
     }
 }
 
@@ -328,13 +374,7 @@ impl Serialize for KeyPair {
     where
         S: Serializer,
     {
-        let mut keypair_bytes = [0u8; (PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH)];
-        let (public_bytes, secret_bytes) = keypair_bytes.split_at_mut(PUBLIC_KEY_LENGTH);
-
-        public_bytes.copy_from_slice(&self.public.to_bytes());
-        secret_bytes.copy_from_slice(&self.secret.to_bytes());
-
-        serializer.serialize_bytes(&keypair_bytes)
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 
@@ -348,7 +388,7 @@ impl<'de> Deserialize<'de> for KeyPair {
         struct ByteVisitor;
 
         impl<'de> Visitor<'de> for ByteVisitor {
-            type Value = (BlstPublicKey, BlstSecretKey);
+            type Value = KeyPair;
 
             fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str(
@@ -360,26 +400,11 @@ impl<'de> Deserialize<'de> for KeyPair {
             where
                 E: Error,
             {
-                if v.len() < (PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH) {
-                    return Err(E::custom("insufficient bytes for a bls keypair"));
-                }
-
-                let (public_bytes, secret_bytes) = v.split_at(PUBLIC_KEY_LENGTH);
-
-                let public = BlstPublicKey::from_bytes(public_bytes)
-                    .map_err(Into::<BlstError>::into)
-                    .map_err(E::custom)?;
-
-                let secret = BlstSecretKey::from_bytes(secret_bytes)
-                    .map_err(Into::<BlstError>::into)
-                    .map_err(E::custom)?;
-
-                Ok((public, secret))
+                KeyPair::from_bytes(v).map_err(E::custom)
             }
         }
 
-        let (public, secret) = deserializer.deserialize_bytes(ByteVisitor)?;
-        Ok(Self { public, secret })
+        deserializer.deserialize_bytes(ByteVisitor)
     }
 }
 
@@ -388,7 +413,7 @@ impl Serialize for PublicKey {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(&self.0.to_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 
@@ -402,7 +427,7 @@ impl<'de> Deserialize<'de> for PublicKey {
         struct ByteVisitor;
 
         impl<'de> Visitor<'de> for ByteVisitor {
-            type Value = BlstPublicKey;
+            type Value = PublicKey;
 
             fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("byte representation of a bls public key")
@@ -412,13 +437,11 @@ impl<'de> Deserialize<'de> for PublicKey {
             where
                 E: Error,
             {
-                BlstPublicKey::from_bytes(v)
-                    .map_err(Into::<BlstError>::into)
-                    .map_err(E::custom)
+                PublicKey::from_bytes(v).map_err(E::custom)
             }
         }
 
-        Ok(Self(deserializer.deserialize_bytes(ByteVisitor)?))
+        deserializer.deserialize_bytes(ByteVisitor)
     }
 }
 
@@ -427,7 +450,7 @@ impl Serialize for Signature {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(&self.0.to_bytes())
+        serializer.serialize_bytes(&self.to_bytes())
     }
 }
 
@@ -441,7 +464,7 @@ impl<'de> Deserialize<'de> for Signature {
         struct ByteVisitor;
 
         impl<'de> Visitor<'de> for ByteVisitor {
-            type Value = BlstSignature;
+            type Value = Signature;
 
             fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("byte representation of a bls public key")
@@ -451,13 +474,11 @@ impl<'de> Deserialize<'de> for Signature {
             where
                 E: Error,
             {
-                BlstSignature::from_bytes(v)
-                    .map_err(Into::<BlstError>::into)
-                    .map_err(E::custom)
+                Signature::from_bytes(v).map_err(E::custom)
             }
         }
 
-        Ok(Self(deserializer.deserialize_bytes(ByteVisitor)?))
+        deserializer.deserialize_bytes(ByteVisitor)
     }
 }
 
