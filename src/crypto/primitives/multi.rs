@@ -127,7 +127,7 @@ impl KeyPair {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     [alice.public()],
+    ///     [&alice.public()],
     ///     &message
     /// ).is_ok());
     /// ```
@@ -265,21 +265,19 @@ impl Signature {
     /// .unwrap();
     ///
     /// assert!(signature.verify_raw(
-    ///     [alice.public(), bob.public()],
+    ///     [&alice.public(), &bob.public()],
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn verify_raw<P, M>(&self, signers: P, message: &M) -> Result<(), Top<MultiError>>
+    pub fn verify_raw<'p, P, M>(&self, signers: P, message: &M) -> Result<(), Top<MultiError>>
     where
-        P: IntoIterator<Item = PublicKey>,
+        P: IntoIterator<Item = &'p PublicKey>,
         M: Serialize,
     {
         let signers = signers
             .into_iter()
-            .map(|signer| signer.0)
+            .map(|signer| &signer.0)
             .collect::<Vec<_>>();
-
-        let signers = signers.iter().collect::<Vec<_>>();
 
         let message = bincode::serialize(message)
             .map_err(MultiError::serialize_failed)
@@ -492,7 +490,7 @@ mod tests {
         let message: u32 = 1234;
         let signature = keypair.sign_raw(&message).unwrap();
 
-        signature.verify_raw([keypair.public()], &message).unwrap();
+        signature.verify_raw([&keypair.public()], &message).unwrap();
     }
 
     #[test]
@@ -503,7 +501,7 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(signature.verify_raw([keypair.public()], &message).is_err());
+        assert!(signature.verify_raw([&keypair.public()], &message).is_err());
     }
 
     #[test]
@@ -518,7 +516,9 @@ mod tests {
 
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
-            assert!(signature.verify_raw([keypair.public()], &message,).is_err());
+            assert!(signature
+                .verify_raw([&keypair.public()], &message,)
+                .is_err());
         }
     }
 
@@ -538,7 +538,7 @@ mod tests {
             Signature::aggregate([alice_signature, bob_signature, carl_signature]).unwrap();
 
         signature
-            .verify_raw([alice.public(), bob.public(), carl.public()], &message)
+            .verify_raw([&alice.public(), &bob.public(), &carl.public()], &message)
             .unwrap();
     }
 
@@ -560,7 +560,7 @@ mod tests {
         let message: u32 = 1235;
 
         assert!(signature
-            .verify_raw([alice.public(), bob.public(), carl.public()], &message,)
+            .verify_raw([&alice.public(), &bob.public(), &carl.public()], &message,)
             .is_err());
     }
 
@@ -586,7 +586,7 @@ mod tests {
         if let Ok(signature) = signature {
             // Sometimes at random, deserializing a tampered signature results itself in an `Err`
             assert!(signature
-                .verify_raw([alice.public(), bob.public(), carl.public()], &message,)
+                .verify_raw([&alice.public(), &bob.public(), &carl.public()], &message,)
                 .is_err());
         }
     }
@@ -602,6 +602,8 @@ mod tests {
 
         let message = 42u64;
         let signature = deserialized.sign_raw(&message).unwrap();
-        signature.verify_raw([original.public()], &message).unwrap();
+        signature
+            .verify_raw([&original.public()], &message)
+            .unwrap();
     }
 }

@@ -64,7 +64,7 @@ impl MultiSignature {
         S: Statement,
     {
         self.verify_raw(
-            cards.into_iter().map(|card| card.keys.multi),
+            cards.into_iter().map(|card| &card.keys.multi),
             &(S::SCOPE, S::HEADER, message),
         )
     }
