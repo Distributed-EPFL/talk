@@ -1,4 +1,4 @@
-use blst::min_sig::{
+use blst::min_pk::{
     AggregateSignature as BlstAggregateSignature, PublicKey as BlstPublicKey,
     SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
@@ -18,9 +18,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub const PUBLIC_KEY_LENGTH: usize = 96;
+pub const PUBLIC_KEY_LENGTH: usize = 48;
 pub const SECRET_KEY_LENGTH: usize = 32;
-pub const SIGNATURE_LENGTH: usize = 48;
+pub const SIGNATURE_LENGTH: usize = 96;
 
 pub const KEYPAIR_LENGTH: usize = PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH;
 
