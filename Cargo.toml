@@ -32,3 +32,5 @@ futures = { version = "0.3" }
 socket2 = { version = "0.4.4" }
 nix = { version = "0.24.2" }
 num_cpus = { version = "1.13" }
+
+tokio-udt = { git = "https://github.com/amatissart/tokio-udt", rev = "99545ed" }
