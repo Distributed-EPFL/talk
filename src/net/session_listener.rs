@@ -32,8 +32,8 @@ impl SessionListener {
     where
         L: Listener,
     {
-        let (connection_inlet, connection_outlet) = mpsc::channel(32); // TODO: Add settings
-        let (return_inlet, return_outlet) = mpsc::channel(32); // TODO: Add settings
+        let (connection_inlet, connection_outlet) = mpsc::channel(1024); // TODO: Add settings
+        let (return_inlet, return_outlet) = mpsc::channel(1024); // TODO: Add settings
 
         let fuse = Fuse::new();
 
