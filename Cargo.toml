@@ -26,4 +26,4 @@ tokio = { version = "1.12.0", features = [ "macros", "net", "rt-multi-thread", "
 async-trait = { version = "0.1.51" }
 futures = { version = "0.3" }
 
-tokio-udt = { git = "https://github.com/amatissart/tokio-udt", rev = "99545ed" }
+tokio-udt = "0.1.0-alpha.1"
