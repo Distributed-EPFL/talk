@@ -18,7 +18,7 @@ use tokio::time;
 const RENDEZVOUS: &str = "172.31.10.33:9000";
 
 const NODES: usize = 2;
-const WORKERS: usize = 1;
+const WORKERS: usize = 3;
 
 const BATCH_SIZE: usize = 4 * 1048576;
 const BATCHES_PER_SESSION: usize = 1;
@@ -95,8 +95,6 @@ async fn node() {
 async fn server(keychain: KeyChain) {
     println!("Running as server..");
 
-    let mut listener = Listener::new(RENDEZVOUS, keychain, Default::default()).await;
-
     let counter = Arc::new(RelaxedCounter::new(0));
 
     {
@@ -118,13 +116,20 @@ async fn server(keychain: KeyChain) {
         });
     }
 
-    loop {
-        let (_, connection) = listener.accept().await.unwrap();
+    for _ in 0..4 {
+        let mut listener = Listener::new(RENDEZVOUS, keychain.clone(), Default::default()).await;
         let counter = counter.clone();
 
         tokio::spawn(async move {
-            if let Err(error) = serve(connection, counter.as_ref()).await {
-                println!("{:?}", error);
+            loop {
+                let (_, connection) = listener.accept().await.unwrap();
+                let counter = counter.clone();
+
+                tokio::spawn(async move {
+                    if let Err(error) = serve(connection, counter.as_ref()).await {
+                        println!("{:?}", error);
+                    }
+                });
             }
         });
     }
