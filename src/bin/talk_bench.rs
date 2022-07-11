@@ -19,6 +19,7 @@ const RENDEZVOUS: &str = "172.31.10.33:9000";
 
 const NODES: usize = 2;
 const WORKERS: usize = 3;
+const SERVERS: usize = 4;
 
 const BATCH_SIZE: usize = 4 * 1048576;
 const BATCHES_PER_SESSION: usize = 1;
@@ -116,7 +117,7 @@ async fn server(keychain: KeyChain) {
         });
     }
 
-    for _ in 0..4 {
+    for _ in 0..SERVERS {
         let mut listener = Listener::new(RENDEZVOUS, keychain.clone(), Default::default()).await;
         let counter = counter.clone();
 
@@ -132,6 +133,10 @@ async fn server(keychain: KeyChain) {
                 });
             }
         });
+    }
+
+    loop {
+        time::sleep(Duration::from_secs(1)).await;
     }
 }
 
