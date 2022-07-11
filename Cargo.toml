@@ -27,4 +27,4 @@ async-trait = { version = "0.1.51" }
 futures = { version = "0.3" }
 
 atomic-counter = { version = "1.0.1" }
-
+serde_bytes = "*"

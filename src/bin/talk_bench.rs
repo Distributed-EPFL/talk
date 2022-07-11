@@ -3,6 +3,7 @@ use atomic_counter::{AtomicCounter, RelaxedCounter};
 use doomstack::{here, Doom, ResultExt, Top};
 
 use rand::prelude::*;
+use serde_bytes::ByteBuf;
 
 use std::{sync::Arc, time::Duration};
 
@@ -14,15 +15,15 @@ use talk::{
 
 use tokio::time;
 
-const RENDEZVOUS: &str = "127.0.0.2:9000";
+const RENDEZVOUS: &str = "172.31.10.33:9000";
 
 const NODES: usize = 2;
 const WORKERS: usize = 1;
 
-const BATCH_SIZE: usize = 1048576;
+const BATCH_SIZE: usize = 4 * 1048576;
 const BATCHES_PER_SESSION: usize = 1;
 
-type Message = u32;
+// type Message = u32;
 
 #[derive(Doom)]
 enum BandError {
@@ -134,8 +135,8 @@ async fn serve(
     counter: &RelaxedCounter,
 ) -> Result<(), Top<BandError>> {
     for _ in 0..BATCHES_PER_SESSION {
-        let buffer = connection
-            .receive_raw::<Vec<Message>>()
+        let buffer: ByteBuf = connection
+            .receive_raw()
             .await
             .pot(BandError::ConnectionError, here!())?;
 
@@ -158,7 +159,7 @@ async fn client(keychain: KeyChain, server: KeyCard) {
     let connector = Connector::new(RENDEZVOUS, keychain, Default::default());
     let connector = Arc::new(connector);
 
-    let buffer = (0..BATCH_SIZE).map(|_| random()).collect::<Vec<Message>>();
+    let buffer: ByteBuf = ByteBuf::from((0..BATCH_SIZE).map(|_| random()).collect::<Vec<_>>());
     let buffer = Arc::new(buffer);
 
     for _ in 0..WORKERS {
@@ -168,7 +169,7 @@ async fn client(keychain: KeyChain, server: KeyCard) {
 
         tokio::spawn(async move {
             loop {
-                if let Err(error) = ping(connector.as_ref(), server, buffer.as_ref()).await {
+                if let Err(error) = ping(connector.as_ref(), server, &buffer).await {
                     println!("{:?}", error);
                 }
             }
@@ -183,7 +184,7 @@ async fn client(keychain: KeyChain, server: KeyCard) {
 async fn ping(
     connector: &Connector,
     server: Identity,
-    buffer: &Vec<Message>,
+    buffer: &ByteBuf,
 ) -> Result<(), Top<BandError>> {
     let mut session = connector
         .connect(server)
