@@ -32,7 +32,7 @@ enum BandError {
     ConnectionError,
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() {
     if std::env::var("RDV").unwrap_or_default() != "" {
         println!("RDV...");
