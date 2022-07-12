@@ -51,6 +51,17 @@ impl PlainReceiver {
             .spot(here!())
     }
 
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<PlainConnectionError>> {
+        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
+            .await
+            .pot(PlainConnectionError::ReceiveTimeout, here!())?
+            .map_err(PlainConnectionError::read_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        Ok(self.unit_receiver.as_vec().clone())
+    }
+
     pub(in crate::net) fn secure(self, channel_receiver: ChannelReceiver) -> SecureReceiver {
         SecureReceiver::new(self.unit_receiver, channel_receiver, self.settings)
     }

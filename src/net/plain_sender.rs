@@ -51,6 +51,18 @@ impl PlainSender {
             .spot(here!())
     }
 
+    pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlainConnectionError>> {
+        self.unit_sender.as_vec().clear();
+        self.unit_sender.as_vec().extend_from_slice(message);
+
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(PlainConnectionError::SendTimeout, here!())?
+            .map_err(PlainConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
+    }
+
     pub(in crate::net) fn secure(self, channel_sender: ChannelSender) -> SecureSender {
         SecureSender::new(self.unit_sender, channel_sender, self.settings)
     }
