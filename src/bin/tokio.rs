@@ -36,15 +36,17 @@ async fn server() {
 async fn serve(mut connection: TcpStream) -> Result<()> {
     let mut buffer: Vec<u8> = Vec::new();
 
-    let size = connection.read_u32().await?;
-    buffer.resize(size as usize, 0);
-    connection.read_exact(buffer.as_mut_slice()).await?;
-    let message = bincode::deserialize::<Vec<Message>>(buffer.as_slice()).unwrap();
-    connection.write_u32(message.len() as u32).await?;
-    Ok(())
+    loop {
+        let size = connection.read_u32().await?;
+        buffer.resize(size as usize, 0);
+        connection.read_exact(buffer.as_mut_slice()).await?;
+        let message = bincode::deserialize::<Vec<Message>>(buffer.as_slice()).unwrap();
+        connection.write_u32(message.len() as u32).await?;
+    }
 }
 
 async fn client() -> Result<()> {
+    let mut connection = TcpStream::connect("172.31.8.82:1234").await.unwrap();
     let message = (0..BATCH_SIZE).map(|_| random()).collect::<Vec<Message>>();
 
     let mut last_print = Instant::now();
@@ -71,11 +73,15 @@ async fn client() -> Result<()> {
             last_value = batch;
         }
 
-        let mut connection = TcpStream::connect("172.31.8.82:1234").await.unwrap();
+        let now = Instant::now();
+
         let buffer = bincode::serialize(&message).unwrap();
         connection.write_u32(buffer.len() as u32).await?;
         connection.write_all(buffer.as_slice()).await?;
         let size = connection.read_u32().await?;
+
+        println!("Spent {:?}", now.elapsed());
+
         assert_eq!(size, BATCH_SIZE as u32);
     }
 
