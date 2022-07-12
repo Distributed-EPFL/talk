@@ -55,6 +55,13 @@ impl Session {
         self.connection.send_raw(message).await
     }
 
+    pub async fn send_raw_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
+        self.connection.send_raw_bytes(message).await
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
@@ -74,6 +81,10 @@ impl Session {
         M: for<'de> Deserialize<'de>,
     {
         self.connection.receive_raw().await
+    }
+
+    pub async fn receive_raw_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.connection.receive_raw_bytes().await
     }
 
     pub fn end(mut self) {

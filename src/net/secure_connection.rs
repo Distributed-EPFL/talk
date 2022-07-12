@@ -163,7 +163,10 @@ impl SecureConnection {
         self.sender.send_raw(message).await
     }
 
-    pub async fn send_raw_bytes(&mut self, message: &[u8]) -> Result<(), Top<SecureConnectionError>> {
+    pub async fn send_raw_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
         self.sender.send_raw_bytes(message).await
     }
 
