@@ -17,10 +17,9 @@ where
     A: Send + Sync + Clone + ToSocketAddrs,
 {
     async fn connect(&self) -> Result<PlainConnection> {
-        TcpStream::connect(self.clone()).await
-            .and_then(|stream| {
-                stream.set_nodelay(true)?;
-                Ok(stream.into())
-            })
+        TcpStream::connect(self.clone()).await.and_then(|stream| {
+            stream.set_nodelay(true)?;
+            Ok(stream.into())
+        })
     }
 }
