@@ -80,11 +80,19 @@ impl PlainConnection {
         self.sender.send(message).await
     }
 
+    pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlainConnectionError>> {
+        self.sender.send_bytes(message).await
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
     {
         self.receiver.receive::<M>().await
+    }
+
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<PlainConnectionError>> {
+        self.receiver.receive_bytes().await
     }
 
     pub fn split(self) -> (PlainSender, PlainReceiver) {
