@@ -79,4 +79,19 @@ impl SecureSender {
             .map_err(Doom::into_top)
             .spot(here!())
     }
+
+    pub async fn send_raw_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
+        self.unit_sender.as_vec().clear();
+        self.unit_sender.as_vec().extend_from_slice(message);
+
+        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
+            .await
+            .pot(SecureConnectionError::SendTimeout, here!())?
+            .map_err(SecureConnectionError::write_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
+    }
 }

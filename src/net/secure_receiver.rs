@@ -79,4 +79,15 @@ impl SecureReceiver {
             .map_err(Doom::into_top)
             .spot(here!())
     }
+
+    pub async fn receive_raw_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
+            .await
+            .pot(SecureConnectionError::ReceiveTimeout, here!())?
+            .map_err(SecureConnectionError::read_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())?;
+
+        Ok(self.unit_receiver.as_vec().clone())
+    }
 }
