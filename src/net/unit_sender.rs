@@ -29,6 +29,7 @@ impl UnitSender {
     pub async fn flush(&mut self) -> io::Result<()> {
         self.send_size(self.buffer.len()).await?;
         self.write_half.write_all(&self.buffer).await?;
+        self.write_half.flush().await?;
         self.buffer.clear();
 
         Ok(())
