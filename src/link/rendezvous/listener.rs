@@ -73,7 +73,10 @@ impl Listener {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, _)) = listener.accept().await {
+            if let Ok((stream, _)) = listener.accept().await.and_then(|(stream, addr)| {
+                stream.set_nodelay(true)?;
+                Ok((stream, addr))
+            }) {
                 let connection = stream.into();
 
                 let keychain = keychain.clone();
