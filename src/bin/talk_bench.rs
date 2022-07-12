@@ -14,13 +14,13 @@ use talk::{
 
 use tokio::time;
 
-const RENDEZVOUS: &str = "127.0.0.2:9000";
+const RENDEZVOUS: &str = "172.31.10.33:9000";
 
 const NODES: usize = 2;
 const WORKERS: usize = 1;
 
 const BATCH_SIZE: usize = 1048576;
-const BATCHES_PER_SESSION: usize = 1;
+const BATCHES_PER_SESSION: usize = 1_000_000_000;
 
 type Message = u32;
 
@@ -133,6 +133,8 @@ async fn serve(
     mut connection: SecureConnection,
     counter: &RelaxedCounter,
 ) -> Result<(), Top<BandError>> {
+    println!("Serve: establishing new connection");
+
     for _ in 0..BATCHES_PER_SESSION {
         let buffer = connection
             .receive_raw::<Vec<Message>>()
@@ -185,6 +187,8 @@ async fn ping(
     server: Identity,
     buffer: &Vec<Message>,
 ) -> Result<(), Top<BandError>> {
+    println!("Ping: establishing new connection");
+
     let mut session = connector
         .connect(server)
         .await
