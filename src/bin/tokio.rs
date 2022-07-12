@@ -71,7 +71,7 @@ async fn client() -> Result<()> {
             last_value = batch;
         }
 
-        let mut connection = TcpStream::connect("172.31.38.206:1234").await.unwrap();
+        let mut connection = TcpStream::connect("172.31.8.82:1234").await.unwrap();
         let buffer = bincode::serialize(&message).unwrap();
         connection.write_u32(buffer.len() as u32).await?;
         connection.write_all(buffer.as_slice()).await?;
