@@ -20,7 +20,7 @@ const NODES: usize = 2;
 const WORKERS: usize = 1;
 
 const BATCH_SIZE: usize = 1048576;
-const BATCHES_PER_SESSION: usize = 1_000_000_000;
+const BATCHES_PER_SESSION: usize = 1;
 
 type Message = u32;
 
@@ -191,10 +191,14 @@ async fn ping(
     buffer: &Vec<Message>,
 ) -> Result<(), Top<BandError>> {
 
+    let now = std::time::Instant::now();
+
     let mut session = connector
         .connect(server)
         .await
         .pot(BandError::ConnectFailed, here!())?;
+
+    println!("Session established in {:?}", now.elapsed());
 
     for _ in 0..BATCHES_PER_SESSION {
 
