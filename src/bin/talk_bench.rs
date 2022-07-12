@@ -195,6 +195,9 @@ async fn ping(
         .pot(BandError::ConnectFailed, here!())?;
 
     for _ in 0..BATCHES_PER_SESSION {
+
+        let now = std::time::Instant::now();
+
         session
             .send_raw(&buffer)
             .await
@@ -204,6 +207,8 @@ async fn ping(
             .receive_raw::<u64>()
             .await
             .pot(BandError::ConnectionError, here!())?;
+
+        println!("Spent {:?}", now.elapsed());
 
         assert_eq!(len as usize, buffer.len());
     }
