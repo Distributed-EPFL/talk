@@ -163,6 +163,10 @@ impl SecureConnection {
         self.sender.send_raw(message).await
     }
 
+    pub async fn send_raw_bytes(&mut self, message: &[u8]) -> Result<(), Top<SecureConnectionError>> {
+        self.sender.send_raw_bytes(message).await
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,
@@ -182,6 +186,10 @@ impl SecureConnection {
         M: for<'de> Deserialize<'de>,
     {
         self.receiver.receive_raw().await
+    }
+
+    pub async fn receive_raw_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receiver.receive_raw_bytes().await
     }
 
     pub fn split(self) -> (SecureSender, SecureReceiver) {
