@@ -29,3 +29,7 @@ futures = { version = "0.3" }
 atomic-counter = { version = "1.0.1" }
 
 statistical = { version = "1.0.0" }
+
+[profile.release]
+lto = true
+codegen-units = 1
