@@ -18,6 +18,8 @@ use tokio::{
     },
 };
 
+use tokio_udt::{UdtListener, UdtConfiguration};
+
 const CHANNEL_CAPACITY: usize = 32;
 
 type Outlet = Receiver<(Identity, SecureConnection)>;
@@ -37,7 +39,11 @@ enum ServeError {
 
 impl TestListener {
     pub async fn new(keychain: KeyChain) -> (Self, SocketAddr) {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let bind_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
+        let listener = UdtListener::bind(bind_addr, Some(UdtConfiguration {
+            reuse_mux: false,
+            ..Default::default()
+        })).await.unwrap();
 
         let address = listener.local_addr().unwrap();
 
@@ -60,14 +66,15 @@ impl TestListener {
 
     async fn listen(
         keychain: KeyChain,
-        listener: TcpListener,
+        listener: UdtListener,
         inlet: Sender<(Identity, SecureConnection)>,
     ) {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, _)) = listener.accept().await {
-                let connection = stream.into();
+            if let Ok((_addr, udt_connection)) = listener.accept().await {
+                println!("Accepted {}", _addr);
+                let connection = udt_connection.into();
 
                 let keychain = keychain.clone();
                 let inlet = inlet.clone();
