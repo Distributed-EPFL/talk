@@ -15,10 +15,9 @@ use std::{
     sync::Arc,
 };
 
-use tokio::{
-    io,
-    net::{TcpListener, ToSocketAddrs},
-};
+use tokio::{io, net::ToSocketAddrs};
+
+use tokio_udt::{UdtConfiguration, UdtListener};
 
 pub struct Server {
     _fuse: Fuse,
@@ -45,10 +44,10 @@ struct Database {
 }
 
 impl Server {
-    pub async fn new<A>(address: A, settings: ServerSettings) -> Result<Self, Top<ServerError>>
-    where
-        A: ToSocketAddrs,
-    {
+    pub async fn new(
+        address: SocketAddr,
+        settings: ServerSettings,
+    ) -> Result<Self, Top<ServerError>> {
         let database = Arc::new(Mutex::new(Database {
             shards: settings
                 .shard_sizes
@@ -62,11 +61,17 @@ impl Server {
 
         let fuse = Fuse::new();
 
-        let listener = TcpListener::bind(address)
-            .await
-            .map_err(ServerError::initialize_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        let listener = UdtListener::bind(
+            address,
+            Some(UdtConfiguration {
+                reuse_mux: false,
+                ..Default::default()
+            }),
+        )
+        .await
+        .map_err(ServerError::initialize_failed)
+        .map_err(Doom::into_top)
+        .spot(here!())?;
 
         fuse.spawn(async move {
             let _ = Server::listen(settings, database, listener).await;
@@ -78,12 +83,12 @@ impl Server {
     async fn listen(
         settings: ServerSettings,
         database: Arc<Mutex<Database>>,
-        listener: TcpListener,
+        listener: UdtListener,
     ) {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, address)) = listener.accept().await {
+            if let Ok((address, stream)) = listener.accept().await {
                 let settings = settings.clone();
                 let database = database.clone();
 

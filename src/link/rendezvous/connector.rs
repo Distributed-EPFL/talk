@@ -140,7 +140,12 @@ mod tests {
         const SERVER: &str = "127.0.0.1:1250";
         const MESSAGE: &str = "Hello Alice, this is Bob!";
 
-        let _server = Server::new(SERVER, Default::default()).await.unwrap();
+        let server_addr = tokio::net::lookup_host(SERVER)
+            .await
+            .unwrap()
+            .next()
+            .unwrap();
+        let _server = Server::new(server_addr, Default::default()).await.unwrap();
 
         let alice_keychain = KeyChain::random();
         let bob_keychain = KeyChain::random();

@@ -33,4 +33,5 @@ socket2 = { version = "0.4.4" }
 nix = { version = "0.24.2" }
 num_cpus = { version = "1.13" }
 
-tokio-udt = { git = "https://github.com/amatissart/tokio-udt/", rev="f5f3f40" }
+#tokio-udt = { git = "https://github.com/amatissart/tokio-udt/", rev="f9fdae" }
+tokio-udt = "0.1.0-alpha.4"

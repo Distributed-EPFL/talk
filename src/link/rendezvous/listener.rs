@@ -11,13 +11,12 @@ use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::net::Ipv4Addr;
 
-use tokio::{
-    net::TcpListener,
-    sync::{
-        mpsc,
-        mpsc::{Receiver, Sender},
-    },
+use tokio::sync::{
+    mpsc,
+    mpsc::{Receiver, Sender},
 };
+
+use tokio_udt::{UdtConfiguration, UdtListener};
 
 type Outlet = Receiver<(Identity, SecureConnection)>;
 
@@ -39,8 +38,12 @@ impl Listener {
     where
         S: 'static + TcpConnect,
     {
-        let listener = TcpListener::bind(
-            (Ipv4Addr::UNSPECIFIED, 0), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
+        let listener = UdtListener::bind(
+            (Ipv4Addr::UNSPECIFIED, 0).into(),
+            Some(UdtConfiguration {
+                reuse_mux: false,
+                ..Default::default()
+            }), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
         )
         .await
         .unwrap();
@@ -67,16 +70,17 @@ impl Listener {
 
     async fn listen(
         keychain: KeyChain,
-        listener: TcpListener,
+        listener: UdtListener,
         inlet: Sender<(Identity, SecureConnection)>,
     ) {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((stream, _)) = listener.accept().await.and_then(|(stream, addr)| {
-                stream.set_nodelay(true)?;
-                Ok((stream, addr))
-            }) {
+            // if let Ok((stream, _)) = listener.accept().await.and_then(|(stream, addr)| {
+            //     stream.set_nodelay(true)?;
+            //     Ok((stream, addr))
+            // }) {
+            if let Ok((_addr, stream)) = listener.accept().await {
                 let connection = stream.into();
 
                 let keychain = keychain.clone();

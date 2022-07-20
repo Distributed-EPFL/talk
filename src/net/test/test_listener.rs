@@ -10,15 +10,12 @@ use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::net::{Ipv4Addr, SocketAddr};
 
-use tokio::{
-    net::TcpListener,
-    sync::{
-        mpsc,
-        mpsc::{Receiver, Sender},
-    },
+use tokio::sync::{
+    mpsc,
+    mpsc::{Receiver, Sender},
 };
 
-use tokio_udt::{UdtListener, UdtConfiguration};
+use tokio_udt::{UdtConfiguration, UdtListener};
 
 const CHANNEL_CAPACITY: usize = 32;
 
@@ -40,10 +37,15 @@ enum ServeError {
 impl TestListener {
     pub async fn new(keychain: KeyChain) -> (Self, SocketAddr) {
         let bind_addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0);
-        let listener = UdtListener::bind(bind_addr, Some(UdtConfiguration {
-            reuse_mux: false,
-            ..Default::default()
-        })).await.unwrap();
+        let listener = UdtListener::bind(
+            bind_addr,
+            Some(UdtConfiguration {
+                reuse_mux: false,
+                ..Default::default()
+            }),
+        )
+        .await
+        .unwrap();
 
         let address = listener.local_addr().unwrap();
 
@@ -73,7 +75,6 @@ impl TestListener {
 
         loop {
             if let Ok((_addr, udt_connection)) = listener.accept().await {
-                println!("Accepted {}", _addr);
                 let connection = udt_connection.into();
 
                 let keychain = keychain.clone();

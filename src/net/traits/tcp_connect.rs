@@ -4,9 +4,9 @@ use crate::net::PlainConnection;
 
 use std::io::Result;
 
-use tokio::net::{TcpStream, ToSocketAddrs, lookup_host};
+use tokio::net::{lookup_host, TcpStream, ToSocketAddrs};
 
-use tokio_udt::{UdtConnection, UdtConfiguration};
+use tokio_udt::{UdtConfiguration, UdtConnection};
 
 // TODO: Define generic Connect
 // pub enum TransportType {
@@ -22,7 +22,6 @@ use tokio_udt::{UdtConnection, UdtConfiguration};
 // pub trait Connect: Send + Sync {
 //     async fn connect(&self, settings: ConnectSettings) -> Result<PlainConnection>;
 // }
-
 
 #[async_trait]
 pub trait TcpConnect: Send + Sync {
@@ -41,6 +40,14 @@ where
         // })
 
         let addr = lookup_host(self).await?.next().expect("no addr found");
-        UdtConnection::connect(addr, None).await.map(Into::into)
+        UdtConnection::connect(
+            addr,
+            Some(UdtConfiguration {
+                reuse_mux: false,
+                ..Default::default()
+            }),
+        )
+        .await
+        .map(Into::into)
     }
 }

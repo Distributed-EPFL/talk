@@ -151,10 +151,12 @@ mod tests {
 
     use std::time::Duration;
 
+    use tokio::net::lookup_host;
     use tokio::time;
 
     async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {
-        Server::new(address, ServerSettings { shard_sizes })
+        let addr = lookup_host(address).await.unwrap().next().unwrap();
+        Server::new(addr, ServerSettings { shard_sizes })
             .await
             .unwrap()
     }
