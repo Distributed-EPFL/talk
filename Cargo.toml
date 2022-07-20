@@ -16,6 +16,7 @@ doomstack = { git = "https://github.com/Distributed-EPFL/doomstack" }
 
 parking_lot = { version = "0.11.2" }
 rand = { version = "0.7" }
+
 blake3 = { version = "1.0.0" }
 ed25519-dalek = { version = "1.0.1", features = [ "serde", "batch" ] }
 x25519-dalek = { version = "1.2.0", features = [ "serde" ] }
@@ -25,3 +26,5 @@ chacha20poly1305 = { version = "0.9.0" }
 tokio = { version = "1.12.0", features = [ "macros", "net", "rt-multi-thread", "io-util", "sync", "time" ] }
 async-trait = { version = "0.1.51" }
 futures = { version = "0.3" }
+
+socket2 = { version = "0.4.4" }
