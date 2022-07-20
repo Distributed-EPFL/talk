@@ -1,10 +1,10 @@
 use crate::{
     crypto::Identity,
-    net::Connector,
+    net::{Connector, Message as NetMessage},
     sync::fuse::{Fuse, Relay},
     unicast::{
-        Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated,
-        Message as UnicastMessage, PushSettings, Request, SenderSettings,
+        Acknowledgement, Caster, CasterError, CasterSettings, CasterTerminated, PushSettings,
+        Request, SenderSettings,
     },
 };
 
@@ -23,18 +23,18 @@ use tokio::{sync::oneshot::Receiver, task::JoinHandle, time};
 type AcknowledgementOutlet = Receiver<Result<Acknowledgement, Top<CasterError>>>;
 
 #[derive(Clone)]
-pub struct Sender<Message: UnicastMessage> {
+pub struct Sender<Message: NetMessage> {
     connector: Arc<dyn Connector>,
     database: Arc<Mutex<Database<Message>>>,
     settings: SenderSettings,
     _fuse: Arc<Fuse>,
 }
 
-struct Database<Message: UnicastMessage> {
+struct Database<Message: NetMessage> {
     links: HashMap<Identity, Link<Message>>,
 }
 
-struct Link<Message: UnicastMessage> {
+struct Link<Message: NetMessage> {
     caster: Caster<Message>,
     last_message: Instant,
 }
@@ -47,7 +47,7 @@ pub enum SenderError {
 
 impl<Message> Sender<Message>
 where
-    Message: UnicastMessage,
+    Message: NetMessage,
 {
     pub fn new<C>(connector: C, settings: SenderSettings) -> Self
     where

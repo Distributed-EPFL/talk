@@ -1,6 +1,7 @@
 mod connection_settings;
 mod connector;
 mod listener;
+mod message;
 mod plain_connection;
 mod plain_receiver;
 mod plain_sender;
@@ -30,6 +31,7 @@ use unit_sender::UnitSender;
 pub use connection_settings::ConnectionSettings;
 pub use connector::Connector;
 pub use listener::Listener;
+pub use message::Message;
 pub use plain_connection::{PlainConnection, PlainConnectionError};
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;

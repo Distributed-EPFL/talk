@@ -1,8 +1,8 @@
 use crate::{
     crypto::Identity,
-    net::{Connector, SecureReceiver, SecureSender},
+    net::{Connector, Message as NetMessage, SecureReceiver, SecureSender},
     sync::fuse::Fuse,
-    unicast::{Acknowledgement, CasterSettings, Message as UnicastMessage, Request, Response},
+    unicast::{Acknowledgement, CasterSettings, Request, Response},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -26,12 +26,12 @@ type RequestOutlet<Message> = MpscReceiver<(Request<Message>, AcknowledgementInl
 type AcknowledgementInlet = OneshotSender<Result<Acknowledgement, Top<CasterError>>>;
 type AcknowledgementOutlet = OneshotReceiver<Result<Acknowledgement, Top<CasterError>>>;
 
-pub(in crate::unicast) struct Caster<Message: UnicastMessage> {
+pub(in crate::unicast) struct Caster<Message: NetMessage> {
     state: Arc<Mutex<State<Message>>>,
     _fuse: Fuse,
 }
 
-enum State<Message: UnicastMessage> {
+enum State<Message: NetMessage> {
     Running(RequestInlet<Message>),
     Terminated,
 }
@@ -40,7 +40,7 @@ struct Database {
     acknowledgement_inlets: HashMap<u32, AcknowledgementInlet>,
 }
 
-pub(in crate::unicast) struct CasterTerminated<Message: UnicastMessage>(pub Request<Message>);
+pub(in crate::unicast) struct CasterTerminated<Message: NetMessage>(pub Request<Message>);
 
 #[derive(Clone, Doom)]
 pub(in crate::unicast) enum CasterError {
@@ -68,7 +68,7 @@ enum DriveOutError {
 
 impl<Message> Caster<Message>
 where
-    Message: UnicastMessage,
+    Message: NetMessage,
 {
     pub fn new(connector: Arc<dyn Connector>, remote: Identity, settings: CasterSettings) -> Self {
         let (request_inlet, request_outlet) = mpsc::channel(settings.request_channel_capacity);

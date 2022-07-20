@@ -1,11 +1,8 @@
 use crate::{
     crypto::Identity,
-    net::{Listener, SecureConnection, SecureReceiver, SecureSender},
+    net::{Listener, Message as NetMessage, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::Fuse,
-    unicast::{
-        Acknowledgement, Acknowledger, Message as UnicastMessage, ReceiverSettings, Request,
-        Response,
-    },
+    unicast::{Acknowledgement, Acknowledger, ReceiverSettings, Request, Response},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -21,7 +18,7 @@ type MessageOutlet<Message> = TokioReceiver<(Identity, Message, Acknowledger)>;
 type ResponseInlet = TokioSender<Response>;
 type ResponseOutlet = TokioReceiver<Response>;
 
-pub struct Receiver<Message: UnicastMessage> {
+pub struct Receiver<Message: NetMessage> {
     message_outlet: MessageOutlet<Message>,
     _fuse: Fuse,
 }
@@ -48,7 +45,7 @@ enum DriveOutError {
 
 impl<Message> Receiver<Message>
 where
-    Message: UnicastMessage,
+    Message: NetMessage,
 {
     pub fn new<L>(listener: L, settings: ReceiverSettings) -> Self
     where

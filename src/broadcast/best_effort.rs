@@ -1,8 +1,9 @@
 use crate::{
     broadcast::BestEffortSettings,
     crypto::Identity,
+    net::Message,
     sync::fuse::{Fuse, Relay},
-    unicast::{Message, Sender},
+    unicast::Sender,
 };
 
 use futures::stream::{FuturesUnordered, Stream, StreamExt};

@@ -1,10 +1,10 @@
 use crate::{
     crypto::{Identity, KeyChain},
-    net::test::System as NetSystem,
-    unicast::{Message as UnicastMessage, Receiver, Sender},
+    net::{test::System as NetSystem, Message as NetMessage},
+    unicast::{Receiver, Sender},
 };
 
-pub struct UnicastSystem<Message: UnicastMessage> {
+pub struct UnicastSystem<Message: NetMessage> {
     pub keys: Vec<Identity>,
     pub senders: Vec<Sender<Message>>,
     pub receivers: Vec<Receiver<Message>>,
@@ -12,7 +12,7 @@ pub struct UnicastSystem<Message: UnicastMessage> {
 
 impl<Message> UnicastSystem<Message>
 where
-    Message: UnicastMessage,
+    Message: NetMessage,
 {
     pub fn new(
         keys: Vec<Identity>,
