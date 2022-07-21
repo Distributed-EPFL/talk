@@ -18,12 +18,12 @@ impl<M> DatagramReceiver<M>
 where
     M: Message,
 {
-    pub async fn bind<A>(bind: A) -> DatagramReceiver<M>
+    pub async fn bind<A>(address: A) -> DatagramReceiver<M>
     where
         A: ToSocketAddrs,
     {
         // TODO: Manage errors
-        let address: SocketAddr = net::lookup_host(bind).await.unwrap().next().unwrap();
+        let address: SocketAddr = net::lookup_host(address).await.unwrap().next().unwrap();
 
         let sockets = iter::repeat_with(|| {
             let socket = Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap();
