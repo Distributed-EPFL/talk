@@ -1,11 +1,13 @@
 use doomstack::{here, Doom, ResultExt, Top};
 
+use nix::sys::socket::{sendmmsg, MsgFlags, SendMmsgData, SockaddrStorage};
+
 use socket2::{Domain, Socket, Type};
 
-use std::net::SocketAddr;
+use std::{io::IoSlice, net::SocketAddr, os::unix::io::AsRawFd};
 
 use tokio::{
-    io,
+    io::{self, Interest},
     net::{self, ToSocketAddrs, UdpSocket},
 };
 
@@ -23,6 +25,12 @@ pub(in crate::net::datagram_dispatcher) enum UdpWrapError {
     #[doom(description("Failed to bind address: {:?}", source))]
     #[doom(wrap(bind_failed))]
     BindFailed { source: io::Error },
+    #[doom(description("Socket error: {:?}", source))]
+    #[doom(wrap(socket_error))]
+    SocketError { source: io::Error },
+    #[doom(description("Send failed: {:?}", source))]
+    #[doom(wrap(send_failed))]
+    SendFailed { source: io::Error },
 }
 
 impl UdpWrap {
@@ -53,5 +61,51 @@ impl UdpWrap {
         let socket = UdpSocket::from_std(socket.into()).unwrap();
 
         Ok(UdpWrap { socket })
+    }
+
+    async fn send_multiple<'m, I>(&self, messages: I) -> Result<(), Top<UdpWrapError>>
+    where
+        I: IntoIterator<Item = &'m (SocketAddr, &'m [u8])>,
+    {
+        let data = messages
+            .into_iter()
+            .map(|(address, buffer)| {
+                let address: SockaddrStorage = (*address).into();
+
+                SendMmsgData {
+                    iov: [IoSlice::new(buffer)],
+                    cmsgs: &[],
+                    addr: Some(address),
+                    _lt: Default::default(),
+                }
+            })
+            .collect::<Vec<SendMmsgData<_, _, _>>>();
+
+        self.socket
+            .writable()
+            .await
+            .map_err(UdpWrapError::socket_error)
+            .map_err(UdpWrapError::into_top)
+            .spot(here!())?;
+
+        self.socket
+            .try_io(Interest::WRITABLE, || {
+                let descriptor = self.socket.as_raw_fd();
+
+                sendmmsg(descriptor, &data, MsgFlags::MSG_DONTWAIT).map_err(|error| {
+                    if error == nix::errno::Errno::EWOULDBLOCK {
+                        return io::Error::new(io::ErrorKind::WouldBlock, "`sendmmsg` would block");
+                    }
+
+                    io::Error::new(io::ErrorKind::Other, error)
+                })?;
+
+                Ok(())
+            })
+            .map_err(UdpWrapError::send_failed)
+            .map_err(UdpWrapError::into_top)
+            .spot(here!())?;
+
+        Ok(())
     }
 }
