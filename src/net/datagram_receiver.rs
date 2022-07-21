@@ -18,7 +18,7 @@ impl<M> DatagramReceiver<M>
 where
     M: Message,
 {
-    pub async fn new<A>(bind: A) -> DatagramReceiver<M>
+    pub async fn bind<A>(bind: A) -> DatagramReceiver<M>
     where
         A: ToSocketAddrs,
     {
