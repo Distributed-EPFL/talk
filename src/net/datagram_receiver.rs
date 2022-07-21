@@ -22,6 +22,14 @@ where
     where
         A: ToSocketAddrs,
     {
+        DatagramReceiver::with_filter(address, |_| true).await
+    }
+
+    pub async fn with_filter<A, F>(address: A, filter: F) -> DatagramReceiver<M>
+    where
+        A: ToSocketAddrs,
+        F: 'static + Send + Clone + Fn(&M) -> bool,
+    {
         // TODO: Manage errors
         let address: SocketAddr = net::lookup_host(address).await.unwrap().next().unwrap();
 
@@ -44,10 +52,11 @@ where
         let fuse = Fuse::new();
 
         for socket in sockets {
+            let filter = filter.clone();
             let message_inlet = message_inlet.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramReceiver::<M>::listen(socket, message_inlet).await;
+                let _ = DatagramReceiver::<M>::listen(socket, filter, message_inlet).await;
             });
         }
 
@@ -64,13 +73,18 @@ where
         self.message_outlet.recv().await.unwrap()
     }
 
-    async fn listen(socket: UdpSocket, message_inlet: Sender<(SocketAddr, M)>) {
+    async fn listen<F>(socket: UdpSocket, filter: F, message_inlet: Sender<(SocketAddr, M)>)
+    where
+        F: Fn(&M) -> bool,
+    {
         let mut buffer = [0u8; 2048];
 
         loop {
             if let Ok((length, source)) = socket.recv_from(&mut buffer).await {
                 if let Ok(message) = bincode::deserialize::<M>(&buffer[..length]) {
-                    let _ = message_inlet.send((source, message)).await;
+                    if filter(&message) {
+                        let _ = message_inlet.send((source, message)).await;
+                    }
                 }
             }
         }
