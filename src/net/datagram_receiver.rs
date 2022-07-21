@@ -1,8 +1,8 @@
 use crate::{net::Message, sync::fuse::Fuse};
 
-use std::{iter, net::SocketAddr};
-
 use socket2::{Domain, Socket, Type};
+
+use std::{iter, net::SocketAddr};
 
 use tokio::{
     net::{self, ToSocketAddrs, UdpSocket},
