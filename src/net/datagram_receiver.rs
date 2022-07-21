@@ -34,7 +34,9 @@ where
             socket.bind(&address.into()).unwrap();
 
             UdpSocket::from_std(socket.into()).unwrap()
-        });
+        })
+        .take(32) // TODO: Add settings
+        .collect::<Vec<_>>();
 
         // TODO: Add settings
         let (message_inlet, message_outlet) = mpsc::channel(1024);
@@ -68,7 +70,7 @@ where
         loop {
             if let Ok((length, source)) = socket.recv_from(&mut buffer).await {
                 if let Ok(message) = bincode::deserialize::<M>(&buffer[..length]) {
-                    let _ = message_inlet.send((source, message));
+                    let _ = message_inlet.send((source, message)).await;
                 }
             }
         }
