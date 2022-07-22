@@ -1,10 +1,16 @@
+use crate::net::datagram_dispatcher::UdpWrapSettings;
+
 use doomstack::{here, Doom, ResultExt, Top};
 
-use nix::sys::socket::{sendmmsg, MsgFlags, SendMmsgData, SockaddrStorage};
+use nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage};
 
 use socket2::{Domain, Socket, Type};
 
-use std::{io::IoSlice, net::SocketAddr, os::unix::io::AsRawFd};
+use std::{
+    io::{IoSlice, IoSliceMut},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    os::unix::io::AsRawFd,
+};
 
 use tokio::{
     io::{self, Interest},
@@ -13,6 +19,13 @@ use tokio::{
 
 pub(in crate::net::datagram_dispatcher) struct UdpWrap {
     socket: UdpSocket,
+    settings: UdpWrapSettings,
+}
+
+pub(in crate::net::datagram_dispatcher) struct ReceiveMultiple {
+    buffer: Vec<u8>,
+    maximum_transfer_unit: usize,
+    messages: Vec<(SocketAddr, usize)>,
 }
 
 #[derive(Doom)]
@@ -34,7 +47,10 @@ pub(in crate::net::datagram_dispatcher) enum UdpWrapError {
 }
 
 impl UdpWrap {
-    pub async fn bind<A>(address: A) -> Result<UdpWrap, Top<UdpWrapError>>
+    pub async fn bind<A>(
+        address: A,
+        settings: UdpWrapSettings,
+    ) -> Result<UdpWrap, Top<UdpWrapError>>
     where
         A: ToSocketAddrs,
     {
@@ -60,7 +76,7 @@ impl UdpWrap {
 
         let socket = UdpSocket::from_std(socket.into()).unwrap();
 
-        Ok(UdpWrap { socket })
+        Ok(UdpWrap { socket, settings })
     }
 
     async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
@@ -118,6 +134,69 @@ impl UdpWrap {
 
         Ok(sent)
     }
+
+    async fn receive_multiple(&self) -> ReceiveMultiple {
+        let mut buffer =
+            vec![0u8; self.settings.maximum_transmission_unit * self.settings.receive_buffer_size];
+
+        let mut data = buffer
+            .chunks_exact_mut(self.settings.maximum_transmission_unit)
+            .map(|chunk| RecvMmsgData {
+                iov: [IoSliceMut::new(chunk)],
+                cmsg_buffer: None,
+            })
+            .collect::<Vec<RecvMmsgData<_>>>();
+
+        self.socket.readable().await.unwrap();
+
+        let messages: Vec<_> = self
+            .socket
+            .try_io(Interest::READABLE, || {
+                let descriptor = self.socket.as_raw_fd();
+
+                let messages = recvmmsg(descriptor, &mut data, MsgFlags::MSG_DONTWAIT, None)
+                    .map_err(|error| {
+                        if error == nix::errno::Errno::EWOULDBLOCK {
+                            return io::Error::new(
+                                io::ErrorKind::WouldBlock,
+                                "recvmmsg would block",
+                            );
+                        }
+                        io::Error::new(io::ErrorKind::Other, error)
+                    })?
+                    .iter()
+                    .map(|message| {
+                        let sockaddr_storage: SockaddrStorage = message.address.unwrap();
+                        let sockaddr_in = sockaddr_storage.as_sockaddr_in().unwrap();
+
+                        let socketaddr_v4 =
+                            SocketAddrV4::new(Ipv4Addr::from(sockaddr_in.ip()), sockaddr_in.port());
+
+                        let address = SocketAddr::V4(socketaddr_v4);
+
+                        (address, message.bytes)
+                    })
+                    .collect();
+
+                Ok(messages)
+            })
+            .unwrap_or_default();
+
+        ReceiveMultiple {
+            buffer,
+            maximum_transfer_unit: self.settings.maximum_transmission_unit,
+            messages,
+        }
+    }
+}
+
+impl ReceiveMultiple {
+    pub fn iter(&self) -> impl Iterator<Item = (SocketAddr, &[u8])> {
+        self.messages
+            .iter()
+            .zip(self.buffer.chunks_exact(self.maximum_transfer_unit))
+            .map(|((address, size), buffer)| (*address, &buffer[..*size]))
+    }
 }
 
 #[cfg(test)]
@@ -126,7 +205,9 @@ mod tests {
 
     #[tokio::test]
     async fn develop() {
-        let wrap = UdpWrap::bind("0.0.0.0:0").await.unwrap();
+        let wrap = UdpWrap::bind("0.0.0.0:0", Default::default())
+            .await
+            .unwrap();
 
         let buffer = [42u8; 288];
         let messages = vec![("127.0.0.1:1234".parse().unwrap(), &buffer[..]); 100000];
