@@ -191,27 +191,14 @@ impl UdpWrap {
 }
 
 impl ReceiveMultiple {
+    pub fn len(&self) -> usize {
+        self.messages.len()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (SocketAddr, &[u8])> {
         self.messages
             .iter()
             .zip(self.buffer.chunks_exact(self.maximum_transfer_unit))
             .map(|((address, size), buffer)| (*address, &buffer[..*size]))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn develop() {
-        let wrap = UdpWrap::bind("0.0.0.0:0", Default::default())
-            .await
-            .unwrap();
-
-        let buffer = [42u8; 288];
-        let messages = vec![("127.0.0.1:1234".parse().unwrap(), &buffer[..]); 100000];
-
-        wrap.send_multiple(&messages).await.unwrap();
     }
 }
