@@ -79,7 +79,7 @@ impl UdpWrap {
         Ok(UdpWrap { socket, settings })
     }
 
-    async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
+    pub async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
     where
         I: IntoIterator<Item = &'m (SocketAddr, &'m [u8])>,
     {
@@ -135,7 +135,7 @@ impl UdpWrap {
         Ok(sent)
     }
 
-    async fn receive_multiple(&self) -> ReceiveMultiple {
+    pub async fn receive_multiple(&self) -> ReceiveMultiple {
         let mut buffer =
             vec![0u8; self.settings.maximum_transmission_unit * self.settings.receive_buffer_size];
 
