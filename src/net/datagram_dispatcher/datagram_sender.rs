@@ -1,5 +1,7 @@
 use crate::sync::fuse::Fuse;
 
+use rand::prelude::*;
+
 use std::{net::SocketAddr, sync::Arc};
 
 use tokio::sync::mpsc::Sender as MpscSender;
@@ -20,5 +22,17 @@ impl DatagramSender {
             datagram_inlets: packet_inlets,
             _fuse: fuse,
         }
+    }
+
+    pub async fn send(&self, destination: SocketAddr, message: Vec<u8>) {
+        let router = random::<usize>() % self.datagram_inlets.len();
+
+        // Because this `DatagramSender` is holding a copy
+        // of the `DatagramDispatcher`'s fuse, the corresponding
+        // inlet is guaranteed to still be held by `route_out` tasks
+        self.datagram_inlets[router]
+            .send((destination, message))
+            .await
+            .unwrap();
     }
 }

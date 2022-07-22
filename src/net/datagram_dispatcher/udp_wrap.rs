@@ -191,10 +191,6 @@ impl UdpWrap {
 }
 
 impl ReceiveMultiple {
-    pub fn len(&self) -> usize {
-        self.messages.len()
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&SocketAddr, &[u8])> {
         self.messages
             .iter()

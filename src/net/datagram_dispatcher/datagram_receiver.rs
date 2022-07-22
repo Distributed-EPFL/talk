@@ -21,4 +21,11 @@ impl DatagramReceiver {
             _fuse: fuse,
         }
     }
+
+    pub async fn receive(&mut self) -> (SocketAddr, Vec<u8>) {
+        // Because this `DatagramReceiver` is holding a copy
+        // of the `DatagramDispatcher`'s fuse, the corresponding
+        // inlet is guaranteed to still be held by `process` tasks
+        self.datagram_outlet.recv().await.unwrap()
+    }
 }

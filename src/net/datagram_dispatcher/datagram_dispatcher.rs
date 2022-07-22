@@ -156,6 +156,18 @@ impl DatagramDispatcher {
         Ok(DatagramDispatcher { sender, receiver })
     }
 
+    pub async fn send(&self, destination: SocketAddr, message: Vec<u8>) {
+        self.sender.send(destination, message).await
+    }
+
+    pub async fn receive(&mut self) -> (SocketAddr, Vec<u8>) {
+        self.receiver.receive().await
+    }
+
+    pub fn split(self) -> (DatagramSender, DatagramReceiver) {
+        (self.sender, self.receiver)
+    }
+
     async fn route_out(
         index: u8,
         wrap: Arc<UdpWrap>,
