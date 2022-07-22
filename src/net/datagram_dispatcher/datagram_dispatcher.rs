@@ -12,7 +12,7 @@ use std::{
     mem,
     net::SocketAddr,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use tokio::{
@@ -64,7 +64,7 @@ impl DatagramDispatcher {
 
         // Receiver inlet
 
-        let (receiver_inlet, receiver_outlet) = mpsc::channel(1024); // TODO: Add settings
+        let (receiver_inlet, receiver_outlet) = mpsc::channel(settings.receiver_channel_capacity);
 
         // `route_out` task channels
 
@@ -72,7 +72,8 @@ impl DatagramDispatcher {
         let mut route_out_outlets = Vec::new();
 
         for _ in 0..settings.workers {
-            let (route_in_inlet, route_out_outlet) = mpsc::channel(1024); // TODO: Add settings
+            let (route_in_inlet, route_out_outlet) =
+                mpsc::channel(settings.route_out_channels_capacity);
 
             route_out_inlets.push(route_in_inlet);
             route_out_outlets.push(route_out_outlet);
@@ -84,7 +85,8 @@ impl DatagramDispatcher {
         let mut acknowledgements_outlets = Vec::new();
 
         for _ in 0..settings.workers {
-            let (acknowledgements_inlet, acknowledgements_outlet) = mpsc::channel(1024); // TODO: Add settings
+            let (acknowledgements_inlet, acknowledgements_outlet) =
+                mpsc::channel(settings.acknowledgements_channels_capacity);
 
             acknowledgements_inlets.push(acknowledgements_inlet);
             acknowledgements_outlets.push(acknowledgements_outlet);
@@ -96,7 +98,7 @@ impl DatagramDispatcher {
         let mut process_outlets = Vec::new();
 
         for _ in 0..settings.workers {
-            let (process_inlet, process_outlet) = mpsc::channel(1024); // TODO: Add settings
+            let (process_inlet, process_outlet) = mpsc::channel(settings.process_channels_capacity);
 
             process_inlets.push(process_inlet);
             process_outlets.push(process_outlet);
@@ -113,6 +115,7 @@ impl DatagramDispatcher {
             .enumerate()
         {
             let wrap = wrap.clone();
+            let settings = settings.clone();
 
             fuse.spawn(async move {
                 let _ = DatagramDispatcher::route_out(
@@ -120,6 +123,7 @@ impl DatagramDispatcher {
                     wrap,
                     route_out_outlet,
                     acknowledgements_outlet,
+                    settings,
                 )
                 .await;
             });
@@ -173,6 +177,7 @@ impl DatagramDispatcher {
         wrap: Arc<UdpWrap>,
         mut route_out_outlet: DatagramOutlet,
         mut acknowledgements_outlet: AcknowledgementsOutlet,
+        settings: DatagramDispatcherSettings,
     ) {
         // Data structures
 
@@ -204,7 +209,7 @@ impl DatagramDispatcher {
                         acknowledgements_buffer.append(&mut acknowledgements);
                     }
                 }
-                _ = time::sleep(Duration::from_millis(10)), if !retransmissions.is_empty() => {} // TODO: Add settings
+                _ = time::sleep(settings.retransmission_interval), if !retransmissions.is_empty() => {}
             }
 
             // Flush outlets
@@ -269,8 +274,7 @@ impl DatagramDispatcher {
 
             // Populate `datagrams` and `retransmissions`
 
-            // TODO: Add settings
-            let retransmission_time = Instant::now() + Duration::from_millis(50);
+            let retransmission_time = Instant::now() + settings.retransmission_delay;
 
             for (sequence, datagram) in transmission_buffer.drain(..) {
                 datagrams.insert(sequence, datagram);
