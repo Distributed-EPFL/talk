@@ -63,7 +63,7 @@ impl UdpWrap {
         Ok(UdpWrap { socket })
     }
 
-    async fn send_multiple<'m, I>(&self, messages: I) -> Result<(), Top<UdpWrapError>>
+    async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
     where
         I: IntoIterator<Item = &'m (SocketAddr, &'m [u8])>,
     {
@@ -88,24 +88,49 @@ impl UdpWrap {
             .map_err(UdpWrapError::into_top)
             .spot(here!())?;
 
-        self.socket
+        let sent = self
+            .socket
             .try_io(Interest::WRITABLE, || {
                 let descriptor = self.socket.as_raw_fd();
 
-                sendmmsg(descriptor, &data, MsgFlags::MSG_DONTWAIT).map_err(|error| {
-                    if error == nix::errno::Errno::EWOULDBLOCK {
-                        return io::Error::new(io::ErrorKind::WouldBlock, "`sendmmsg` would block");
-                    }
+                let sizes =
+                    sendmmsg(descriptor, &data, MsgFlags::MSG_DONTWAIT).map_err(|error| {
+                        if error == nix::errno::Errno::EWOULDBLOCK {
+                            return io::Error::new(
+                                io::ErrorKind::WouldBlock,
+                                "`sendmmsg` would block",
+                            );
+                        }
 
-                    io::Error::new(io::ErrorKind::Other, error)
-                })?;
+                        io::Error::new(io::ErrorKind::Other, error)
+                    })?;
 
-                Ok(())
+                let sent = sizes
+                    .iter()
+                    .position(|size| *size == 0)
+                    .unwrap_or(sizes.len());
+
+                Ok(sent)
             })
             .map_err(UdpWrapError::send_failed)
             .map_err(UdpWrapError::into_top)
             .spot(here!())?;
 
-        Ok(())
+        Ok(sent)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn develop() {
+        let wrap = UdpWrap::bind("0.0.0.0:0").await.unwrap();
+
+        let buffer = [42u8; 288];
+        let messages = vec![("127.0.0.1:1234".parse().unwrap(), &buffer[..]); 100000];
+
+        wrap.send_multiple(&messages).await.unwrap();
     }
 }
