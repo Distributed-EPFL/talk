@@ -60,7 +60,7 @@ impl UdpWrap {
             .map_err(UdpWrapError::into_top)
             .spot(here!())?
             .next()
-            .ok_or(UdpWrapError::BindUnknown.into_top())
+            .ok_or_else(|| UdpWrapError::BindUnknown.into_top())
             .spot(here!())?;
 
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap();

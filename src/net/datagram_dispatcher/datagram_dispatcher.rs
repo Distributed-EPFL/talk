@@ -118,7 +118,7 @@ impl DatagramDispatcher {
             let settings = settings.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::route_out(
+                DatagramDispatcher::route_out(
                     index as u8,
                     wrap,
                     route_out_outlet,
@@ -133,7 +133,7 @@ impl DatagramDispatcher {
             let wrap = wrap.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::route_in(wrap, process_inlet).await;
+                DatagramDispatcher::route_in(wrap, process_inlet).await;
             });
         }
 
@@ -142,7 +142,7 @@ impl DatagramDispatcher {
             let acknowledgements_inlets = acknowledgements_inlets.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::process(
+                DatagramDispatcher::process(
                     wrap,
                     process_outlet,
                     receiver_inlet,
@@ -155,7 +155,7 @@ impl DatagramDispatcher {
         // Sender and receiver
 
         let sender = DatagramSender::new(route_out_inlets, fuse.clone());
-        let receiver = DatagramReceiver::new(receiver_outlet, fuse.clone());
+        let receiver = DatagramReceiver::new(receiver_outlet, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
     }
@@ -213,11 +213,6 @@ impl DatagramDispatcher {
             }
 
             // Flush outlets
-
-            while let Ok(datagram) = route_out_outlet.try_recv() {
-                route_out_buffer.push(datagram);
-            }
-
             while let Ok(mut acknowledgements) = acknowledgements_outlet.try_recv() {
                 acknowledgements_buffer.append(&mut acknowledgements);
             }
@@ -248,6 +243,16 @@ impl DatagramDispatcher {
                 }
             }
 
+            if !transmission_buffer.is_empty() {
+                println!("Retransmitting {} messages", transmission_buffer.len());
+            }
+
+            if transmission_buffer.len() < 1000 {
+                while let Ok(datagram) = route_out_outlet.try_recv() {
+                    route_out_buffer.push(datagram);
+                }
+            }
+
             // Stage `route_out_buffer` for transmission
 
             for (address, mut buffer) in route_out_buffer.drain(..) {
@@ -264,13 +269,20 @@ impl DatagramDispatcher {
 
             // Invoke `send_multiple`
 
-            let send_multiple_iterator = transmission_buffer
-                .iter()
-                .map(|(_, (address, buffer))| (address, buffer.as_slice()));
+            let to_send = transmission_buffer.len();
+            let send_multiple_iterator = |start| {
+                transmission_buffer[start..]
+                    .iter()
+                    .map(|(_, (address, buffer))| (address, buffer.as_slice()))
+            };
 
-            // TODO: Retransmit if some packets are not sent (this is indicated
-            // by the `Ok` variant of the value returned by `wrap.send_multiple(..)`)
-            let _ = wrap.send_multiple(send_multiple_iterator).await;
+            let mut sent = 0;
+            while sent < to_send {
+                sent += wrap
+                    .send_multiple(send_multiple_iterator(sent))
+                    .await
+                    .expect("send_multiple failed");
+            }
 
             // Populate `datagrams` and `retransmissions`
 
@@ -343,14 +355,20 @@ impl DatagramDispatcher {
             }
 
             // Invoke `send_multiple`
+            let to_send = acknowledgements_out.len();
+            let send_multiple_iterator = |start| {
+                acknowledgements_out[start..]
+                    .iter()
+                    .map(|(address, buffer)| (address, buffer.as_slice()))
+            };
 
-            let send_multiple_iterator = acknowledgements_out
-                .iter()
-                .map(|(address, buffer)| (address, buffer.as_slice()));
-
-            // TODO: Retransmit if some packets are not sent (this is indicated
-            // by the `Ok` variant of the value returned by `wrap.send_multiple(..)`)
-            let _ = wrap.send_multiple(send_multiple_iterator).await;
+            let mut sent = 0;
+            while sent < to_send {
+                sent += wrap
+                    .send_multiple(send_multiple_iterator(sent))
+                    .await
+                    .expect("send_multiple failed");
+            }
 
             // Dispatch acknowledgements to routers
 
