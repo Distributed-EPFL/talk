@@ -183,13 +183,13 @@ impl DatagramDispatcher {
 
         let mut sequence: u64 = 0;
         let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> = HashMap::new();
-        let mut retransmissions: VecDeque<(Instant, u64)> = VecDeque::new();
+        let mut retransmissions: VecDeque<(Instant, u64)> = VecDeque::with_capacity(1000);
 
         // Buffers
 
-        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> = Vec::new();
-        let mut acknowledgements_buffer: Vec<u64> = Vec::new();
-        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> = Vec::new();
+        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> = Vec::with_capacity(1000);
+        let mut acknowledgements_buffer: Vec<u64> = Vec::with_capacity(1000);
+        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> = Vec::with_capacity(1000);
 
         loop {
             // Invariant: here all buffers are empty: `route_out_buffer`,
@@ -308,9 +308,9 @@ impl DatagramDispatcher {
         receiver_inlet: DatagramInlet,
         acknowledgements_inlets: Vec<AcknowledgementsInlet>,
     ) {
-        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> = Vec::new();
+        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> = Vec::with_capacity(1000);
         let mut acknowledgements_in: Vec<Vec<u64>> =
-            vec![Vec::new(); acknowledgements_inlets.len()];
+            vec![Vec::with_capacity(1000); acknowledgements_inlets.len()];
 
         loop {
             let datagrams = match process_outlet.recv().await {
