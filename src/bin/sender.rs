@@ -5,7 +5,7 @@ use talk::net::{DatagramDispatcher, DatagramDispatcherSettings};
 use tokio::time;
 
 const MESSAGES: u64 = 32000000;
-const WORKERS: u64 = 4;
+const WORKERS: u64 = 25;
 
 const MESSAGES_PER_WORKER: u64 = MESSAGES / WORKERS;
 
@@ -19,7 +19,8 @@ async fn spam(worker: u64) {
         "0.0.0.0:0",
         DatagramDispatcherSettings {
             workers: 1,
-            retransmission_delay: Duration::from_millis(200),
+            retransmission_delay: Duration::from_millis(150),
+            retransmission_interval: Duration::from_millis(20),
             ..Default::default()
         },
     )
@@ -39,7 +40,7 @@ async fn spam(worker: u64) {
 
         dispatcher.send(destination, message).await;
 
-        if index % 200 == 0 {
+        if index % 50 == 0 {
             time::sleep(Duration::from_millis(1)).await;
         }
     }
