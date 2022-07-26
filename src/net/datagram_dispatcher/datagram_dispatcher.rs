@@ -12,13 +12,13 @@ use std::{
     mem,
     net::SocketAddr,
     sync::Arc,
-    time::Instant,
 };
 
 use tokio::{
     net::ToSocketAddrs,
     sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender},
     time,
+    time::Instant,
 };
 
 type AcknowledgementsInlet = MpscSender<Vec<u64>>;
@@ -180,16 +180,16 @@ impl DatagramDispatcher {
         settings: DatagramDispatcherSettings,
     ) {
         // Data structures
-
         let mut sequence: u64 = 0;
         let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> = HashMap::new();
         let mut retransmissions: VecDeque<(Instant, u64)> = VecDeque::with_capacity(1000);
 
         // Buffers
-
         let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> = Vec::with_capacity(1000);
         let mut acknowledgements_buffer: Vec<u64> = Vec::with_capacity(1000);
         let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> = Vec::with_capacity(1000);
+
+        let mut last_retransmission: Instant = Instant::now();
 
         loop {
             // Invariant: here all buffers are empty: `route_out_buffer`,
@@ -209,7 +209,7 @@ impl DatagramDispatcher {
                         acknowledgements_buffer.append(&mut acknowledgements);
                     }
                 }
-                _ = time::sleep(settings.retransmission_interval), if !retransmissions.is_empty() => {}
+                _ = time::sleep_until(last_retransmission + settings.retransmission_interval), if !retransmissions.is_empty() => {}
             }
 
             // Flush outlets
@@ -227,19 +227,22 @@ impl DatagramDispatcher {
 
             let now = Instant::now();
 
-            loop {
-                if let Some((time, _)) = retransmissions.front() {
-                    if *time > now {
+            if now > last_retransmission + settings.retransmission_interval {
+                last_retransmission = now;
+                loop {
+                    if let Some((time, _)) = retransmissions.front() {
+                        if *time > now {
+                            break;
+                        }
+                    } else {
                         break;
                     }
-                } else {
-                    break;
-                }
 
-                let (_, sequence) = retransmissions.pop_front().unwrap();
+                    let (_, sequence) = retransmissions.pop_front().unwrap();
 
-                if let Some(datagram) = datagrams.remove(&sequence) {
-                    transmission_buffer.push((sequence, datagram));
+                    if let Some(datagram) = datagrams.remove(&sequence) {
+                        transmission_buffer.push((sequence, datagram));
+                    }
                 }
             }
 
