@@ -97,16 +97,15 @@ impl UdpWrap {
             })
             .collect::<Vec<SendMmsgData<_, _, _>>>();
 
-        self.socket
-            .writable()
-            .await
-            .map_err(UdpWrapError::socket_error)
-            .map_err(UdpWrapError::into_top)
-            .spot(here!())?;
+        let sent = loop {
+            self.socket
+                .writable()
+                .await
+                .map_err(UdpWrapError::socket_error)
+                .map_err(UdpWrapError::into_top)
+                .spot(here!())?;
 
-        let sent = self
-            .socket
-            .try_io(Interest::WRITABLE, || {
+            match self.socket.try_io(Interest::WRITABLE, || {
                 let descriptor = self.socket.as_raw_fd();
 
                 let sizes =
@@ -127,10 +126,14 @@ impl UdpWrap {
                     .unwrap_or(sizes.len());
 
                 Ok(sent)
-            })
-            .map_err(UdpWrapError::send_failed)
-            .map_err(UdpWrapError::into_top)
-            .spot(here!())?;
+            }) {
+                Ok(n) => break n,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    continue;
+                }
+                Err(e) => return Err(UdpWrapError::send_failed(e).into_top()).spot(here!()),
+            };
+        };
 
         Ok(sent)
     }
