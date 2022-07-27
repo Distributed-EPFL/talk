@@ -183,13 +183,18 @@ impl DatagramDispatcher {
     ) {
         // Data structures
         let mut sequence: u64 = 0;
-        let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> = HashMap::with_capacity(settings.route_out_channels_capacity);
-        let mut retransmissions: VecDeque<(Instant, u64)> = VecDeque::with_capacity(settings.route_out_channels_capacity);
+        let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> =
+            HashMap::with_capacity(settings.route_out_channels_capacity);
+        let mut retransmissions: VecDeque<(Instant, u64)> =
+            VecDeque::with_capacity(settings.route_out_channels_capacity);
 
         // Buffers
-        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> = Vec::with_capacity(settings.route_out_channels_capacity);
-        let mut acknowledgements_buffer: Vec<u64> = Vec::with_capacity(settings.route_out_channels_capacity);
-        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> = Vec::with_capacity(settings.route_out_channels_capacity);
+        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
+        let mut acknowledgements_buffer: Vec<u64> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
+        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
 
         let mut last_retransmission: Instant = Instant::now();
 
@@ -317,9 +322,13 @@ impl DatagramDispatcher {
         acknowledgements_inlets: Vec<AcknowledgementsInlet>,
         settings: DatagramDispatcherSettings,
     ) {
-        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> = Vec::with_capacity(settings.process_channels_capacity);
+        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> =
+            Vec::with_capacity(settings.process_channels_capacity);
         let mut acknowledgements_in: Vec<Vec<u64>> =
-            vec![Vec::with_capacity(settings.process_channels_capacity); acknowledgements_inlets.len()];
+            vec![
+                Vec::with_capacity(settings.process_channels_capacity);
+                acknowledgements_inlets.len()
+            ];
 
         loop {
             let datagrams = match process_outlet.recv().await {
