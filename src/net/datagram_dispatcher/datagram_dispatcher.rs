@@ -12,13 +12,13 @@ use std::{
     mem,
     net::SocketAddr,
     sync::Arc,
-    time::Instant,
 };
 
 use tokio::{
     net::ToSocketAddrs,
     sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender},
     time,
+    time::Instant,
 };
 
 type AcknowledgementsInlet = MpscSender<Vec<u64>>;
@@ -118,7 +118,7 @@ impl DatagramDispatcher {
             let settings = settings.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::route_out(
+                DatagramDispatcher::route_out(
                     index as u8,
                     wrap,
                     route_out_outlet,
@@ -133,20 +133,22 @@ impl DatagramDispatcher {
             let wrap = wrap.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::route_in(wrap, process_inlet).await;
+                DatagramDispatcher::route_in(wrap, process_inlet).await;
             });
         }
 
         for (wrap, process_outlet) in wraps.into_iter().zip(process_outlets) {
             let receiver_inlet = receiver_inlet.clone();
             let acknowledgements_inlets = acknowledgements_inlets.clone();
+            let settings = settings.clone();
 
             fuse.spawn(async move {
-                let _ = DatagramDispatcher::process(
+                DatagramDispatcher::process(
                     wrap,
                     process_outlet,
                     receiver_inlet,
                     acknowledgements_inlets,
+                    settings,
                 )
                 .await;
             });
@@ -155,7 +157,7 @@ impl DatagramDispatcher {
         // Sender and receiver
 
         let sender = DatagramSender::new(route_out_inlets, fuse.clone());
-        let receiver = DatagramReceiver::new(receiver_outlet, fuse.clone());
+        let receiver = DatagramReceiver::new(receiver_outlet, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
     }
@@ -180,16 +182,21 @@ impl DatagramDispatcher {
         settings: DatagramDispatcherSettings,
     ) {
         // Data structures
-
         let mut sequence: u64 = 0;
-        let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> = HashMap::new();
-        let mut retransmissions: VecDeque<(Instant, u64)> = VecDeque::new();
+        let mut datagrams: HashMap<u64, (SocketAddr, Vec<u8>)> =
+            HashMap::with_capacity(settings.route_out_channels_capacity);
+        let mut retransmissions: VecDeque<(Instant, u64)> =
+            VecDeque::with_capacity(settings.route_out_channels_capacity);
 
         // Buffers
+        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
+        let mut acknowledgements_buffer: Vec<u64> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
+        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> =
+            Vec::with_capacity(settings.route_out_channels_capacity);
 
-        let mut route_out_buffer: Vec<(SocketAddr, Vec<u8>)> = Vec::new();
-        let mut acknowledgements_buffer: Vec<u64> = Vec::new();
-        let mut transmission_buffer: Vec<(u64, (SocketAddr, Vec<u8>))> = Vec::new();
+        let mut last_retransmission: Instant = Instant::now();
 
         loop {
             // Invariant: here all buffers are empty: `route_out_buffer`,
@@ -209,15 +216,10 @@ impl DatagramDispatcher {
                         acknowledgements_buffer.append(&mut acknowledgements);
                     }
                 }
-                _ = time::sleep(settings.retransmission_interval), if !retransmissions.is_empty() => {}
+                _ = time::sleep_until(last_retransmission + settings.retransmission_interval), if !retransmissions.is_empty() => {}
             }
 
             // Flush outlets
-
-            while let Ok(datagram) = route_out_outlet.try_recv() {
-                route_out_buffer.push(datagram);
-            }
-
             while let Ok(mut acknowledgements) = acknowledgements_outlet.try_recv() {
                 acknowledgements_buffer.append(&mut acknowledgements);
             }
@@ -231,25 +233,41 @@ impl DatagramDispatcher {
             // Stage `retransmissions` for transmission
 
             let now = Instant::now();
+            let mut has_pending_retransmissions = false;
 
-            loop {
-                if let Some((time, _)) = retransmissions.front() {
-                    if *time > now {
+            if now > last_retransmission + settings.retransmission_interval {
+                loop {
+                    if let Some((time, _)) = retransmissions.front() {
+                        if *time > now {
+                            break;
+                        }
+                        if transmission_buffer.len() >= settings.retransmission_batch_size {
+                            has_pending_retransmissions = true;
+                            break;
+                        }
+                    } else {
                         break;
                     }
-                } else {
-                    break;
+
+                    let (_, sequence) = retransmissions.pop_front().unwrap();
+
+                    if let Some(datagram) = datagrams.remove(&sequence) {
+                        transmission_buffer.push((sequence, datagram));
+                    }
                 }
+            }
 
-                let (_, sequence) = retransmissions.pop_front().unwrap();
+            if !transmission_buffer.is_empty() {
+                last_retransmission = now;
+            }
 
-                if let Some(datagram) = datagrams.remove(&sequence) {
-                    transmission_buffer.push((sequence, datagram));
+            if !has_pending_retransmissions {
+                while let Ok(datagram) = route_out_outlet.try_recv() {
+                    route_out_buffer.push(datagram);
                 }
             }
 
             // Stage `route_out_buffer` for transmission
-
             for (address, mut buffer) in route_out_buffer.drain(..) {
                 let mut footer = [0u8; 10];
                 footer[0] = 0; // Datagram is a message
@@ -264,13 +282,20 @@ impl DatagramDispatcher {
 
             // Invoke `send_multiple`
 
-            let send_multiple_iterator = transmission_buffer
-                .iter()
-                .map(|(_, (address, buffer))| (address, buffer.as_slice()));
+            let to_send = transmission_buffer.len();
+            let send_multiple_iterator = |start| {
+                transmission_buffer[start..]
+                    .iter()
+                    .map(|(_, (address, buffer))| (address, buffer.as_slice()))
+            };
 
-            // TODO: Retransmit if some packets are not sent (this is indicated
-            // by the `Ok` variant of the value returned by `wrap.send_multiple(..)`)
-            let _ = wrap.send_multiple(send_multiple_iterator).await;
+            let mut sent = 0;
+            while sent < to_send {
+                sent += wrap
+                    .send_multiple(send_multiple_iterator(sent))
+                    .await
+                    .expect("send_multiple failed");
+            }
 
             // Populate `datagrams` and `retransmissions`
 
@@ -295,10 +320,15 @@ impl DatagramDispatcher {
         mut process_outlet: DatagramsOutlet,
         receiver_inlet: DatagramInlet,
         acknowledgements_inlets: Vec<AcknowledgementsInlet>,
+        settings: DatagramDispatcherSettings,
     ) {
-        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> = Vec::new();
+        let mut acknowledgements_out: Vec<(SocketAddr, [u8; 10])> =
+            Vec::with_capacity(settings.process_channels_capacity);
         let mut acknowledgements_in: Vec<Vec<u64>> =
-            vec![Vec::new(); acknowledgements_inlets.len()];
+            vec![
+                Vec::with_capacity(settings.process_channels_capacity);
+                acknowledgements_inlets.len()
+            ];
 
         loop {
             let datagrams = match process_outlet.recv().await {
@@ -343,14 +373,20 @@ impl DatagramDispatcher {
             }
 
             // Invoke `send_multiple`
+            let to_send = acknowledgements_out.len();
+            let send_multiple_iterator = |start| {
+                acknowledgements_out[start..]
+                    .iter()
+                    .map(|(address, buffer)| (address, buffer.as_slice()))
+            };
 
-            let send_multiple_iterator = acknowledgements_out
-                .iter()
-                .map(|(address, buffer)| (address, buffer.as_slice()));
-
-            // TODO: Retransmit if some packets are not sent (this is indicated
-            // by the `Ok` variant of the value returned by `wrap.send_multiple(..)`)
-            let _ = wrap.send_multiple(send_multiple_iterator).await;
+            let mut sent = 0;
+            while sent < to_send {
+                sent += wrap
+                    .send_multiple(send_multiple_iterator(sent))
+                    .await
+                    .expect("send_multiple failed");
+            }
 
             // Dispatch acknowledgements to routers
 
