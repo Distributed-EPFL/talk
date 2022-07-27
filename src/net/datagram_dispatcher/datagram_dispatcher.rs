@@ -254,7 +254,6 @@ impl DatagramDispatcher {
 
             if !transmission_buffer.is_empty() {
                 last_retransmission = now;
-                println!("Retransmitting {} messages", transmission_buffer.len());
             }
 
             if !has_pending_retransmissions {
