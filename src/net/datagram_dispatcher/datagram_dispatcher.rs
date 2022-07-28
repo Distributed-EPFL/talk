@@ -283,16 +283,19 @@ impl DatagramDispatcher {
             // Invoke `send_multiple`
 
             let to_send = transmission_buffer.len();
-            let send_multiple_iterator = |start| {
-                transmission_buffer[start..]
+            fn get_iter_to_send(
+                buffer: &[(u64, (SocketAddr, Vec<u8>))],
+                start: usize,
+            ) -> impl Iterator<Item = (&SocketAddr, &[u8])> {
+                buffer[start..]
                     .iter()
                     .map(|(_, (address, buffer))| (address, buffer.as_slice()))
-            };
+            }
 
             let mut sent = 0;
             while sent < to_send {
                 sent += wrap
-                    .send_multiple(send_multiple_iterator(sent))
+                    .send_multiple(get_iter_to_send(&transmission_buffer, sent))
                     .await
                     .expect("send_multiple failed");
             }
@@ -374,16 +377,19 @@ impl DatagramDispatcher {
 
             // Invoke `send_multiple`
             let to_send = acknowledgements_out.len();
-            let send_multiple_iterator = |start| {
-                acknowledgements_out[start..]
+            fn get_iter_to_send(
+                buffer: &[(SocketAddr, [u8; 10])],
+                start: usize,
+            ) -> impl Iterator<Item = (&SocketAddr, &[u8])> {
+                buffer[start..]
                     .iter()
                     .map(|(address, buffer)| (address, buffer.as_slice()))
-            };
+            }
 
             let mut sent = 0;
             while sent < to_send {
                 sent += wrap
-                    .send_multiple(send_multiple_iterator(sent))
+                    .send_multiple(get_iter_to_send(&acknowledgements_out, sent))
                     .await
                     .expect("send_multiple failed");
             }
