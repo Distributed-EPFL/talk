@@ -1,21 +1,19 @@
 use crate::net::datagram_dispatcher::UdpWrapSettings;
 
 use doomstack::{here, Doom, ResultExt, Top};
-
-#[cfg(target_os = "linux")]
-use nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage};
-
 use socket2::{Domain, Socket, Type};
-
-use std::{
-    io::{IoSlice, IoSliceMut},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    os::unix::io::AsRawFd,
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use tokio::{
+    io,
+    net::{self, ToSocketAddrs, UdpSocket},
 };
 
-use tokio::{
-    io::{self, Interest},
-    net::{self, ToSocketAddrs, UdpSocket},
+#[cfg(target_os = "linux")]
+use {
+    nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage},
+    std::io::{IoSlice, IoSliceMut},
+    std::os::unix::io::AsRawFd,
+    tokio::io::Interest,
 };
 
 pub(in crate::net::datagram_dispatcher) struct UdpWrap {
@@ -66,9 +64,10 @@ impl UdpWrap {
 
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap();
 
+        #[cfg(unix)]
         socket.set_reuse_port(true).unwrap();
-        socket.set_nonblocking(true).unwrap();
 
+        socket.set_nonblocking(true).unwrap();
         socket
             .bind(&address.into())
             .map_err(UdpWrapError::bind_failed)
@@ -222,9 +221,9 @@ impl UdpWrap {
 
         let messages: Vec<(SocketAddr, usize)> = buffer
             .chunks_exact_mut(self.settings.maximum_transmission_unit)
-            .map(|buf| self.socket.try_recv_from(buf).ok())
-            .fuse()
-            .flatten()
+            .map(|buf| self.socket.try_recv_from(buf))
+            .take_while(Result::is_ok)
+            .map(Result::unwrap)
             .map(|(size, addr)| (addr, size))
             .collect();
 
