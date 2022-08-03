@@ -1,20 +1,19 @@
 use crate::net::datagram_dispatcher::UdpWrapSettings;
 
 use doomstack::{here, Doom, ResultExt, Top};
-
-use nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage};
-
 use socket2::{Domain, Socket, Type};
-
-use std::{
-    io::{IoSlice, IoSliceMut},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    os::unix::io::AsRawFd,
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use tokio::{
+    io,
+    net::{self, ToSocketAddrs, UdpSocket},
 };
 
-use tokio::{
-    io::{self, Interest},
-    net::{self, ToSocketAddrs, UdpSocket},
+#[cfg(target_os = "linux")]
+use {
+    nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage},
+    std::io::{IoSlice, IoSliceMut},
+    std::os::unix::io::AsRawFd,
+    tokio::io::Interest,
 };
 
 pub(in crate::net::datagram_dispatcher) struct UdpWrap {
@@ -65,9 +64,10 @@ impl UdpWrap {
 
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap();
 
+        #[cfg(unix)]
         socket.set_reuse_port(true).unwrap();
-        socket.set_nonblocking(true).unwrap();
 
+        socket.set_nonblocking(true).unwrap();
         socket
             .bind(&address.into())
             .map_err(UdpWrapError::bind_failed)
@@ -79,6 +79,7 @@ impl UdpWrap {
         Ok(UdpWrap { socket, settings })
     }
 
+    #[cfg(target_os = "linux")]
     pub async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
     where
         I: IntoIterator<Item = (&'m SocketAddr, &'m [u8])>,
@@ -138,6 +139,25 @@ impl UdpWrap {
         Ok(sent)
     }
 
+    #[cfg(not(target_os = "linux"))]
+    pub async fn send_multiple<'m, I>(&self, messages: I) -> Result<usize, Top<UdpWrapError>>
+    where
+        I: IntoIterator<Item = (&'m SocketAddr, &'m [u8])>,
+    {
+        let mut sent = 0;
+        for (addr, bytes) in messages {
+            self.socket
+                .send_to(bytes, addr)
+                .await
+                .map_err(UdpWrapError::send_failed)
+                .map_err(UdpWrapError::into_top)
+                .spot(here!())?;
+            sent += 1;
+        }
+        Ok(sent)
+    }
+
+    #[cfg(target_os = "linux")]
     pub async fn receive_multiple(&self) -> ReceiveMultiple {
         let mut buffer =
             vec![0u8; self.settings.maximum_transmission_unit * self.settings.receive_buffer_size];
@@ -184,6 +204,28 @@ impl UdpWrap {
                 Ok(messages)
             })
             .unwrap_or_default();
+
+        ReceiveMultiple {
+            buffer,
+            maximum_transfer_unit: self.settings.maximum_transmission_unit,
+            messages,
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn receive_multiple(&self) -> ReceiveMultiple {
+        let mut buffer =
+            vec![0u8; self.settings.maximum_transmission_unit * self.settings.receive_buffer_size];
+
+        self.socket.readable().await.unwrap();
+
+        let messages: Vec<(SocketAddr, usize)> = buffer
+            .chunks_exact_mut(self.settings.maximum_transmission_unit)
+            .map(|buf| self.socket.try_recv_from(buf))
+            .take_while(Result::is_ok)
+            .map(Result::unwrap)
+            .map(|(size, addr)| (addr, size))
+            .collect();
 
         ReceiveMultiple {
             buffer,
