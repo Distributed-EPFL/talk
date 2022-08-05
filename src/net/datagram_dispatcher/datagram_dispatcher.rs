@@ -33,9 +33,9 @@ type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 type DatagramsInlet = MpscSender<ReceiveMultiple>;
 type DatagramsOutlet = MpscReceiver<ReceiveMultiple>;
 
-pub struct DatagramDispatcher<M: Message> {
-    sender: DatagramSender<M>,
-    receiver: DatagramReceiver<M>,
+pub struct DatagramDispatcher<S: Message, R: Message> {
+    sender: DatagramSender<S>,
+    receiver: DatagramReceiver<R>,
 }
 
 #[derive(Doom)]
@@ -44,14 +44,15 @@ pub enum DatagramDispatcherError {
     BindFailed,
 }
 
-impl<M> DatagramDispatcher<M>
+impl<S, R> DatagramDispatcher<S, R>
 where
-    M: Message,
+    S: Message,
+    R: Message,
 {
     pub async fn bind<A>(
         address: A,
         settings: DatagramDispatcherSettings,
-    ) -> Result<DatagramDispatcher<M>, Top<DatagramDispatcherError>>
+    ) -> Result<DatagramDispatcher<S, R>, Top<DatagramDispatcherError>>
     where
         A: Clone + ToSocketAddrs,
     {
@@ -124,7 +125,7 @@ where
             let settings = settings.clone();
 
             fuse.spawn(async move {
-                DatagramDispatcher::route_out(
+                DatagramDispatcher::<S, R>::route_out(
                     index as u8,
                     wrap,
                     route_out_outlet,
@@ -139,7 +140,7 @@ where
             let wrap = wrap.clone();
 
             fuse.spawn(async move {
-                DatagramDispatcher::<M>::route_in(wrap, process_inlet).await;
+                DatagramDispatcher::<S, R>::route_in(wrap, process_inlet).await;
             });
         }
 
@@ -149,7 +150,7 @@ where
             let settings = settings.clone();
 
             fuse.spawn(async move {
-                DatagramDispatcher::process(
+                DatagramDispatcher::<S, R>::process(
                     wrap,
                     process_outlet,
                     receiver_inlet,
@@ -168,22 +169,22 @@ where
         Ok(DatagramDispatcher { sender, receiver })
     }
 
-    pub async fn send(&self, destination: SocketAddr, message: M) {
+    pub async fn send(&self, destination: SocketAddr, message: S) {
         self.sender.send(destination, message).await
     }
 
-    pub async fn receive(&mut self) -> (SocketAddr, M) {
+    pub async fn receive(&mut self) -> (SocketAddr, R) {
         self.receiver.receive().await
     }
 
-    pub fn split(self) -> (DatagramSender<M>, DatagramReceiver<M>) {
+    pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
         (self.sender, self.receiver)
     }
 
     async fn route_out(
         index: u8,
         wrap: Arc<UdpWrap>,
-        mut route_out_outlet: MessageOutlet<M>,
+        mut route_out_outlet: MessageOutlet<S>,
         mut acknowledgements_outlet: AcknowledgementsOutlet,
         settings: DatagramDispatcherSettings,
     ) {
@@ -331,7 +332,7 @@ where
     async fn process(
         wrap: Arc<UdpWrap>,
         mut process_outlet: DatagramsOutlet,
-        receiver_inlet: MessageInlet<M>,
+        receiver_inlet: MessageInlet<R>,
         acknowledgements_inlets: Vec<AcknowledgementsInlet>,
         settings: DatagramDispatcherSettings,
     ) {

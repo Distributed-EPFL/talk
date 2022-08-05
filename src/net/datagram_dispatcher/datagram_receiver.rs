@@ -6,17 +6,17 @@ use crate::{net::Message, sync::fuse::Fuse};
 
 type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 
-pub struct DatagramReceiver<M: Message> {
-    datagram_outlet: MessageOutlet<M>,
+pub struct DatagramReceiver<R: Message> {
+    datagram_outlet: MessageOutlet<R>,
     _fuse: Arc<Fuse>,
 }
 
-impl<M> DatagramReceiver<M>
+impl<R> DatagramReceiver<R>
 where
-    M: Message,
+    R: Message,
 {
     pub(in crate::net::datagram_dispatcher) fn new(
-        packet_outlet: MessageOutlet<M>,
+        packet_outlet: MessageOutlet<R>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramReceiver {
@@ -25,7 +25,7 @@ where
         }
     }
 
-    pub async fn receive(&mut self) -> (SocketAddr, M) {
+    pub async fn receive(&mut self) -> (SocketAddr, R) {
         // Because this `DatagramReceiver` is holding a copy
         // of the `DatagramDispatcher`'s fuse, the corresponding
         // inlet is guaranteed to still be held by `process` tasks

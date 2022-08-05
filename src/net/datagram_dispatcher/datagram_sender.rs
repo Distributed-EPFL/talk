@@ -8,17 +8,17 @@ use tokio::sync::mpsc::Sender as MpscSender;
 
 type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
 
-pub struct DatagramSender<M: Message> {
-    datagram_inlets: Vec<MessageInlet<M>>,
+pub struct DatagramSender<S: Message> {
+    datagram_inlets: Vec<MessageInlet<S>>,
     _fuse: Arc<Fuse>,
 }
 
-impl<M> DatagramSender<M>
+impl<S> DatagramSender<S>
 where
-    M: Message,
+    S: Message,
 {
     pub(in crate::net::datagram_dispatcher) fn new(
-        packet_inlets: Vec<MessageInlet<M>>,
+        packet_inlets: Vec<MessageInlet<S>>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramSender {
@@ -27,7 +27,7 @@ where
         }
     }
 
-    pub async fn send(&self, destination: SocketAddr, message: M) {
+    pub async fn send(&self, destination: SocketAddr, message: S) {
         let router = random::<usize>() % self.datagram_inlets.len();
 
         // Because this `DatagramSender` is holding a copy
