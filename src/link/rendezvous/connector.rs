@@ -62,7 +62,7 @@ impl Connector {
             .spot(here!())?;
 
         let mut connection = address
-            .connect(&self.client.connect_settings())
+            .connect(self.client.connect_settings())
             .await
             .map_err(ConnectorError::connect_failed)
             .map_err(Doom::into_top)

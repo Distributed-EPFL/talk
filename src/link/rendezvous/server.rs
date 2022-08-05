@@ -63,11 +63,11 @@ impl Server {
 
         let listener = {
             let result = match settings.connect.transport {
-                TransportProtocol::TCP => TcpListener::bind(address).await.map(RawListener::TCP),
+                TransportProtocol::TCP => TcpListener::bind(address).await.map(RawListener::Tcp),
                 TransportProtocol::UDT(ref config) => {
                     UdtListener::bind(address, Some(config.clone()))
                         .await
-                        .map(RawListener::UDT)
+                        .map(RawListener::Udt)
                 }
             };
             result
@@ -92,11 +92,11 @@ impl Server {
 
         let accept = || async {
             match listener {
-                RawListener::TCP(ref tcp_listener) => tcp_listener
+                RawListener::Tcp(ref tcp_listener) => tcp_listener
                     .accept()
                     .await
                     .map(|(stream, address)| (stream.into(), address)),
-                RawListener::UDT(ref udt_listener) => udt_listener
+                RawListener::Udt(ref udt_listener) => udt_listener
                     .accept()
                     .await
                     .map(|(address, stream)| (stream.into(), address)),

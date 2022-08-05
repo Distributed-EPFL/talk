@@ -26,7 +26,7 @@ pub struct ConnectSettings {
 impl Default for ConnectSettings {
     fn default() -> Self {
         Self {
-            transport: TransportProtocol::UDT(UdtConfiguration::default()),
+            transport: TransportProtocol::TCP,
         }
     }
 }

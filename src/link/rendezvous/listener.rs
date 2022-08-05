@@ -25,8 +25,8 @@ use tokio_udt::UdtListener;
 type Outlet = Receiver<(Identity, SecureConnection)>;
 
 pub(crate) enum RawListener {
-    TCP(TcpListener),
-    UDT(UdtListener),
+    Tcp(TcpListener),
+    Udt(UdtListener),
 }
 
 pub struct Listener {
@@ -55,7 +55,7 @@ impl Listener {
                 .await
                 .unwrap();
                 let port = listener.local_addr().unwrap().port();
-                (RawListener::TCP(listener), port)
+                (RawListener::Tcp(listener), port)
             }
             TransportProtocol::UDT(ref config) => {
                 let listener =
@@ -63,7 +63,7 @@ impl Listener {
                         .await
                         .unwrap();
                 let port = listener.local_addr().unwrap().port();
-                (RawListener::UDT(listener), port)
+                (RawListener::Udt(listener), port)
             }
         };
 
@@ -95,13 +95,13 @@ impl Listener {
 
         loop {
             let accept_result = match listener {
-                RawListener::TCP(ref tcp_listener) => {
+                RawListener::Tcp(ref tcp_listener) => {
                     tcp_listener.accept().await.and_then(|(stream, addr)| {
                         stream.set_nodelay(true)?;
                         Ok((stream.into(), addr))
                     })
                 }
-                RawListener::UDT(ref udt_listener) => udt_listener
+                RawListener::Udt(ref udt_listener) => udt_listener
                     .accept()
                     .await
                     .map(|(addr, udt_connection)| (udt_connection.into(), addr)),
