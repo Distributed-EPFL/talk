@@ -3,7 +3,10 @@ use async_trait::async_trait;
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ListenerSettings},
-    net::{traits::TcpConnect, Listener as NetListener, PlainConnection, SecureConnection},
+    net::{
+        traits::{TcpConnect, TransportProtocol},
+        Listener as NetListener, PlainConnection, SecureConnection,
+    },
     sync::fuse::Fuse,
 };
 
@@ -11,14 +14,20 @@ use doomstack::{here, Doom, ResultExt, Stack, Top};
 
 use std::net::Ipv4Addr;
 
+use tokio::net::TcpListener;
 use tokio::sync::{
     mpsc,
     mpsc::{Receiver, Sender},
 };
 
-use tokio_udt::{UdtConfiguration, UdtListener};
+use tokio_udt::UdtListener;
 
 type Outlet = Receiver<(Identity, SecureConnection)>;
+
+pub(crate) enum RawListener {
+    TCP(TcpListener),
+    UDT(UdtListener),
+}
 
 pub struct Listener {
     outlet: Outlet,
@@ -38,18 +47,27 @@ impl Listener {
     where
         S: 'static + TcpConnect,
     {
-        let listener = UdtListener::bind(
-            (Ipv4Addr::UNSPECIFIED, 0).into(),
-            Some(UdtConfiguration {
-                reuse_mux: false,
-                ..Default::default()
-            }), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
-        )
-        .await
-        .unwrap();
+        let (listener, port) = match settings.client_settings.connect.transport {
+            TransportProtocol::TCP => {
+                let listener = TcpListener::bind(
+                    (Ipv4Addr::UNSPECIFIED, 0), // TODO: Determine if `Ipv6Addr` can be used instead (problems with Docker?)
+                )
+                .await
+                .unwrap();
+                let port = listener.local_addr().unwrap().port();
+                (RawListener::TCP(listener), port)
+            }
+            TransportProtocol::UDT(ref config) => {
+                let listener =
+                    UdtListener::bind((Ipv4Addr::UNSPECIFIED, 0).into(), Some(config.clone()))
+                        .await
+                        .unwrap();
+                let port = listener.local_addr().unwrap().port();
+                (RawListener::UDT(listener), port)
+            }
+        };
 
         let identity = keychain.keycard().identity();
-        let port = listener.local_addr().unwrap().port();
 
         let fuse = Fuse::new();
 
@@ -70,19 +88,29 @@ impl Listener {
 
     async fn listen(
         keychain: KeyChain,
-        listener: UdtListener,
+        listener: RawListener,
         inlet: Sender<(Identity, SecureConnection)>,
     ) {
         let fuse = Fuse::new();
 
         loop {
+            let accept_result = match listener {
+                RawListener::TCP(ref tcp_listener) => {
+                    tcp_listener.accept().await.and_then(|(stream, addr)| {
+                        stream.set_nodelay(true)?;
+                        Ok((stream.into(), addr))
+                    })
+                }
+                RawListener::UDT(ref udt_listener) => udt_listener
+                    .accept()
+                    .await
+                    .map(|(addr, udt_connection)| (udt_connection.into(), addr)),
+            };
             // if let Ok((stream, _)) = listener.accept().await.and_then(|(stream, addr)| {
             //     stream.set_nodelay(true)?;
             //     Ok((stream, addr))
             // }) {
-            if let Ok((_addr, stream)) = listener.accept().await {
-                let connection = stream.into();
-
+            if let Ok((connection, _)) = accept_result {
                 let keychain = keychain.clone();
                 let inlet = inlet.clone();
 

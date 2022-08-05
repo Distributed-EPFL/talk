@@ -2,7 +2,10 @@ use async_trait::async_trait;
 
 use crate::{
     crypto::{Identity, KeyChain},
-    net::{traits::TcpConnect, Connector, SecureConnection},
+    net::{
+        traits::{ConnectSettings, TcpConnect},
+        Connector, SecureConnection,
+    },
 };
 
 use doomstack::{here, Doom, ResultExt, Stack};
@@ -46,7 +49,7 @@ impl Connector for TestConnector {
             .clone();
 
         let mut connection = address
-            .connect()
+            .connect(&ConnectSettings::default())
             .await
             .map_err(TestConnectorError::connect_failed)
             .map_err(Doom::into_top)

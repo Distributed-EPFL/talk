@@ -4,28 +4,36 @@ use crate::net::PlainConnection;
 
 use std::io::Result;
 
-use tokio::net::{lookup_host, TcpStream, ToSocketAddrs};
-
+use tokio::net::{TcpStream, ToSocketAddrs};
 use tokio_udt::{UdtConfiguration, UdtConnection};
 
-// TODO: Define generic Connect
-// pub enum TransportType {
-//     TCP,
-//     UDT,
-// }
+/*  TODO:
+ * Define generic Connect
+ * Retry handshake / RDV queue in UDT
+*/
 
-// struct ConnectSettings {
-//     transport: // TCP / UDT
-// }
+#[derive(Clone, Debug)]
+pub enum TransportProtocol {
+    TCP,
+    UDT(UdtConfiguration),
+}
 
-// #[async_trait]
-// pub trait Connect: Send + Sync {
-//     async fn connect(&self, settings: ConnectSettings) -> Result<PlainConnection>;
-// }
+#[derive(Clone, Debug)]
+pub struct ConnectSettings {
+    pub transport: TransportProtocol,
+}
+
+impl Default for ConnectSettings {
+    fn default() -> Self {
+        Self {
+            transport: TransportProtocol::UDT(UdtConfiguration::default()),
+        }
+    }
+}
 
 #[async_trait]
 pub trait TcpConnect: Send + Sync {
-    async fn connect(&self) -> Result<PlainConnection>;
+    async fn connect(&self, settings: &ConnectSettings) -> Result<PlainConnection>;
 }
 
 #[async_trait]
@@ -33,21 +41,15 @@ impl<A> TcpConnect for A
 where
     A: Send + Sync + Clone + ToSocketAddrs,
 {
-    async fn connect(&self) -> Result<PlainConnection> {
-        // TcpStream::connect(self.clone()).await.and_then(|stream| {
-        //     stream.set_nodelay(true)?;
-        //     Ok(stream.into())
-        // })
-
-        let addr = lookup_host(self).await?.next().expect("no addr found");
-        UdtConnection::connect(
-            addr,
-            Some(UdtConfiguration {
-                reuse_mux: false,
-                ..Default::default()
+    async fn connect(&self, settings: &ConnectSettings) -> Result<PlainConnection> {
+        match &settings.transport {
+            TransportProtocol::TCP => TcpStream::connect(self.clone()).await.and_then(|stream| {
+                stream.set_nodelay(true)?;
+                Ok(stream.into())
             }),
-        )
-        .await
-        .map(Into::into)
+            TransportProtocol::UDT(config) => UdtConnection::connect(&self, Some(config.clone()))
+                .await
+                .map(Into::into),
+        }
     }
 }

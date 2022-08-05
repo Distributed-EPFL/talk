@@ -7,7 +7,7 @@ mod context {
         },
         net::{
             test::{System as NetSystem, TestConnector},
-            traits::TcpConnect,
+            traits::{ConnectSettings, TcpConnect},
             Connector, Listener, PlainConnection,
         },
         time::test::join,
@@ -95,7 +95,7 @@ mod context {
     impl SlowLoris {
         async fn connect(&self, identity: Identity) -> PlainConnection {
             let address = self.0.peers.get(&identity).unwrap().clone();
-            address.connect().await.unwrap()
+            address.connect(&ConnectSettings::default()).await.unwrap()
 
             // does not complete (no `secure` or `authenticate`)
         }

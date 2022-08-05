@@ -1,7 +1,7 @@
 use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
-    net::traits::TcpConnect,
+    net::traits::{ConnectSettings, TcpConnect},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -120,7 +120,7 @@ impl Client {
     async fn attempt(&self, request: &Request) -> Result<Response, Top<AttemptError>> {
         let mut connection = self
             .server
-            .connect()
+            .connect(&self.settings.connect)
             .await
             .map_err(AttemptError::connect_failed)
             .map_err(Doom::into_top)
@@ -137,6 +137,10 @@ impl Client {
             .pot(AttemptError::ConnectionError, here!())?;
 
         Ok(response)
+    }
+
+    pub(crate) fn connect_settings(&self) -> &ConnectSettings {
+        &self.settings.connect
     }
 }
 
@@ -156,9 +160,15 @@ mod tests {
 
     async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {
         let addr = lookup_host(address).await.unwrap().next().unwrap();
-        Server::new(addr, ServerSettings { shard_sizes })
-            .await
-            .unwrap()
+        Server::new(
+            addr,
+            ServerSettings {
+                shard_sizes,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
     }
 
     async fn setup_clients(
