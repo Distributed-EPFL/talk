@@ -106,10 +106,6 @@ impl Listener {
                     .await
                     .map(|(addr, udt_connection)| (udt_connection.into(), addr)),
             };
-            // if let Ok((stream, _)) = listener.accept().await.and_then(|(stream, addr)| {
-            //     stream.set_nodelay(true)?;
-            //     Ok((stream, addr))
-            // }) {
             if let Ok((connection, _)) = accept_result {
                 let keychain = keychain.clone();
                 let inlet = inlet.clone();
