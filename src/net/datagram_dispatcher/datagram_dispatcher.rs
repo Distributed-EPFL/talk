@@ -1,6 +1,9 @@
 use crate::{
-    net::datagram_dispatcher::{
-        DatagramDispatcherSettings, DatagramReceiver, DatagramSender, ReceiveMultiple, UdpWrap,
+    net::{
+        datagram_dispatcher::{
+            DatagramDispatcherSettings, DatagramReceiver, DatagramSender, ReceiveMultiple, UdpWrap,
+        },
+        Message,
     },
     sync::fuse::Fuse,
 };
@@ -24,15 +27,15 @@ use tokio::{
 type AcknowledgementsInlet = MpscSender<Vec<u64>>;
 type AcknowledgementsOutlet = MpscReceiver<Vec<u64>>;
 
-type DatagramInlet = MpscSender<(SocketAddr, Vec<u8>)>;
-type DatagramOutlet = MpscReceiver<(SocketAddr, Vec<u8>)>;
+type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
+type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 
 type DatagramsInlet = MpscSender<ReceiveMultiple>;
 type DatagramsOutlet = MpscReceiver<ReceiveMultiple>;
 
-pub struct DatagramDispatcher {
-    sender: DatagramSender,
-    receiver: DatagramReceiver,
+pub struct DatagramDispatcher<M: Message> {
+    sender: DatagramSender<M>,
+    receiver: DatagramReceiver<M>,
 }
 
 #[derive(Doom)]
@@ -41,11 +44,14 @@ pub enum DatagramDispatcherError {
     BindFailed,
 }
 
-impl DatagramDispatcher {
+impl<M> DatagramDispatcher<M>
+where
+    M: Message,
+{
     pub async fn bind<A>(
         address: A,
         settings: DatagramDispatcherSettings,
-    ) -> Result<DatagramDispatcher, Top<DatagramDispatcherError>>
+    ) -> Result<DatagramDispatcher<M>, Top<DatagramDispatcherError>>
     where
         A: Clone + ToSocketAddrs,
     {
@@ -133,7 +139,7 @@ impl DatagramDispatcher {
             let wrap = wrap.clone();
 
             fuse.spawn(async move {
-                DatagramDispatcher::route_in(wrap, process_inlet).await;
+                DatagramDispatcher::<M>::route_in(wrap, process_inlet).await;
             });
         }
 
@@ -162,22 +168,22 @@ impl DatagramDispatcher {
         Ok(DatagramDispatcher { sender, receiver })
     }
 
-    pub async fn send(&self, destination: SocketAddr, message: Vec<u8>) {
+    pub async fn send(&self, destination: SocketAddr, message: M) {
         self.sender.send(destination, message).await
     }
 
-    pub async fn receive(&mut self) -> (SocketAddr, Vec<u8>) {
+    pub async fn receive(&mut self) -> (SocketAddr, M) {
         self.receiver.receive().await
     }
 
-    pub fn split(self) -> (DatagramSender, DatagramReceiver) {
+    pub fn split(self) -> (DatagramSender<M>, DatagramReceiver<M>) {
         (self.sender, self.receiver)
     }
 
     async fn route_out(
         index: u8,
         wrap: Arc<UdpWrap>,
-        mut route_out_outlet: DatagramOutlet,
+        mut route_out_outlet: MessageOutlet<M>,
         mut acknowledgements_outlet: AcknowledgementsOutlet,
         settings: DatagramDispatcherSettings,
     ) {
@@ -207,8 +213,10 @@ impl DatagramDispatcher {
 
             tokio::select! {
                 datagram = route_out_outlet.recv() => {
-                    if let Some(datagram) = datagram {
-                        route_out_buffer.push(datagram);
+                    if let Some((destination, message)) = datagram {
+                        if let Ok(message) = bincode::serialize(&message) {
+                            route_out_buffer.push((destination, message));
+                        }
                     }
                 }
                 acknowledgements = acknowledgements_outlet.recv() => {
@@ -262,8 +270,10 @@ impl DatagramDispatcher {
             }
 
             if !has_pending_retransmissions {
-                while let Ok(datagram) = route_out_outlet.try_recv() {
-                    route_out_buffer.push(datagram);
+                while let Ok((destination, message)) = route_out_outlet.try_recv() {
+                    if let Ok(message) = bincode::serialize(&message) {
+                        route_out_buffer.push((destination, message));
+                    }
                 }
             }
 
@@ -321,7 +331,7 @@ impl DatagramDispatcher {
     async fn process(
         wrap: Arc<UdpWrap>,
         mut process_outlet: DatagramsOutlet,
-        receiver_inlet: DatagramInlet,
+        receiver_inlet: MessageInlet<M>,
         acknowledgements_inlets: Vec<AcknowledgementsInlet>,
         settings: DatagramDispatcherSettings,
     ) {
@@ -361,7 +371,9 @@ impl DatagramDispatcher {
 
                     // Dispatch message to `DatagramReceiver`
 
-                    let _ = receiver_inlet.send(((*source), message.to_vec())).await;
+                    if let Ok(message) = bincode::deserialize(message) {
+                        let _ = receiver_inlet.send(((*source), message)).await;
+                    }
                 } else if footer[0] == 1 {
                     // Datagram is an acknowledgement
 

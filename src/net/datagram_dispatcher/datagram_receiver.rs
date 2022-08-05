@@ -2,18 +2,21 @@ use std::{net::SocketAddr, sync::Arc};
 
 use tokio::sync::mpsc::Receiver as MpscReceiver;
 
-use crate::sync::fuse::Fuse;
+use crate::{net::Message, sync::fuse::Fuse};
 
-type DatagramOutlet = MpscReceiver<(SocketAddr, Vec<u8>)>;
+type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 
-pub struct DatagramReceiver {
-    datagram_outlet: DatagramOutlet,
+pub struct DatagramReceiver<M: Message> {
+    datagram_outlet: MessageOutlet<M>,
     _fuse: Arc<Fuse>,
 }
 
-impl DatagramReceiver {
+impl<M> DatagramReceiver<M>
+where
+    M: Message,
+{
     pub(in crate::net::datagram_dispatcher) fn new(
-        packet_outlet: DatagramOutlet,
+        packet_outlet: MessageOutlet<M>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramReceiver {
@@ -22,7 +25,7 @@ impl DatagramReceiver {
         }
     }
 
-    pub async fn receive(&mut self) -> (SocketAddr, Vec<u8>) {
+    pub async fn receive(&mut self) -> (SocketAddr, M) {
         // Because this `DatagramReceiver` is holding a copy
         // of the `DatagramDispatcher`'s fuse, the corresponding
         // inlet is guaranteed to still be held by `process` tasks
