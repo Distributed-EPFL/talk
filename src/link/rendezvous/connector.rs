@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ConnectorSettings},
-    net::{traits::TcpConnect, Connector as NetConnector, SecureConnection},
+    net::{traits::Connect, Connector as NetConnector, SecureConnection},
 };
 
 use doomstack::{here, Doom, ResultExt, Stack, Top};
@@ -40,7 +40,7 @@ pub enum ConnectorError {
 impl Connector {
     pub fn new<S>(server: S, keychain: KeyChain, settings: ConnectorSettings) -> Self
     where
-        S: 'static + TcpConnect,
+        S: 'static + Connect,
     {
         let client = Client::new(server, settings.client_settings);
 

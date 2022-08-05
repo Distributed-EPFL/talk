@@ -4,7 +4,7 @@ use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ListenerSettings},
     net::{
-        traits::{TcpConnect, TransportProtocol},
+        traits::{Connect, TransportProtocol},
         Listener as NetListener, PlainConnection, SecureConnection,
     },
     sync::fuse::Fuse,
@@ -45,7 +45,7 @@ enum ServeError {
 impl Listener {
     pub async fn new<S>(server: S, keychain: KeyChain, settings: ListenerSettings) -> Self
     where
-        S: 'static + TcpConnect,
+        S: 'static + Connect,
     {
         let (listener, port) = match settings.client_settings.connect.transport {
             TransportProtocol::TCP => {

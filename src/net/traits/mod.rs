@@ -1,3 +1,3 @@
-mod tcp_connect;
+mod connect;
 
-pub use tcp_connect::{ConnectSettings, TcpConnect, TransportProtocol};
+pub use connect::{ConnectSettings, Connect, TransportProtocol};

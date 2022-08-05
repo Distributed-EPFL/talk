@@ -1,7 +1,7 @@
 use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
-    net::traits::{ConnectSettings, TcpConnect},
+    net::traits::{ConnectSettings, Connect},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
@@ -9,7 +9,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::{io, net::SocketAddr, vec::Vec};
 
 pub struct Client {
-    server: Box<dyn TcpConnect>,
+    server: Box<dyn Connect>,
     settings: ClientSettings,
 }
 
@@ -41,7 +41,7 @@ enum AttemptError {
 impl Client {
     pub fn new<S>(server: S, settings: ClientSettings) -> Self
     where
-        S: 'static + TcpConnect,
+        S: 'static + Connect,
     {
         Client {
             server: Box::new(server),

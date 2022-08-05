@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     crypto::{Identity, KeyChain},
     net::{
-        traits::{ConnectSettings, TcpConnect},
+        traits::{ConnectSettings, Connect},
         Connector, SecureConnection,
     },
 };

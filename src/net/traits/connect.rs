@@ -32,12 +32,12 @@ impl Default for ConnectSettings {
 }
 
 #[async_trait]
-pub trait TcpConnect: Send + Sync {
+pub trait Connect: Send + Sync {
     async fn connect(&self, settings: &ConnectSettings) -> Result<PlainConnection>;
 }
 
 #[async_trait]
-impl<A> TcpConnect for A
+impl<A> Connect for A
 where
     A: Send + Sync + Clone + ToSocketAddrs,
 {
