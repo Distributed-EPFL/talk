@@ -163,7 +163,7 @@ where
 
         // Sender and receiver
 
-        let sender = DatagramSender::new(route_out_inlets, fuse.clone());
+        let sender = DatagramSender::new(route_out_inlets, settings, fuse.clone());
         let receiver = DatagramReceiver::new(receiver_outlet, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
@@ -171,6 +171,13 @@ where
 
     pub async fn send(&self, destination: SocketAddr, message: S) {
         self.sender.send(destination, message).await
+    }
+
+    pub async fn pace<I>(&self, datagrams: I, rate: f64)
+    where
+        I: IntoIterator<Item = (SocketAddr, S)>,
+    {
+        self.sender.pace(datagrams, rate).await
     }
 
     pub async fn receive(&mut self) -> (SocketAddr, R) {

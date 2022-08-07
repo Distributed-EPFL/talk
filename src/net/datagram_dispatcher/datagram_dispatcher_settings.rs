@@ -6,6 +6,7 @@ pub struct DatagramDispatcherSettings {
     pub retransmission_delay: Duration,
     pub retransmission_interval: Duration,
     pub retransmission_batch_size: usize,
+    pub pace_interval: Duration,
 
     pub receiver_channel_capacity: usize,
     pub route_out_channels_capacity: usize,
@@ -21,6 +22,7 @@ impl Default for DatagramDispatcherSettings {
             retransmission_delay: Duration::from_millis(100),
             retransmission_interval: Duration::from_millis(10),
             retransmission_batch_size: 500,
+            pace_interval: Duration::from_millis(10),
 
             receiver_channel_capacity: 1024,
             route_out_channels_capacity: 1024,
