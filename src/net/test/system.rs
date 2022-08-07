@@ -4,7 +4,6 @@ use crate::{
         test::{ConnectionPair, TestConnector, TestListener},
         Connector, Listener,
     },
-    time::test::join,
 };
 
 use futures::stream::{FuturesOrdered, StreamExt};
@@ -97,6 +96,8 @@ impl System {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::time::test::join;
 
     #[tokio::test]
     async fn example_setup() {
