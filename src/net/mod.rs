@@ -16,14 +16,12 @@ mod session_connector;
 mod session_control;
 mod session_listener;
 mod socket;
+mod udt;
 mod unit_receiver;
 mod unit_sender;
 
 pub mod sockets;
 pub mod traits;
-
-#[cfg(target_os = "linux")]
-mod udt;
 
 #[cfg(any(test, feature = "test_utilities"))]
 pub mod test;

@@ -20,12 +20,13 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 
+use tokio_udt::UdtListener;
+
 type Outlet = Receiver<(Identity, SecureConnection)>;
 
 pub(crate) enum RawListener {
     Tcp(TcpListener),
-    #[cfg(target_os = "linux")]
-    Udt(tokio_udt::UdtListener),
+    Udt(UdtListener),
 }
 
 pub struct Listener {
@@ -56,14 +57,11 @@ impl Listener {
                 let port = listener.local_addr().unwrap().port();
                 (RawListener::Tcp(listener), port)
             }
-            #[cfg(target_os = "linux")]
             TransportProtocol::UDT(ref config) => {
-                let listener = tokio_udt::UdtListener::bind(
-                    (Ipv4Addr::UNSPECIFIED, 0).into(),
-                    Some(config.clone()),
-                )
-                .await
-                .unwrap();
+                let listener =
+                    UdtListener::bind((Ipv4Addr::UNSPECIFIED, 0).into(), Some(config.clone()))
+                        .await
+                        .unwrap();
                 let port = listener.local_addr().unwrap().port();
                 (RawListener::Udt(listener), port)
             }
@@ -103,7 +101,6 @@ impl Listener {
                         Ok((stream.into(), addr))
                     })
                 }
-                #[cfg(target_os = "linux")]
                 RawListener::Udt(ref udt_listener) => udt_listener
                     .accept()
                     .await

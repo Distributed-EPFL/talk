@@ -5,12 +5,12 @@ use crate::net::PlainConnection;
 use std::io::Result;
 
 use tokio::net::{TcpStream, ToSocketAddrs};
+use tokio_udt::{UdtConfiguration, UdtConnection};
 
 #[derive(Clone, Debug)]
 pub enum TransportProtocol {
     TCP,
-    #[cfg(target_os = "linux")]
-    UDT(tokio_udt::UdtConfiguration),
+    UDT(UdtConfiguration),
 }
 
 #[derive(Clone, Debug)]
@@ -42,12 +42,9 @@ where
                 stream.set_nodelay(true)?;
                 Ok(stream.into())
             }),
-            #[cfg(target_os = "linux")]
-            TransportProtocol::UDT(config) => {
-                tokio_udt::UdtConnection::connect(&self, Some(config.clone()))
-                    .await
-                    .map(Into::into)
-            }
+            TransportProtocol::UDT(config) => UdtConnection::connect(&self, Some(config.clone()))
+                .await
+                .map(Into::into),
         }
     }
 }

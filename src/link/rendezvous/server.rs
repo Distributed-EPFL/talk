@@ -17,6 +17,7 @@ use std::{
 };
 
 use tokio::{io, net::TcpListener};
+use tokio_udt::UdtListener;
 
 pub struct Server {
     _fuse: Fuse,
@@ -63,9 +64,8 @@ impl Server {
         let listener = {
             let result = match settings.connect.transport {
                 TransportProtocol::TCP => TcpListener::bind(address).await.map(RawListener::Tcp),
-                #[cfg(target_os = "linux")]
                 TransportProtocol::UDT(ref config) => {
-                    tokio_udt::UdtListener::bind(address, Some(config.clone()))
+                    UdtListener::bind(address, Some(config.clone()))
                         .await
                         .map(RawListener::Udt)
                 }
@@ -96,7 +96,6 @@ impl Server {
                     .accept()
                     .await
                     .map(|(stream, address)| (stream.into(), address)),
-                #[cfg(target_os = "linux")]
                 RawListener::Udt(ref udt_listener) => udt_listener
                     .accept()
                     .await
