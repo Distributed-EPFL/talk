@@ -7,7 +7,7 @@ mod context {
         },
         net::{
             test::{System as NetSystem, TestConnector},
-            traits::{ConnectSettings, Connect},
+            traits::{Connect, ConnectSettings},
             Connector, Listener, PlainConnection,
         },
         time::test::join,

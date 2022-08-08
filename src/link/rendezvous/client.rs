@@ -1,7 +1,7 @@
 use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
-    net::traits::{ConnectSettings, Connect},
+    net::traits::{Connect, ConnectSettings},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};

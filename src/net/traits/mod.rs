@@ -1,3 +1,3 @@
 mod connect;
 
-pub use connect::{ConnectSettings, Connect, TransportProtocol};
+pub use connect::{Connect, ConnectSettings, TransportProtocol};
