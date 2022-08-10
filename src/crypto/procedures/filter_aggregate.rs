@@ -26,8 +26,12 @@ where
         })
         .collect::<Vec<_>>();
 
-    let aggregation_root = aggregation_tree(entries.as_slice(), 32); // TODO: Add settings
-    filter_recursion(statement, entries.as_ref(), Some(aggregation_root))
+    if !entries.is_empty() {
+        let aggregation_root = aggregation_tree(entries.as_slice(), 32); // TODO: Add settings
+        filter_recursion(statement, entries.as_ref(), Some(aggregation_root))
+    } else {
+        (None, Vec::new())
+    }
 }
 
 fn aggregation_tree(entries: &[Entry], chunk: usize) -> AggregationNode {
@@ -126,5 +130,165 @@ where
         exceptions.append(&mut right_exceptions);
 
         (signature, exceptions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::crypto::KeyChain;
+
+    use serde::Serialize;
+
+    use std::iter;
+
+    #[derive(Serialize)]
+    enum TestStatement {
+        Correct,
+        Incorrect,
+    }
+
+    impl Statement for TestStatement {
+        type Header = ();
+        const HEADER: Self::Header = ();
+    }
+
+    #[test]
+    fn empty() {
+        let (signature, exceptions) = filter_aggregate(&TestStatement::Correct, vec![]);
+
+        assert!(signature.is_none());
+        assert!(exceptions.is_empty());
+    }
+
+    #[test]
+    fn correct() {
+        let keychains = iter::repeat_with(KeyChain::random)
+            .take(128)
+            .collect::<Vec<_>>();
+
+        let keycards = keychains.iter().map(KeyChain::keycard).collect::<Vec<_>>();
+
+        let signatures = keychains
+            .iter()
+            .map(|keychain| keychain.multisign(&TestStatement::Correct).unwrap())
+            .collect::<Vec<_>>();
+
+        let (signature, exceptions) = filter_aggregate(
+            &TestStatement::Correct,
+            keycards.iter().zip(signatures.iter()),
+        );
+
+        let reference_signature = Signature::aggregate(signatures).unwrap();
+
+        assert_eq!(signature.unwrap(), reference_signature);
+        assert!(exceptions.is_empty());
+    }
+
+    #[test]
+    fn one_incorrect() {
+        let keychains = iter::repeat_with(KeyChain::random)
+            .take(128)
+            .collect::<Vec<_>>();
+
+        let keycards = keychains.iter().map(KeyChain::keycard).collect::<Vec<_>>();
+
+        let mut signatures = keychains
+            .iter()
+            .map(|keychain| keychain.multisign(&TestStatement::Correct).unwrap())
+            .collect::<Vec<_>>();
+
+        *signatures.get_mut(33).unwrap() = keychains
+            .get(33)
+            .unwrap()
+            .multisign(&TestStatement::Incorrect)
+            .unwrap();
+
+        let (signature, exceptions) = filter_aggregate(
+            &TestStatement::Correct,
+            keycards.iter().zip(signatures.iter()),
+        );
+
+        let reference_signature = Signature::aggregate(
+            (&signatures[..33])
+                .iter()
+                .copied()
+                .chain((&signatures[34..]).iter().copied()),
+        )
+        .unwrap();
+
+        assert_eq!(signature.unwrap(), reference_signature);
+        assert_eq!(exceptions, vec![33]);
+    }
+
+    #[test]
+    fn multiple_incorrect() {
+        let keychains = iter::repeat_with(KeyChain::random)
+            .take(128)
+            .collect::<Vec<_>>();
+
+        let keycards = keychains.iter().map(KeyChain::keycard).collect::<Vec<_>>();
+
+        let signatures = keychains
+            .iter()
+            .enumerate()
+            .map(|(index, keychain)| {
+                keychain
+                    .multisign(if index % 3 == 0 {
+                        &TestStatement::Incorrect
+                    } else {
+                        &TestStatement::Correct
+                    })
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let (signature, exceptions) = filter_aggregate(
+            &TestStatement::Correct,
+            keycards.iter().zip(signatures.iter()),
+        );
+
+        let reference_signature =
+            Signature::aggregate(signatures.into_iter().enumerate().filter_map(
+                |(index, signature)| {
+                    if index % 3 == 0 {
+                        None
+                    } else {
+                        Some(signature)
+                    }
+                },
+            ))
+            .unwrap();
+
+        let reference_exceptions = (0..128)
+            .into_iter()
+            .filter(|index| index % 3 == 0)
+            .collect::<Vec<_>>();
+
+        assert_eq!(signature.unwrap(), reference_signature);
+        assert_eq!(exceptions, reference_exceptions);
+    }
+
+    #[test]
+    fn incorrect() {
+        let keychains = iter::repeat_with(KeyChain::random)
+            .take(128)
+            .collect::<Vec<_>>();
+
+        let keycards = keychains.iter().map(KeyChain::keycard).collect::<Vec<_>>();
+
+        let signatures = keychains
+            .iter()
+            .map(|keychain| keychain.multisign(&TestStatement::Incorrect).unwrap())
+            .collect::<Vec<_>>();
+
+        let (signature, exceptions) = filter_aggregate(
+            &TestStatement::Correct,
+            keycards.iter().zip(signatures.iter()),
+        );
+
+        assert!(signature.is_none());
+        assert_eq!(exceptions, (0..128).into_iter().collect::<Vec<_>>());
     }
 }
