@@ -6,6 +6,7 @@ mod statement;
 mod talk_header;
 
 pub mod primitives;
+pub mod procedures;
 
 pub(crate) use talk_header::TalkHeader;
 
