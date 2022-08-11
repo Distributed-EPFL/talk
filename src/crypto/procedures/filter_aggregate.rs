@@ -75,6 +75,9 @@ where
     let (signature, children) = match aggregation_node {
         Some(aggregation_node) => (aggregation_node.signature, aggregation_node.children),
         None => {
+            // (TODO) Remark: Normally this case happens when `entries.len() < chunk`. However, this could also
+            // happen because aggregation previously failed for `chunk`. In this case, aggregation is bound to
+            // fail again. This case should probably be handled to save useless aggregations.
             let signatures = entries.iter().map(|entry| entry.signature).copied();
             (Signature::aggregate(signatures).ok(), None)
         }
@@ -118,7 +121,7 @@ where
 
         let signature = match (left_signature, right_signature) {
             (Some(left_signature), Some(right_signature)) => {
-                Signature::aggregate([left_signature, right_signature]).ok()
+                Signature::aggregate([left_signature, right_signature]).ok() // This is guaranteed to succeed
             }
             (Some(left_signature), None) => Some(left_signature),
             (None, Some(right_signature)) => Some(right_signature),
