@@ -1,6 +1,5 @@
 mod connection_settings;
 mod connector;
-mod datagram_dispatcher;
 mod listener;
 mod message;
 mod plain_connection;
@@ -31,9 +30,6 @@ use unit_sender::UnitSender;
 
 pub use connection_settings::ConnectionSettings;
 pub use connector::Connector;
-pub use datagram_dispatcher::{
-    DatagramDispatcher, DatagramDispatcherSettings, DatagramReceiver, DatagramSender,
-};
 pub use listener::Listener;
 pub use message::Message;
 pub use plain_connection::{PlainConnection, PlainConnectionError};
