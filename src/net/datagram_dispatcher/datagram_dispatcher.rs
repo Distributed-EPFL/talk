@@ -1,4 +1,7 @@
-use crate::sync::fuse::{Fuse, Relay};
+use crate::{
+    net::datagram_dispatcher::{Message, MAXIMUM_TRANSMISSION_UNIT},
+    sync::fuse::{Fuse, Relay},
+};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
@@ -14,8 +17,6 @@ use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 type DatagramInlet = MpscSender<(SocketAddr, Message)>;
 type DatagramOutlet = MpscReceiver<(SocketAddr, Message)>;
 
-const MAXIMUM_TRANSMISSION_UNIT: usize = 2048;
-
 // TODO: Turn into settings
 const PROCESS_TASKS: usize = 4;
 const PROCESS_CHANNEL_CAPACITY: usize = 1024;
@@ -29,11 +30,6 @@ pub enum DatagramDispatcherError {
     #[doom(description("Failed to bind address: {:?}", source))]
     #[doom(wrap(bind_failed))]
     BindFailed { source: io::Error },
-}
-
-struct Message {
-    buffer: [u8; MAXIMUM_TRANSMISSION_UNIT],
-    size: usize,
 }
 
 impl DatagramDispatcher {
