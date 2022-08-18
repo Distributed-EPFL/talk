@@ -49,3 +49,63 @@ impl MessageTable {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::net::datagram_dispatcher::MAXIMUM_TRANSMISSION_UNIT;
+
+    #[test]
+    fn manual() {
+        let mut table = MessageTable::new();
+
+        for index in 0..128 {
+            table.push(Message {
+                buffer: [0u8; MAXIMUM_TRANSMISSION_UNIT],
+                size: index,
+            });
+        }
+
+        assert_eq!(table.messages.len(), 128);
+
+        for index in 0..128 {
+            assert_eq!(table.get(index).unwrap().size, index);
+        }
+
+        assert_eq!(table.remove(0).unwrap().size, 0);
+
+        assert_eq!(table.messages.len(), 127);
+
+        assert!(table.get(0).is_none());
+
+        for index in 1..128 {
+            assert_eq!(table.get(index).unwrap().size, index);
+        }
+
+        assert_eq!(table.remove(2).unwrap().size, 2);
+        assert_eq!(table.remove(3).unwrap().size, 3);
+
+        assert_eq!(table.messages.len(), 127);
+
+        for index in [0, 2, 3] {
+            assert!(table.get(index).is_none());
+        }
+
+        for index in (1..=1).into_iter().chain(4..128) {
+            assert_eq!(table.get(index).unwrap().size, index);
+        }
+
+        assert_eq!(table.remove(1).unwrap().size, 1);
+
+        assert_eq!(table.messages.len(), 124);
+
+        for index in 0..4 {
+            assert!(table.get(index).is_none());
+        }
+
+        for index in 4..128 {
+            assert_eq!(table.get(index).unwrap().size, index);
+        }
+    }
+}
