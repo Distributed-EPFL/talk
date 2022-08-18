@@ -1,3 +1,5 @@
+use crate::sync::fuse::{Fuse, Relay};
+
 use doomstack::{here, Doom, ResultExt, Top};
 
 use std::{
@@ -18,7 +20,9 @@ const MAXIMUM_TRANSMISSION_UNIT: usize = 2048;
 const PROCESS_TASKS: usize = 4;
 const PROCESS_CHANNEL_CAPACITY: usize = 1024;
 
-pub struct DatagramDispatcher {}
+pub struct DatagramDispatcher {
+    _fuse: Fuse,
+}
 
 #[derive(Doom)]
 pub enum DatagramDispatcherError {
@@ -54,18 +58,25 @@ impl DatagramDispatcher {
             process_outlets.push(process_outlet);
         }
 
+        let fuse = Fuse::new();
+
         {
             let socket = socket.clone();
+            let relay = fuse.relay();
 
             tokio::task::spawn_blocking(move || {
-                DatagramDispatcher::route_in(socket, process_inlets)
+                DatagramDispatcher::route_in(socket, process_inlets, relay)
             });
         }
 
-        todo!()
+        for process_outlet in process_outlets {
+            fuse.spawn(DatagramDispatcher::process(process_outlet));
+        }
+
+        Ok(DatagramDispatcher { _fuse: fuse })
     }
 
-    fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>) {
+    fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>, relay: Relay) {
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
@@ -73,7 +84,13 @@ impl DatagramDispatcher {
         for robin in 0.. {
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
-            let (size, source) = match socket.recv_from(&mut buffer) {
+            let datagram = socket.recv_from(&mut buffer);
+
+            if !relay.is_on() {
+                break;
+            }
+
+            let (size, source) = match datagram {
                 Ok((size, source)) => (size, source),
                 Err(error) => {
                     if error.kind() == io::ErrorKind::WouldBlock
@@ -92,6 +109,17 @@ impl DatagramDispatcher {
                 .get(robin % PROCESS_TASKS)
                 .unwrap()
                 .try_send((source, message)); // TODO: Log warning in case of `Err`
+        }
+    }
+
+    async fn process(mut process_outlet: DatagramOutlet) {
+        loop {
+            let (_source, _message) = if let Some(datagram) = process_outlet.recv().await {
+                datagram
+            } else {
+                // `DatagramDispatcher` has dropped, shutdown
+                return;
+            };
         }
     }
 }
