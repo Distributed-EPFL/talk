@@ -1,16 +1,15 @@
 use crate::{
-    net::datagram_dispatcher::{Message, MessageTable, MAXIMUM_TRANSMISSION_UNIT},
+    net::datagram_dispatcher::{Message, MAXIMUM_TRANSMISSION_UNIT},
     sync::fuse::{Fuse, Relay},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
 
 use std::{
-    collections::VecDeque,
     io,
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use tokio::{
@@ -21,12 +20,14 @@ use tokio::{
 type DatagramInlet = MpscSender<(SocketAddr, Message)>;
 type DatagramOutlet = MpscReceiver<(SocketAddr, Message)>;
 
-type CommandOutlet = MpscReceiver<Command>;
+type AcknowledgementOutlet = MpscReceiver<(SocketAddr, usize)>;
 
 // TODO: Turn into settings
 const PROCESS_TASKS: usize = 4;
 const PROCESS_CHANNEL_CAPACITY: usize = 1024;
-const ROUTE_OUT_CHANNEL_CAPACITY: usize = 4096;
+
+const ROUTE_OUT_DATAGRAM_CHANNEL_CAPACITY: usize = 4096;
+const ROUTE_OUT_ACKNOWLEDGEMENT_CHANNEL_CAPACITY: usize = 4096;
 
 pub struct DatagramDispatcher {
     _fuse: Fuse,
@@ -37,11 +38,6 @@ pub enum DatagramDispatcherError {
     #[doom(description("Failed to bind address: {:?}", source))]
     #[doom(wrap(bind_failed))]
     BindFailed { source: io::Error },
-}
-
-enum Command {
-    Send(Message),
-    Acknowledge(usize),
 }
 
 impl DatagramDispatcher {
@@ -66,7 +62,11 @@ impl DatagramDispatcher {
             process_outlets.push(process_outlet);
         }
 
-        let (route_out_inlet, route_out_outlet) = mpsc::channel(ROUTE_OUT_CHANNEL_CAPACITY);
+        let (_route_out_datagram_inlet, route_out_datagram_outlet) =
+            mpsc::channel(ROUTE_OUT_DATAGRAM_CHANNEL_CAPACITY);
+
+        let (_route_out_acknowledgement_inlet, route_out_acknowledgement_outlet) =
+            mpsc::channel(ROUTE_OUT_ACKNOWLEDGEMENT_CHANNEL_CAPACITY);
 
         let fuse = Fuse::new();
 
@@ -86,9 +86,11 @@ impl DatagramDispatcher {
         {
             let socket = socket.clone();
 
-            task::spawn_blocking(move || {
-                DatagramDispatcher::route_out(socket, route_out_outlet);
-            });
+            fuse.spawn(DatagramDispatcher::route_out(
+                socket,
+                route_out_datagram_outlet,
+                route_out_acknowledgement_outlet,
+            ));
         }
 
         Ok(DatagramDispatcher { _fuse: fuse })
@@ -141,8 +143,10 @@ impl DatagramDispatcher {
         }
     }
 
-    fn route_out(socket: Arc<UdpSocket>, route_out_outlet: CommandOutlet) {
-        let mut message_table = MessageTable::new();
-        let mut retransmission_queue: VecDeque<(Instant, usize)> = VecDeque::new();
+    async fn route_out(
+        _socket: Arc<UdpSocket>,
+        _route_out_datagram_outlet: DatagramOutlet,
+        _route_out_acknowledgement_outlet: AcknowledgementOutlet,
+    ) {
     }
 }
