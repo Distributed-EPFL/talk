@@ -1,10 +1,10 @@
 mod datagram_dispatcher;
+mod datagram_table;
 mod message;
-mod message_table;
 
 pub use datagram_dispatcher::{DatagramDispatcher, DatagramDispatcherError};
 
+use datagram_table::DatagramTable;
 use message::Message;
-use message_table::MessageTable;
 
 const MAXIMUM_TRANSMISSION_UNIT: usize = 2048;

@@ -1,27 +1,27 @@
 use crate::net::datagram_dispatcher::Message;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, net::SocketAddr};
 
-pub(in crate::net::datagram_dispatcher) struct MessageTable {
-    messages: VecDeque<Option<Message>>,
+pub(in crate::net::datagram_dispatcher) struct DatagramTable {
+    datagrams: VecDeque<Option<(SocketAddr, Message)>>,
     offset: usize,
 }
 
-impl MessageTable {
-    pub fn new() -> MessageTable {
-        MessageTable {
-            messages: VecDeque::new(),
+impl DatagramTable {
+    pub fn new() -> DatagramTable {
+        DatagramTable {
+            datagrams: VecDeque::new(),
             offset: 0,
         }
     }
 
-    pub fn push(&mut self, message: Message) {
-        self.messages.push_back(Some(message));
+    pub fn push(&mut self, destination: SocketAddr, message: Message) {
+        self.datagrams.push_back(Some((destination, message)));
     }
 
-    pub fn get(&self, index: usize) -> Option<&Message> {
+    pub fn get(&self, index: usize) -> Option<&(SocketAddr, Message)> {
         if index >= self.offset {
-            self.messages
+            self.datagrams
                 .get(index - self.offset)
                 .map(Option::as_ref)
                 .flatten()
@@ -30,20 +30,20 @@ impl MessageTable {
         }
     }
 
-    pub fn remove(&mut self, index: usize) -> Option<Message> {
+    pub fn remove(&mut self, index: usize) -> Option<(SocketAddr, Message)> {
         if index >= self.offset {
-            let message = self
-                .messages
+            let datagram = self
+                .datagrams
                 .get_mut(index - self.offset)
                 .map(Option::take)
                 .flatten();
 
-            while let Some(None) = self.messages.front() {
-                self.messages.pop_front();
+            while let Some(None) = self.datagrams.front() {
+                self.datagrams.pop_front();
                 self.offset += 1;
             }
 
-            message
+            datagram
         } else {
             None
         }
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn manual() {
-        let mut table = MessageTable::new();
+        let mut table = DatagramTable::new();
 
         for index in 0..128 {
             table.push(Message {
@@ -67,7 +67,7 @@ mod tests {
             });
         }
 
-        assert_eq!(table.messages.len(), 128);
+        assert_eq!(table.datagrams.len(), 128);
 
         for index in 0..128 {
             assert_eq!(table.get(index).unwrap().size, index);
@@ -75,7 +75,7 @@ mod tests {
 
         assert_eq!(table.remove(0).unwrap().size, 0);
 
-        assert_eq!(table.messages.len(), 127);
+        assert_eq!(table.datagrams.len(), 127);
 
         assert!(table.get(0).is_none());
 
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(table.remove(2).unwrap().size, 2);
         assert_eq!(table.remove(3).unwrap().size, 3);
 
-        assert_eq!(table.messages.len(), 127);
+        assert_eq!(table.datagrams.len(), 127);
 
         for index in [0, 2, 3] {
             assert!(table.get(index).is_none());
@@ -98,7 +98,7 @@ mod tests {
 
         assert_eq!(table.remove(1).unwrap().size, 1);
 
-        assert_eq!(table.messages.len(), 124);
+        assert_eq!(table.datagrams.len(), 124);
 
         for index in 0..4 {
             assert!(table.get(index).is_none());
