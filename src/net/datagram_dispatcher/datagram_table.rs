@@ -61,30 +61,33 @@ mod tests {
         let mut table = DatagramTable::new();
 
         for index in 0..128 {
-            table.push(Message {
-                buffer: [0u8; MAXIMUM_TRANSMISSION_UNIT],
-                size: index,
-            });
+            table.push(
+                "127.0.0.1:1234".parse().unwrap(),
+                Message {
+                    buffer: [0u8; MAXIMUM_TRANSMISSION_UNIT],
+                    size: index,
+                },
+            );
         }
 
         assert_eq!(table.datagrams.len(), 128);
 
         for index in 0..128 {
-            assert_eq!(table.get(index).unwrap().size, index);
+            assert_eq!(table.get(index).unwrap().1.size, index);
         }
 
-        assert_eq!(table.remove(0).unwrap().size, 0);
+        assert_eq!(table.remove(0).unwrap().1.size, 0);
 
         assert_eq!(table.datagrams.len(), 127);
 
         assert!(table.get(0).is_none());
 
         for index in 1..128 {
-            assert_eq!(table.get(index).unwrap().size, index);
+            assert_eq!(table.get(index).unwrap().1.size, index);
         }
 
-        assert_eq!(table.remove(2).unwrap().size, 2);
-        assert_eq!(table.remove(3).unwrap().size, 3);
+        assert_eq!(table.remove(2).unwrap().1.size, 2);
+        assert_eq!(table.remove(3).unwrap().1.size, 3);
 
         assert_eq!(table.datagrams.len(), 127);
 
@@ -93,10 +96,10 @@ mod tests {
         }
 
         for index in (1..=1).into_iter().chain(4..128) {
-            assert_eq!(table.get(index).unwrap().size, index);
+            assert_eq!(table.get(index).unwrap().1.size, index);
         }
 
-        assert_eq!(table.remove(1).unwrap().size, 1);
+        assert_eq!(table.remove(1).unwrap().1.size, 1);
 
         assert_eq!(table.datagrams.len(), 124);
 
@@ -105,7 +108,7 @@ mod tests {
         }
 
         for index in 4..128 {
-            assert_eq!(table.get(index).unwrap().size, index);
+            assert_eq!(table.get(index).unwrap().1.size, index);
         }
     }
 }
