@@ -287,9 +287,15 @@ where
         let mut datagram_table = DatagramTable::new();
         let mut retransmission_queue = VecDeque::new();
 
+        let mut last_tick = Instant::now();
+
         loop {
-            let start = Instant::now();
-            time::sleep(settings.minimum_rate_window).await;
+            time::sleep(
+                settings
+                    .minimum_rate_window
+                    .saturating_sub(last_tick.elapsed()),
+            )
+            .await;
 
             let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_route_out_task(
                 &mut route_out_datagram_outlet,
@@ -305,12 +311,13 @@ where
                 return;
             };
 
-            let slept = start.elapsed();
+            let window = last_tick.elapsed();
+            last_tick = Instant::now();
 
-            let target = (cmp::min(slept, settings.maximum_rate_window).as_secs_f64()
+            let packet_allowance = (cmp::min(window, settings.maximum_rate_window).as_secs_f64()
                 * settings.maximum_packet_rate) as usize;
 
-            let mut fulfilled = 0;
+            let mut packets_sent = 0;
 
             if DatagramDispatcher::<S, R>::fulfill_route_out_task(
                 socket.as_ref(),
@@ -322,10 +329,10 @@ where
             )
             .await
             {
-                fulfilled += 1;
+                packets_sent += 1;
             }
 
-            while fulfilled < target {
+            while packets_sent < packet_allowance {
                 let task = if let Some(task) = DatagramDispatcher::<S, R>::next_route_out_task(
                     &mut route_out_datagram_outlet,
                     &mut route_out_acknowledgement_outlet,
@@ -348,7 +355,7 @@ where
                 )
                 .await
                 {
-                    fulfilled += 1;
+                    packets_sent += 1;
                 }
             }
         }
