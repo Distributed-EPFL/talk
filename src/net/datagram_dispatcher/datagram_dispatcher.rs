@@ -1,9 +1,14 @@
 use crate::{
-    net::datagram_dispatcher::{DatagramTable, Message, MAXIMUM_TRANSMISSION_UNIT},
+    net::{
+        datagram_dispatcher::{DatagramTable, Message, MAXIMUM_TRANSMISSION_UNIT},
+        Message as NetMessage,
+    },
     sync::fuse::{Fuse, Relay},
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
+
+use rand::prelude::*;
 
 use std::{
     cmp,
@@ -19,6 +24,9 @@ use tokio::{
     task, time,
 };
 
+type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
+type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
+
 type DatagramInlet = MpscSender<(SocketAddr, Message)>;
 type DatagramOutlet = MpscReceiver<(SocketAddr, Message)>;
 
@@ -31,8 +39,13 @@ type CompletionOutlet = MpscReceiver<usize>;
 // TODO: Turn into settings
 const RETRANSMISSION_DELAY: Duration = Duration::from_millis(100);
 
-const PROCESS_TASKS: usize = 4;
-const PROCESS_CHANNEL_CAPACITY: usize = 1024;
+const RECEIVE_CHANNEL_CAPACITY: usize = 1024;
+
+const PROCESS_IN_TASKS: usize = 4;
+const PROCESS_IN_CHANNEL_CAPACITY: usize = 1024;
+
+const PROCESS_OUT_TASKS: usize = 4;
+const PROCESS_OUT_CHANNEL_CAPACITY: usize = 1024;
 
 const ROUTE_OUT_RATE: f64 = 65536.;
 
@@ -43,7 +56,9 @@ const ROUTE_OUT_DATAGRAM_CHANNEL_CAPACITY: usize = 4096;
 const ROUTE_OUT_ACKNOWLEDGEMENT_CHANNEL_CAPACITY: usize = 4096;
 const ROUTE_OUT_COMPLETION_CHANNEL_CAPACITY: usize = 4096;
 
-pub struct DatagramDispatcher {
+pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
+    receive_outlet: MessageOutlet<R>,
+    process_out_inlets: Vec<MessageInlet<S>>,
     _fuse: Fuse,
 }
 
@@ -61,8 +76,12 @@ enum RouteOutTask {
     Send(SocketAddr, Message),
 }
 
-impl DatagramDispatcher {
-    pub fn bind<A>(address: A) -> Result<DatagramDispatcher, Top<DatagramDispatcherError>>
+impl<S, R> DatagramDispatcher<S, R>
+where
+    S: NetMessage,
+    R: NetMessage,
+{
+    pub fn bind<A>(address: A) -> Result<Self, Top<DatagramDispatcherError>>
     where
         A: ToSocketAddrs,
     {
@@ -73,14 +92,27 @@ impl DatagramDispatcher {
 
         let socket = Arc::new(socket);
 
-        let mut process_inlets = Vec::new();
-        let mut process_outlets = Vec::new();
+        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
 
-        for _ in 0..PROCESS_TASKS {
-            let (process_inlet, process_outlet) = mpsc::channel(PROCESS_CHANNEL_CAPACITY);
+        let mut process_in_inlets = Vec::new();
+        let mut process_in_outlets = Vec::new();
 
-            process_inlets.push(process_inlet);
-            process_outlets.push(process_outlet);
+        for _ in 0..PROCESS_IN_TASKS {
+            let (process_in_inlet, process_in_outlet) = mpsc::channel(PROCESS_IN_CHANNEL_CAPACITY);
+
+            process_in_inlets.push(process_in_inlet);
+            process_in_outlets.push(process_in_outlet);
+        }
+
+        let mut process_out_inlets = Vec::new();
+        let mut process_out_outlets = Vec::new();
+
+        for _ in 0..PROCESS_OUT_TASKS {
+            let (process_out_inlet, process_out_outlet) =
+                mpsc::channel(PROCESS_OUT_CHANNEL_CAPACITY);
+
+            process_out_inlets.push(process_out_inlet);
+            process_out_outlets.push(process_out_outlet);
         }
 
         let (_route_out_datagram_inlet, route_out_datagram_outlet) =
@@ -99,22 +131,30 @@ impl DatagramDispatcher {
             let relay = fuse.relay();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::route_in(socket, process_inlets, relay)
+                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, relay)
             });
         }
 
-        for process_outlet in process_outlets {
-            fuse.spawn(DatagramDispatcher::process_in(
-                process_outlet,
+        for process_in_outlet in process_in_outlets {
+            fuse.spawn(DatagramDispatcher::<S, R>::process_in(
+                process_in_outlet,
+                receive_inlet.clone(),
                 route_out_acknowledgement_inlet.clone(),
                 route_out_completion_inlet.clone(),
+            ));
+        }
+
+        for process_out_outlet in process_out_outlets {
+            fuse.spawn(DatagramDispatcher::<S, R>::process_out(
+                process_out_outlet,
+                _route_out_datagram_inlet.clone(),
             ));
         }
 
         {
             let socket = socket.clone();
 
-            fuse.spawn(DatagramDispatcher::route_out(
+            fuse.spawn(DatagramDispatcher::<S, R>::route_out(
                 socket,
                 route_out_datagram_outlet,
                 route_out_acknowledgement_outlet,
@@ -122,7 +162,23 @@ impl DatagramDispatcher {
             ));
         }
 
-        Ok(DatagramDispatcher { _fuse: fuse })
+        Ok(DatagramDispatcher {
+            receive_outlet,
+            process_out_inlets,
+            _fuse: fuse,
+        })
+    }
+
+    pub async fn send(&self, destination: SocketAddr, payload: S) {
+        let _ = self
+            .process_out_inlets
+            .choose(&mut thread_rng())
+            .unwrap()
+            .send((destination, payload));
+    }
+
+    pub async fn receive(&mut self) -> (SocketAddr, R) {
+        self.receive_outlet.recv().await.unwrap()
     }
 
     fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>, relay: Relay) {
@@ -155,19 +211,20 @@ impl DatagramDispatcher {
             let message = Message { buffer, size };
 
             let _ = process_inlets
-                .get(robin % PROCESS_TASKS)
+                .get(robin % PROCESS_IN_TASKS)
                 .unwrap()
                 .try_send((source, message)); // TODO: Log warning in case of `Err`
         }
     }
 
     async fn process_in(
-        mut process_outlet: DatagramOutlet,
+        mut process_in_outlet: DatagramOutlet,
+        receive_inlet: MessageInlet<R>,
         route_out_acknowledgement_inlet: AcknowledgementInlet,
         route_out_completion_inlet: CompletionInlet,
     ) {
         loop {
-            let (source, message) = if let Some(datagram) = process_outlet.recv().await {
+            let (source, message) = if let Some(datagram) = process_in_outlet.recv().await {
                 datagram
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
@@ -178,7 +235,7 @@ impl DatagramDispatcher {
                 continue;
             }
 
-            let (_payload, footer) = message.buffer[..message.size].split_at(message.size - 9);
+            let (payload, footer) = message.buffer[..message.size].split_at(message.size - 9);
 
             let mut index = [0u8; 8];
             index.clone_from_slice(&footer[1..]);
@@ -188,10 +245,37 @@ impl DatagramDispatcher {
                 // First footer byte is 0: MESSAGE
 
                 let _ = route_out_acknowledgement_inlet.send((source, index)).await;
+
+                if let Ok(payload) = bincode::deserialize::<R>(payload) {
+                    let _ = receive_inlet.send((source, payload)).await;
+                }
             } else if footer[1] == 1 {
                 // First footer byte is 1: ACKNOWLEDGEMENT
 
                 let _ = route_out_completion_inlet.send(index).await;
+            }
+        }
+    }
+
+    async fn process_out(
+        mut process_out_outlet: MessageOutlet<S>,
+        route_out_datagram_inlet: DatagramInlet,
+    ) {
+        loop {
+            let (destination, payload) = if let Some(message) = process_out_outlet.recv().await {
+                message
+            } else {
+                // `DatagramDispatcher` has dropped, shutdown
+                return;
+            };
+
+            let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
+            let mut write = &mut buffer[..];
+
+            if bincode::serialize_into(&mut write, &payload).is_ok() {
+                let size = MAXIMUM_TRANSMISSION_UNIT - write.len();
+                let message = Message { buffer, size };
+                let _ = route_out_datagram_inlet.send((destination, message)).await;
             }
         }
     }
@@ -211,7 +295,7 @@ impl DatagramDispatcher {
             let start = Instant::now();
             time::sleep(ROUTE_OUT_WINDOW_MIN).await;
 
-            let task = if let Some(task) = DatagramDispatcher::wait_route_out_task(
+            let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_route_out_task(
                 &mut route_out_datagram_outlet,
                 &mut route_out_acknowledgement_outlet,
                 &mut route_out_completion_outlet,
@@ -232,7 +316,7 @@ impl DatagramDispatcher {
 
             let mut fulfilled = 0;
 
-            if DatagramDispatcher::fulfill_route_out_task(
+            if DatagramDispatcher::<S, R>::fulfill_route_out_task(
                 socket.as_ref(),
                 &mut cursor,
                 &mut datagram_table,
@@ -245,7 +329,7 @@ impl DatagramDispatcher {
             }
 
             while fulfilled < target {
-                let task = if let Some(task) = DatagramDispatcher::next_route_out_task(
+                let task = if let Some(task) = DatagramDispatcher::<S, R>::next_route_out_task(
                     &mut route_out_datagram_outlet,
                     &mut route_out_acknowledgement_outlet,
                     &mut route_out_completion_outlet,
@@ -257,7 +341,7 @@ impl DatagramDispatcher {
                     break;
                 };
 
-                if DatagramDispatcher::fulfill_route_out_task(
+                if DatagramDispatcher::<S, R>::fulfill_route_out_task(
                     socket.as_ref(),
                     &mut cursor,
                     &mut datagram_table,
