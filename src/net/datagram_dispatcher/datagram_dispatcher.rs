@@ -174,14 +174,15 @@ where
             .process_out_inlets
             .choose(&mut thread_rng())
             .unwrap()
-            .send((destination, payload));
+            .send((destination, payload))
+            .await;
     }
 
     pub async fn receive(&mut self) -> (SocketAddr, R) {
         self.receive_outlet.recv().await.unwrap()
     }
 
-    fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>, relay: Relay) {
+    fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>, mut relay: Relay) {
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
@@ -249,7 +250,7 @@ where
                 if let Ok(payload) = bincode::deserialize::<R>(payload) {
                     let _ = receive_inlet.send((source, payload)).await;
                 }
-            } else if footer[1] == 1 {
+            } else if footer[0] == 1 {
                 // First footer byte is 1: ACKNOWLEDGEMENT
 
                 let _ = route_out_completion_inlet.send(index).await;
@@ -366,6 +367,20 @@ where
             .front()
             .map(|(next_retransmission, _)| *next_retransmission);
 
+        // This is a `Future` that waits until `next_retransmission` iff
+        // `next_retransmission` is `Some`. This is necessary because
+        // `tokio::select!` branches with an `, if..` clause do not guarantee that 
+        // the selected future will be evaulated only if the `, if..` clause 
+        // is satisfied. As a result, an `, if next_retransmission.is_some()` clause 
+        // would not be sufficient to prevent a `next_retransmission.unwrap()` from 
+        // panicking in a `tokio::select!` branch. Note that this future is not
+        // polled unless `next_retransmission` is `Some`.
+        let wait_until_next_retransmission = async {
+            if let Some(next_retransmission) = next_retransmission {
+                time::sleep(next_retransmission - Instant::now()).await;
+            };
+        };
+
         tokio::select! {
             biased;
 
@@ -375,7 +390,7 @@ where
             acknowledgement = route_out_acknowledgement_outlet.recv() => {
                 acknowledgement.map(|(destination, index)| RouteOutTask::Acknowledge(destination, index))
             },
-            _ = time::sleep(next_retransmission.unwrap() - Instant::now()), if next_retransmission.is_some() => {
+            _ = wait_until_next_retransmission, if next_retransmission.is_some() => {
                 let (_, index) = retransmission_queue.pop_front().unwrap();
                 Some(RouteOutTask::Resend(index))
             },
@@ -400,7 +415,7 @@ where
         }
 
         if let Some((next_retransmission, _)) = retransmission_queue.front() {
-            if *next_retransmission > Instant::now() {
+            if Instant::now() >= *next_retransmission {
                 let (_, index) = retransmission_queue.pop_front().unwrap();
                 return Some(RouteOutTask::Resend(index));
             }
@@ -466,5 +481,23 @@ where
                 true
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn single() {
+        let receiver = tokio::spawn(async {
+            let mut dispatcher = DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1260").unwrap();
+            let (_, value) = dispatcher.receive().await;
+            assert_eq!(value, 42);
+        });
+
+        let dispatcher = DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0").unwrap();
+        dispatcher.send("127.0.0.1:1260".parse().unwrap(), 42).await;
+        receiver.await.unwrap();
     }
 }
