@@ -1,6 +1,8 @@
 use crate::{
     net::{
-        datagram_dispatcher::{DatagramTable, Message, MAXIMUM_TRANSMISSION_UNIT},
+        datagram_dispatcher::{
+            DatagramDispatcherSettings, DatagramTable, Message, MAXIMUM_TRANSMISSION_UNIT,
+        },
         Message as NetMessage,
     },
     sync::fuse::{Fuse, Relay},
@@ -36,26 +38,6 @@ type AcknowledgementOutlet = MpscReceiver<(SocketAddr, usize)>;
 type CompletionInlet = MpscSender<usize>;
 type CompletionOutlet = MpscReceiver<usize>;
 
-// TODO: Turn into settings
-const RETRANSMISSION_DELAY: Duration = Duration::from_millis(100);
-
-const RECEIVE_CHANNEL_CAPACITY: usize = 1024;
-
-const PROCESS_IN_TASKS: usize = 4;
-const PROCESS_IN_CHANNEL_CAPACITY: usize = 1024;
-
-const PROCESS_OUT_TASKS: usize = 4;
-const PROCESS_OUT_CHANNEL_CAPACITY: usize = 1024;
-
-const ROUTE_OUT_RATE: f64 = 65536.;
-
-const ROUTE_OUT_WINDOW_MIN: Duration = Duration::from_millis(10);
-const ROUTE_OUT_WINDOW_MAX: Duration = Duration::from_millis(20);
-
-const ROUTE_OUT_DATAGRAM_CHANNEL_CAPACITY: usize = 4096;
-const ROUTE_OUT_ACKNOWLEDGEMENT_CHANNEL_CAPACITY: usize = 4096;
-const ROUTE_OUT_COMPLETION_CHANNEL_CAPACITY: usize = 4096;
-
 pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
     receive_outlet: MessageOutlet<R>,
     process_out_inlets: Vec<MessageInlet<S>>,
@@ -81,7 +63,10 @@ where
     S: NetMessage,
     R: NetMessage,
 {
-    pub fn bind<A>(address: A) -> Result<Self, Top<DatagramDispatcherError>>
+    pub fn bind<A>(
+        address: A,
+        settings: DatagramDispatcherSettings,
+    ) -> Result<Self, Top<DatagramDispatcherError>>
     where
         A: ToSocketAddrs,
     {
@@ -92,13 +77,14 @@ where
 
         let socket = Arc::new(socket);
 
-        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
+        let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
 
         let mut process_in_inlets = Vec::new();
         let mut process_in_outlets = Vec::new();
 
-        for _ in 0..PROCESS_IN_TASKS {
-            let (process_in_inlet, process_in_outlet) = mpsc::channel(PROCESS_IN_CHANNEL_CAPACITY);
+        for _ in 0..settings.process_in_tasks {
+            let (process_in_inlet, process_in_outlet) =
+                mpsc::channel(settings.process_in_channel_capacity);
 
             process_in_inlets.push(process_in_inlet);
             process_in_outlets.push(process_in_outlet);
@@ -107,31 +93,32 @@ where
         let mut process_out_inlets = Vec::new();
         let mut process_out_outlets = Vec::new();
 
-        for _ in 0..PROCESS_OUT_TASKS {
+        for _ in 0..settings.process_out_tasks {
             let (process_out_inlet, process_out_outlet) =
-                mpsc::channel(PROCESS_OUT_CHANNEL_CAPACITY);
+                mpsc::channel(settings.process_out_channel_capacity);
 
             process_out_inlets.push(process_out_inlet);
             process_out_outlets.push(process_out_outlet);
         }
 
-        let (_route_out_datagram_inlet, route_out_datagram_outlet) =
-            mpsc::channel(ROUTE_OUT_DATAGRAM_CHANNEL_CAPACITY);
+        let (route_out_datagram_inlet, route_out_datagram_outlet) =
+            mpsc::channel(settings.route_out_datagram_channel_capacity);
 
         let (route_out_acknowledgement_inlet, route_out_acknowledgement_outlet) =
-            mpsc::channel(ROUTE_OUT_ACKNOWLEDGEMENT_CHANNEL_CAPACITY);
+            mpsc::channel(settings.route_out_acknowledgement_channel_capacity);
 
         let (route_out_completion_inlet, route_out_completion_outlet) =
-            mpsc::channel(ROUTE_OUT_COMPLETION_CHANNEL_CAPACITY);
+            mpsc::channel(settings.route_out_completion_channel_capacity);
 
         let fuse = Fuse::new();
 
         {
             let socket = socket.clone();
+            let settings = settings.clone();
             let relay = fuse.relay();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, relay)
+                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, settings, relay)
             });
         }
 
@@ -147,18 +134,20 @@ where
         for process_out_outlet in process_out_outlets {
             fuse.spawn(DatagramDispatcher::<S, R>::process_out(
                 process_out_outlet,
-                _route_out_datagram_inlet.clone(),
+                route_out_datagram_inlet.clone(),
             ));
         }
 
         {
             let socket = socket.clone();
+            let settings = settings.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::route_out(
                 socket,
                 route_out_datagram_outlet,
                 route_out_acknowledgement_outlet,
                 route_out_completion_outlet,
+                settings,
             ));
         }
 
@@ -182,7 +171,12 @@ where
         self.receive_outlet.recv().await.unwrap()
     }
 
-    fn route_in(socket: Arc<UdpSocket>, process_inlets: Vec<DatagramInlet>, mut relay: Relay) {
+    fn route_in(
+        socket: Arc<UdpSocket>,
+        process_in_inlets: Vec<DatagramInlet>,
+        settings: DatagramDispatcherSettings,
+        mut relay: Relay,
+    ) {
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
@@ -211,8 +205,8 @@ where
 
             let message = Message { buffer, size };
 
-            let _ = process_inlets
-                .get(robin % PROCESS_IN_TASKS)
+            let _ = process_in_inlets
+                .get(robin % settings.process_in_tasks)
                 .unwrap()
                 .try_send((source, message)); // TODO: Log warning in case of `Err`
         }
@@ -286,6 +280,7 @@ where
         mut route_out_datagram_outlet: DatagramOutlet,
         mut route_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut route_out_completion_outlet: CompletionOutlet,
+        settings: DatagramDispatcherSettings,
     ) {
         let mut cursor = 0;
 
@@ -294,7 +289,7 @@ where
 
         loop {
             let start = Instant::now();
-            time::sleep(ROUTE_OUT_WINDOW_MIN).await;
+            time::sleep(settings.minimum_rate_window).await;
 
             let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_route_out_task(
                 &mut route_out_datagram_outlet,
@@ -312,8 +307,8 @@ where
 
             let slept = start.elapsed();
 
-            let target =
-                (cmp::min(slept, ROUTE_OUT_WINDOW_MAX).as_secs_f64() * ROUTE_OUT_RATE) as usize;
+            let target = (cmp::min(slept, settings.maximum_rate_window).as_secs_f64()
+                * settings.maximum_packet_rate) as usize;
 
             let mut fulfilled = 0;
 
@@ -323,6 +318,7 @@ where
                 &mut datagram_table,
                 &mut retransmission_queue,
                 task,
+                &settings,
             )
             .await
             {
@@ -348,6 +344,7 @@ where
                     &mut datagram_table,
                     &mut retransmission_queue,
                     task,
+                    &settings,
                 )
                 .await
                 {
@@ -369,10 +366,10 @@ where
 
         // This is a `Future` that waits until `next_retransmission` iff
         // `next_retransmission` is `Some`. This is necessary because
-        // `tokio::select!` branches with an `, if..` clause do not guarantee that 
-        // the selected future will be evaulated only if the `, if..` clause 
-        // is satisfied. As a result, an `, if next_retransmission.is_some()` clause 
-        // would not be sufficient to prevent a `next_retransmission.unwrap()` from 
+        // `tokio::select!` branches with an `, if..` clause do not guarantee that
+        // the selected future will be evaulated only if the `, if..` clause
+        // is satisfied. As a result, an `, if next_retransmission.is_some()` clause
+        // would not be sufficient to prevent a `next_retransmission.unwrap()` from
         // panicking in a `tokio::select!` branch. Note that this future is not
         // polled unless `next_retransmission` is `Some`.
         let wait_until_next_retransmission = async {
@@ -434,6 +431,7 @@ where
         datagram_table: &mut DatagramTable,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
         task: RouteOutTask,
+        settings: &DatagramDispatcherSettings,
     ) -> bool {
         match task {
             RouteOutTask::Complete(index) => {
@@ -453,7 +451,8 @@ where
                         .send_to(&message.buffer[..message.size], *destination)
                         .unwrap(); // TODO: Determine if this can fail
 
-                    retransmission_queue.push_back((Instant::now() + RETRANSMISSION_DELAY, index));
+                    retransmission_queue
+                        .push_back((Instant::now() + settings.retransmission_delay, index));
 
                     true
                 } else {
@@ -476,7 +475,8 @@ where
                     .unwrap(); // TODO: Determine if this can fail
 
                 datagram_table.push(destination, message);
-                retransmission_queue.push_back((Instant::now() + RETRANSMISSION_DELAY, index));
+                retransmission_queue
+                    .push_back((Instant::now() + settings.retransmission_delay, index));
 
                 true
             }
