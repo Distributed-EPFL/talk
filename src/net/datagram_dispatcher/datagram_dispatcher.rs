@@ -1,7 +1,8 @@
 use crate::{
     net::{
         datagram_dispatcher::{
-            DatagramDispatcherSettings, DatagramTable, Message, MAXIMUM_TRANSMISSION_UNIT,
+            DatagramDispatcherSettings, DatagramReceiver, DatagramSender, DatagramTable, Message,
+            MAXIMUM_TRANSMISSION_UNIT,
         },
         Message as NetMessage,
     },
@@ -9,8 +10,6 @@ use crate::{
 };
 
 use doomstack::{here, Doom, ResultExt, Top};
-
-use rand::prelude::*;
 
 use std::{
     cmp,
@@ -39,9 +38,8 @@ type CompletionInlet = MpscSender<usize>;
 type CompletionOutlet = MpscReceiver<usize>;
 
 pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
-    receive_outlet: MessageOutlet<R>,
-    process_out_inlets: Vec<MessageInlet<S>>,
-    _fuse: Fuse,
+    sender: DatagramSender<S>,
+    receiver: DatagramReceiver<R>,
 }
 
 #[derive(Doom)]
@@ -151,24 +149,24 @@ where
             ));
         }
 
-        Ok(DatagramDispatcher {
-            receive_outlet,
-            process_out_inlets,
-            _fuse: fuse,
-        })
+        let fuse = Arc::new(fuse);
+
+        let sender = DatagramSender::new(process_out_inlets, fuse.clone());
+        let receiver = DatagramReceiver::new(receive_outlet, fuse);
+
+        Ok(DatagramDispatcher { sender, receiver })
     }
 
     pub async fn send(&self, destination: SocketAddr, payload: S) {
-        let _ = self
-            .process_out_inlets
-            .choose(&mut thread_rng())
-            .unwrap()
-            .send((destination, payload))
-            .await;
+        self.sender.send(destination, payload).await;
     }
 
     pub async fn receive(&mut self) -> (SocketAddr, R) {
-        self.receive_outlet.recv().await.unwrap()
+        self.receiver.receive().await
+    }
+
+    pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
+        (self.sender, self.receiver)
     }
 
     fn route_in(
