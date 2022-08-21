@@ -28,9 +28,11 @@ where
     }
 
     pub async fn send(&self, destination: SocketAddr, payload: S) {
+        let inlet = random::<usize>() % self.process_out_inlets.len();
+
         let _ = self
             .process_out_inlets
-            .choose(&mut thread_rng())
+            .get(inlet)
             .unwrap()
             .send((destination, payload))
             .await;
