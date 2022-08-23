@@ -491,7 +491,7 @@ where
             }
             PaceOutTask::Acknowledge(destination, index) => {
                 let mut buffer = [1u8; 2048]; // First footer byte is 1: ACKNOWLEDGEMENT (note that the following bytes are overwritten)
-                buffer[1..].clone_from_slice((index as u64).to_le_bytes().as_slice());
+                buffer[1..9].clone_from_slice((index as u64).to_le_bytes().as_slice());
 
                 let message = Message { buffer, size: 9 };
                 let _ = route_out_inlet.send((destination, message)).await;
@@ -568,12 +568,14 @@ mod tests {
     #[tokio::test]
     async fn single() {
         let receiver = tokio::spawn(async {
-            let mut dispatcher = DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1260").unwrap();
+            let mut dispatcher =
+                DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1260", Default::default()).unwrap();
             let (_, value) = dispatcher.receive().await;
             assert_eq!(value, 42);
         });
 
-        let dispatcher = DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0").unwrap();
+        let dispatcher =
+            DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
         dispatcher.send("127.0.0.1:1260".parse().unwrap(), 42).await;
         receiver.await.unwrap();
     }
