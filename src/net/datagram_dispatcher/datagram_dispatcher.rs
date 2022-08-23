@@ -52,14 +52,14 @@ pub enum DatagramDispatcherError {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum RouteOutPoll {
+enum PaceOutPoll {
     Complete,
     Acknowledge,
     Resend,
     Send,
 }
 
-enum RouteOutTask {
+enum PaceOutTask {
     Complete(usize),
     Acknowledge(SocketAddr, usize),
     Resend(usize),
@@ -109,14 +109,14 @@ where
             process_out_outlets.push(process_out_outlet);
         }
 
-        let (route_out_datagram_inlet, route_out_datagram_outlet) =
-            mpsc::channel(settings.route_out_datagram_channel_capacity);
+        let (pace_out_datagram_inlet, pace_out_datagram_outlet) =
+            mpsc::channel(settings.pace_out_datagram_channel_capacity);
 
-        let (route_out_acknowledgement_inlet, route_out_acknowledgement_outlet) =
-            mpsc::channel(settings.route_out_acknowledgement_channel_capacity);
+        let (pace_out_acknowledgement_inlet, pace_out_acknowledgement_outlet) =
+            mpsc::channel(settings.pace_out_acknowledgement_channel_capacity);
 
-        let (route_out_completion_inlet, route_out_completion_outlet) =
-            mpsc::channel(settings.route_out_completion_channel_capacity);
+        let (pace_out_completion_inlet, pace_out_completion_outlet) =
+            mpsc::channel(settings.pace_out_completion_channel_capacity);
 
         let retransmissions = Arc::new(RelaxedCounter::new(0));
 
@@ -136,15 +136,15 @@ where
             fuse.spawn(DatagramDispatcher::<S, R>::process_in(
                 process_in_outlet,
                 receive_inlet.clone(),
-                route_out_acknowledgement_inlet.clone(),
-                route_out_completion_inlet.clone(),
+                pace_out_acknowledgement_inlet.clone(),
+                pace_out_completion_inlet.clone(),
             ));
         }
 
         for process_out_outlet in process_out_outlets {
             fuse.spawn(DatagramDispatcher::<S, R>::process_out(
                 process_out_outlet,
-                route_out_datagram_inlet.clone(),
+                pace_out_datagram_inlet.clone(),
             ));
         }
 
@@ -153,11 +153,11 @@ where
             let retransmissions = retransmissions.clone();
             let settings = settings.clone();
 
-            fuse.spawn(DatagramDispatcher::<S, R>::route_out(
+            fuse.spawn(DatagramDispatcher::<S, R>::pace_out(
                 socket,
-                route_out_datagram_outlet,
-                route_out_acknowledgement_outlet,
-                route_out_completion_outlet,
+                pace_out_datagram_outlet,
+                pace_out_acknowledgement_outlet,
+                pace_out_completion_outlet,
                 retransmissions,
                 settings,
             ));
@@ -231,8 +231,8 @@ where
     async fn process_in(
         mut process_in_outlet: DatagramOutlet,
         receive_inlet: MessageInlet<R>,
-        route_out_acknowledgement_inlet: AcknowledgementInlet,
-        route_out_completion_inlet: CompletionInlet,
+        pace_out_acknowledgement_inlet: AcknowledgementInlet,
+        pace_out_completion_inlet: CompletionInlet,
     ) {
         loop {
             let (source, message) = if let Some(datagram) = process_in_outlet.recv().await {
@@ -255,7 +255,7 @@ where
             if footer[0] == 0 {
                 // First footer byte is 0: MESSAGE
 
-                let _ = route_out_acknowledgement_inlet.send((source, index)).await;
+                let _ = pace_out_acknowledgement_inlet.send((source, index)).await;
 
                 if let Ok(payload) = bincode::deserialize::<R>(payload) {
                     let _ = receive_inlet.send((source, payload)).await;
@@ -263,14 +263,14 @@ where
             } else if footer[0] == 1 {
                 // First footer byte is 1: ACKNOWLEDGEMENT
 
-                let _ = route_out_completion_inlet.send(index).await;
+                let _ = pace_out_completion_inlet.send(index).await;
             }
         }
     }
 
     async fn process_out(
         mut process_out_outlet: MessageOutlet<S>,
-        route_out_datagram_inlet: DatagramInlet,
+        pace_out_datagram_inlet: DatagramInlet,
     ) {
         loop {
             let (destination, payload) = if let Some(message) = process_out_outlet.recv().await {
@@ -286,16 +286,16 @@ where
             if bincode::serialize_into(&mut write, &payload).is_ok() {
                 let size = MAXIMUM_TRANSMISSION_UNIT - write.len();
                 let message = Message { buffer, size };
-                let _ = route_out_datagram_inlet.send((destination, message)).await;
+                let _ = pace_out_datagram_inlet.send((destination, message)).await;
             }
         }
     }
 
-    async fn route_out(
+    async fn pace_out(
         socket: Arc<UdpSocket>,
-        mut route_out_datagram_outlet: DatagramOutlet,
-        mut route_out_acknowledgement_outlet: AcknowledgementOutlet,
-        mut route_out_completion_outlet: CompletionOutlet,
+        mut pace_out_datagram_outlet: DatagramOutlet,
+        mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
+        mut pace_out_completion_outlet: CompletionOutlet,
         retransmissions: Arc<RelaxedCounter>,
         settings: DatagramDispatcherSettings,
     ) {
@@ -314,10 +314,10 @@ where
             )
             .await;
 
-            let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_route_out_task(
-                &mut route_out_datagram_outlet,
-                &mut route_out_acknowledgement_outlet,
-                &mut route_out_completion_outlet,
+            let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_pace_out_task(
+                &mut pace_out_datagram_outlet,
+                &mut pace_out_acknowledgement_outlet,
+                &mut pace_out_completion_outlet,
                 &mut retransmission_queue,
             )
             .await
@@ -338,7 +338,7 @@ where
 
             let mut packets_sent = 0;
 
-            if DatagramDispatcher::<S, R>::fulfill_route_out_task(
+            if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
                 socket.as_ref(),
                 &mut cursor,
                 &mut datagram_table,
@@ -353,11 +353,11 @@ where
             }
 
             while packets_sent < packet_allowance {
-                let task = if let Some(task) = DatagramDispatcher::<S, R>::next_route_out_task(
+                let task = if let Some(task) = DatagramDispatcher::<S, R>::next_pace_out_task(
                     poll,
-                    &mut route_out_datagram_outlet,
-                    &mut route_out_acknowledgement_outlet,
-                    &mut route_out_completion_outlet,
+                    &mut pace_out_datagram_outlet,
+                    &mut pace_out_acknowledgement_outlet,
+                    &mut pace_out_completion_outlet,
                     &mut retransmission_queue,
                 ) {
                     task
@@ -368,7 +368,7 @@ where
 
                 poll = task.poll();
 
-                if DatagramDispatcher::<S, R>::fulfill_route_out_task(
+                if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
                     socket.as_ref(),
                     &mut cursor,
                     &mut datagram_table,
@@ -385,12 +385,12 @@ where
         }
     }
 
-    async fn wait_route_out_task(
-        route_out_datagram_outlet: &mut DatagramOutlet,
-        route_out_acknowledgement_outlet: &mut AcknowledgementOutlet,
-        route_out_completion_outlet: &mut CompletionOutlet,
+    async fn wait_pace_out_task(
+        pace_out_datagram_outlet: &mut DatagramOutlet,
+        pace_out_acknowledgement_outlet: &mut AcknowledgementOutlet,
+        pace_out_completion_outlet: &mut CompletionOutlet,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
-    ) -> Option<RouteOutTask> {
+    ) -> Option<PaceOutTask> {
         let next_retransmission = retransmission_queue
             .front()
             .map(|(next_retransmission, _)| *next_retransmission);
@@ -412,81 +412,81 @@ where
         tokio::select! {
             biased;
 
-            completion = route_out_completion_outlet.recv() => {
-                completion.map(|index| RouteOutTask::Complete(index))
+            completion = pace_out_completion_outlet.recv() => {
+                completion.map(|index| PaceOutTask::Complete(index))
             }
-            acknowledgement = route_out_acknowledgement_outlet.recv() => {
-                acknowledgement.map(|(destination, index)| RouteOutTask::Acknowledge(destination, index))
+            acknowledgement = pace_out_acknowledgement_outlet.recv() => {
+                acknowledgement.map(|(destination, index)| PaceOutTask::Acknowledge(destination, index))
             },
             _ = wait_until_next_retransmission, if next_retransmission.is_some() => {
                 let (_, index) = retransmission_queue.pop_front().unwrap();
-                Some(RouteOutTask::Resend(index))
+                Some(PaceOutTask::Resend(index))
             },
-            datagram = route_out_datagram_outlet.recv() => {
-                datagram.map(|(destination, message)| RouteOutTask::Send(destination, message))
+            datagram = pace_out_datagram_outlet.recv() => {
+                datagram.map(|(destination, message)| PaceOutTask::Send(destination, message))
             }
         }
     }
 
-    fn next_route_out_task(
-        poll: RouteOutPoll,
-        route_out_datagram_outlet: &mut DatagramOutlet,
-        route_out_acknowledgement_outlet: &mut AcknowledgementOutlet,
-        route_out_completion_outlet: &mut CompletionOutlet,
+    fn next_pace_out_task(
+        poll: PaceOutPoll,
+        pace_out_datagram_outlet: &mut DatagramOutlet,
+        pace_out_acknowledgement_outlet: &mut AcknowledgementOutlet,
+        pace_out_completion_outlet: &mut CompletionOutlet,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
-    ) -> Option<RouteOutTask> {
-        if poll <= RouteOutPoll::Complete {
-            if let Ok(index) = route_out_completion_outlet.try_recv() {
-                return Some(RouteOutTask::Complete(index));
+    ) -> Option<PaceOutTask> {
+        if poll <= PaceOutPoll::Complete {
+            if let Ok(index) = pace_out_completion_outlet.try_recv() {
+                return Some(PaceOutTask::Complete(index));
             }
         }
 
-        if poll <= RouteOutPoll::Acknowledge {
-            if let Ok((destination, index)) = route_out_acknowledgement_outlet.try_recv() {
-                return Some(RouteOutTask::Acknowledge(destination, index));
+        if poll <= PaceOutPoll::Acknowledge {
+            if let Ok((destination, index)) = pace_out_acknowledgement_outlet.try_recv() {
+                return Some(PaceOutTask::Acknowledge(destination, index));
             }
         }
 
-        if poll <= RouteOutPoll::Resend {
+        if poll <= PaceOutPoll::Resend {
             if let Some((next_retransmission, _)) = retransmission_queue.front() {
                 if Instant::now() >= *next_retransmission {
                     let (_, index) = retransmission_queue.pop_front().unwrap();
-                    return Some(RouteOutTask::Resend(index));
+                    return Some(PaceOutTask::Resend(index));
                 }
             }
         }
 
-        if poll <= RouteOutPoll::Send {
-            if let Ok((destination, message)) = route_out_datagram_outlet.try_recv() {
-                return Some(RouteOutTask::Send(destination, message));
+        if poll <= PaceOutPoll::Send {
+            if let Ok((destination, message)) = pace_out_datagram_outlet.try_recv() {
+                return Some(PaceOutTask::Send(destination, message));
             }
         }
 
         None
     }
 
-    async fn fulfill_route_out_task(
+    async fn fulfill_pace_out_task(
         socket: &UdpSocket,
         cursor: &mut usize,
         datagram_table: &mut DatagramTable,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
-        task: RouteOutTask,
+        task: PaceOutTask,
         retransmissions: &RelaxedCounter,
         settings: &DatagramDispatcherSettings,
     ) -> bool {
         match task {
-            RouteOutTask::Complete(index) => {
+            PaceOutTask::Complete(index) => {
                 datagram_table.remove(index);
                 false
             }
-            RouteOutTask::Acknowledge(destination, index) => {
+            PaceOutTask::Acknowledge(destination, index) => {
                 let mut buffer = [1u8; 9]; // First footer byte is 1: ACKNOWLEDGEMENT (note that the following bytes are overwritten)
                 buffer[1..].clone_from_slice((index as u64).to_le_bytes().as_slice());
                 socket.send_to(buffer.as_slice(), destination).unwrap(); // TODO: Determine if this can fail
 
                 true
             }
-            RouteOutTask::Resend(index) => {
+            PaceOutTask::Resend(index) => {
                 if let Some((destination, message)) = datagram_table.get(index) {
                     socket
                         .send_to(&message.buffer[..message.size], *destination)
@@ -502,7 +502,7 @@ where
                     false
                 }
             }
-            RouteOutTask::Send(destination, mut message) => {
+            PaceOutTask::Send(destination, mut message) => {
                 let index = *cursor;
                 *cursor += 1;
 
@@ -527,13 +527,13 @@ where
     }
 }
 
-impl RouteOutTask {
-    fn poll(&self) -> RouteOutPoll {
+impl PaceOutTask {
+    fn poll(&self) -> PaceOutPoll {
         match self {
-            RouteOutTask::Complete(..) => RouteOutPoll::Complete,
-            RouteOutTask::Acknowledge(..) => RouteOutPoll::Acknowledge,
-            RouteOutTask::Resend(..) => RouteOutPoll::Resend,
-            RouteOutTask::Send(..) => RouteOutPoll::Send,
+            PaceOutTask::Complete(..) => PaceOutPoll::Complete,
+            PaceOutTask::Acknowledge(..) => PaceOutPoll::Acknowledge,
+            PaceOutTask::Resend(..) => PaceOutPoll::Resend,
+            PaceOutTask::Send(..) => PaceOutPoll::Send,
         }
     }
 }
