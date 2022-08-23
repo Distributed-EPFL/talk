@@ -118,6 +118,9 @@ where
         let (pace_out_completion_inlet, pace_out_completion_outlet) =
             mpsc::channel(settings.pace_out_completion_channel_capacity);
 
+        let (route_out_inlet, route_out_outlet) =
+            mpsc::channel(settings.route_out_channel_capacity);
+
         let retransmissions = Arc::new(RelaxedCounter::new(0));
 
         let fuse = Fuse::new();
@@ -149,18 +152,25 @@ where
         }
 
         {
-            let socket = socket.clone();
             let retransmissions = retransmissions.clone();
             let settings = settings.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::pace_out(
-                socket,
                 pace_out_datagram_outlet,
                 pace_out_acknowledgement_outlet,
                 pace_out_completion_outlet,
+                route_out_inlet,
                 retransmissions,
                 settings,
             ));
+        }
+
+        {
+            let socket = socket.clone();
+
+            task::spawn_blocking(move || {
+                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet)
+            });
         }
 
         let fuse = Arc::new(fuse);
@@ -292,10 +302,10 @@ where
     }
 
     async fn pace_out(
-        socket: Arc<UdpSocket>,
         mut pace_out_datagram_outlet: DatagramOutlet,
         mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut pace_out_completion_outlet: CompletionOutlet,
+        route_out_inlet: DatagramInlet,
         retransmissions: Arc<RelaxedCounter>,
         settings: DatagramDispatcherSettings,
     ) {
@@ -339,11 +349,11 @@ where
             let mut packets_sent = 0;
 
             if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
-                socket.as_ref(),
                 &mut cursor,
                 &mut datagram_table,
                 &mut retransmission_queue,
                 task,
+                &route_out_inlet,
                 retransmissions.as_ref(),
                 &settings,
             )
@@ -369,11 +379,11 @@ where
                 poll = task.poll();
 
                 if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
-                    socket.as_ref(),
                     &mut cursor,
                     &mut datagram_table,
                     &mut retransmission_queue,
                     task,
+                    &route_out_inlet,
                     retransmissions.as_ref(),
                     &settings,
                 )
@@ -466,11 +476,11 @@ where
     }
 
     async fn fulfill_pace_out_task(
-        socket: &UdpSocket,
         cursor: &mut usize,
         datagram_table: &mut DatagramTable,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
         task: PaceOutTask,
+        route_out_inlet: &DatagramInlet,
         retransmissions: &RelaxedCounter,
         settings: &DatagramDispatcherSettings,
     ) -> bool {
@@ -480,17 +490,17 @@ where
                 false
             }
             PaceOutTask::Acknowledge(destination, index) => {
-                let mut buffer = [1u8; 9]; // First footer byte is 1: ACKNOWLEDGEMENT (note that the following bytes are overwritten)
+                let mut buffer = [1u8; 2048]; // First footer byte is 1: ACKNOWLEDGEMENT (note that the following bytes are overwritten)
                 buffer[1..].clone_from_slice((index as u64).to_le_bytes().as_slice());
-                socket.send_to(buffer.as_slice(), destination).unwrap(); // TODO: Determine if this can fail
+
+                let message = Message { buffer, size: 9 };
+                let _ = route_out_inlet.send((destination, message)).await;
 
                 true
             }
             PaceOutTask::Resend(index) => {
                 if let Some((destination, message)) = datagram_table.get(index) {
-                    socket
-                        .send_to(&message.buffer[..message.size], *destination)
-                        .unwrap(); // TODO: Determine if this can fail
+                    let _ = route_out_inlet.send((destination.clone(), message.clone()));
 
                     retransmission_queue
                         .push_back((Instant::now() + settings.retransmission_delay, index));
@@ -513,9 +523,7 @@ where
 
                 message.size += 9;
 
-                socket
-                    .send_to(&message.buffer[..message.size], destination)
-                    .unwrap(); // TODO: Determine if this can fail
+                let _ = route_out_inlet.send((destination, message.clone())).await;
 
                 datagram_table.push(destination, message);
                 retransmission_queue
@@ -523,6 +531,21 @@ where
 
                 true
             }
+        }
+    }
+
+    fn route_out(socket: Arc<UdpSocket>, mut route_out_outlet: DatagramOutlet) {
+        loop {
+            let (destination, message) = if let Some(datagram) = route_out_outlet.blocking_recv() {
+                datagram
+            } else {
+                // `DatagramDispatcher` has dropped, shutdown
+                return;
+            };
+
+            socket
+                .send_to(&message.buffer[..message.size], destination)
+                .unwrap(); // TODO: Determine if this can fail
         }
     }
 }

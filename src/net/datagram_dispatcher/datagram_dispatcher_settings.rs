@@ -17,6 +17,7 @@ pub struct DatagramDispatcherSettings {
     pub pace_out_datagram_channel_capacity: usize,
     pub pace_out_acknowledgement_channel_capacity: usize,
     pub pace_out_completion_channel_capacity: usize,
+    pub route_out_channel_capacity: usize,
 }
 
 impl Default for DatagramDispatcherSettings {
@@ -34,6 +35,7 @@ impl Default for DatagramDispatcherSettings {
             pace_out_datagram_channel_capacity: 4096,
             pace_out_acknowledgement_channel_capacity: 4096,
             pace_out_completion_channel_capacity: 4096,
+            route_out_channel_capacity: 4096,
         }
     }
 }
