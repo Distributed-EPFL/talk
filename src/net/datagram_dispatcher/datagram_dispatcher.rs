@@ -51,6 +51,14 @@ pub enum DatagramDispatcherError {
     BindFailed { source: io::Error },
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum RouteOutPoll {
+    Complete,
+    Acknowledge,
+    Resend,
+    Send,
+}
+
 enum RouteOutTask {
     Complete(usize),
     Acknowledge(SocketAddr, usize),
@@ -323,6 +331,8 @@ where
             let window = last_tick.elapsed();
             last_tick = Instant::now();
 
+            let mut poll = task.poll();
+
             let packet_allowance = (cmp::min(window, settings.maximum_rate_window).as_secs_f64()
                 * settings.maximum_packet_rate) as usize;
 
@@ -344,6 +354,7 @@ where
 
             while packets_sent < packet_allowance {
                 let task = if let Some(task) = DatagramDispatcher::<S, R>::next_route_out_task(
+                    poll,
                     &mut route_out_datagram_outlet,
                     &mut route_out_acknowledgement_outlet,
                     &mut route_out_completion_outlet,
@@ -354,6 +365,8 @@ where
                     // No more tasks to fulfill on the fly
                     break;
                 };
+
+                poll = task.poll();
 
                 if DatagramDispatcher::<S, R>::fulfill_route_out_task(
                     socket.as_ref(),
@@ -416,28 +429,37 @@ where
     }
 
     fn next_route_out_task(
+        poll: RouteOutPoll,
         route_out_datagram_outlet: &mut DatagramOutlet,
         route_out_acknowledgement_outlet: &mut AcknowledgementOutlet,
         route_out_completion_outlet: &mut CompletionOutlet,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
     ) -> Option<RouteOutTask> {
-        if let Ok(index) = route_out_completion_outlet.try_recv() {
-            return Some(RouteOutTask::Complete(index));
-        }
-
-        if let Ok((destination, index)) = route_out_acknowledgement_outlet.try_recv() {
-            return Some(RouteOutTask::Acknowledge(destination, index));
-        }
-
-        if let Some((next_retransmission, _)) = retransmission_queue.front() {
-            if Instant::now() >= *next_retransmission {
-                let (_, index) = retransmission_queue.pop_front().unwrap();
-                return Some(RouteOutTask::Resend(index));
+        if poll <= RouteOutPoll::Complete {
+            if let Ok(index) = route_out_completion_outlet.try_recv() {
+                return Some(RouteOutTask::Complete(index));
             }
         }
 
-        if let Ok((destination, message)) = route_out_datagram_outlet.try_recv() {
-            return Some(RouteOutTask::Send(destination, message));
+        if poll <= RouteOutPoll::Acknowledge {
+            if let Ok((destination, index)) = route_out_acknowledgement_outlet.try_recv() {
+                return Some(RouteOutTask::Acknowledge(destination, index));
+            }
+        }
+
+        if poll <= RouteOutPoll::Resend {
+            if let Some((next_retransmission, _)) = retransmission_queue.front() {
+                if Instant::now() >= *next_retransmission {
+                    let (_, index) = retransmission_queue.pop_front().unwrap();
+                    return Some(RouteOutTask::Resend(index));
+                }
+            }
+        }
+
+        if poll <= RouteOutPoll::Send {
+            if let Ok((destination, message)) = route_out_datagram_outlet.try_recv() {
+                return Some(RouteOutTask::Send(destination, message));
+            }
         }
 
         None
@@ -501,6 +523,17 @@ where
 
                 true
             }
+        }
+    }
+}
+
+impl RouteOutTask {
+    fn poll(&self) -> RouteOutPoll {
+        match self {
+            RouteOutTask::Complete(..) => RouteOutPoll::Complete,
+            RouteOutTask::Acknowledge(..) => RouteOutPoll::Acknowledge,
+            RouteOutTask::Resend(..) => RouteOutPoll::Resend,
+            RouteOutTask::Send(..) => RouteOutPoll::Send,
         }
     }
 }
