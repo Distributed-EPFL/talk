@@ -89,4 +89,8 @@ where
     pub fn last_tick(&self) -> Option<Instant> {
         *self.statistics.last_tick.lock().unwrap()
     }
+
+    pub fn waiting_next_task(&self) -> bool {
+        *self.statistics.waiting_next_task.lock().unwrap()
+    }
 }

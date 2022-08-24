@@ -133,6 +133,7 @@ where
             retransmission_queue_len: Mutex::new(0),
             next_retransmission: Mutex::new(None),
             last_tick: Mutex::new(None),
+            waiting_next_task: Mutex::new(false),
         };
 
         let statistics = Arc::new(statistics);
@@ -256,6 +257,10 @@ where
 
     pub fn last_tick(&self) -> Option<Instant> {
         self.sender.last_tick()
+    }
+
+    pub fn waiting_next_task(&self) -> bool {
+        self.sender.waiting_next_task()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -404,6 +409,8 @@ where
                 statistics.pace_out_chokes.inc();
             }
 
+            *statistics.waiting_next_task.lock().unwrap() = true;
+
             let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_pace_out_task(
                 &mut pace_out_datagram_outlet,
                 &mut pace_out_acknowledgement_outlet,
@@ -417,6 +424,8 @@ where
                 // `DatagramDispatcher` has dropped, shutdown
                 return;
             };
+
+            *statistics.waiting_next_task.lock().unwrap() = false;
 
             let window = last_tick.elapsed();
             last_tick = Instant::now();
