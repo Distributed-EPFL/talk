@@ -29,13 +29,13 @@ impl Default for DatagramDispatcherSettings {
             maximum_rate_window: Duration::from_millis(20),
             process_in_tasks: 4,
             process_out_tasks: 4,
-            receive_channel_capacity: 4096,
-            process_in_channel_capacity: 1024,
-            process_out_channel_capacity: 1024,
-            pace_out_datagram_channel_capacity: 4096,
+            receive_channel_capacity: 16384,
+            process_in_channel_capacity: 4096,
+            process_out_channel_capacity: 4096,
+            pace_out_datagram_channel_capacity: 16384,
             pace_out_acknowledgement_channel_capacity: 4096,
-            pace_out_completion_channel_capacity: 4096,
-            route_out_channel_capacity: 4096,
+            pace_out_completion_channel_capacity: 16384,
+            route_out_channel_capacity: 16384,
         }
     }
 }
