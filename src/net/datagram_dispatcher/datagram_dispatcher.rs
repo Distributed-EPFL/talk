@@ -4,7 +4,7 @@ use crate::{
     net::{
         datagram_dispatcher::{
             DatagramDispatcherSettings, DatagramReceiver, DatagramSender, DatagramTable, Message,
-            MAXIMUM_TRANSMISSION_UNIT,
+            Statistics, MAXIMUM_TRANSMISSION_UNIT,
         },
         Message as NetMessage,
     },
@@ -121,7 +121,11 @@ where
         let (route_out_inlet, route_out_outlet) =
             mpsc::channel(settings.route_out_channel_capacity);
 
-        let retransmissions = Arc::new(RelaxedCounter::new(0));
+        let statistics = Statistics {
+            retransmissions: RelaxedCounter::new(0),
+        };
+
+        let statistics = Arc::new(statistics);
 
         let fuse = Fuse::new();
 
@@ -152,7 +156,7 @@ where
         }
 
         {
-            let retransmissions = retransmissions.clone();
+            let statistics = statistics.clone();
             let settings = settings.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::pace_out(
@@ -160,7 +164,7 @@ where
                 pace_out_acknowledgement_outlet,
                 pace_out_completion_outlet,
                 route_out_inlet,
-                retransmissions,
+                statistics,
                 settings,
             ));
         }
@@ -175,7 +179,7 @@ where
 
         let fuse = Arc::new(fuse);
 
-        let sender = DatagramSender::new(process_out_inlets, retransmissions, fuse.clone());
+        let sender = DatagramSender::new(process_out_inlets, statistics, fuse.clone());
         let receiver = DatagramReceiver::new(receive_outlet, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
@@ -306,7 +310,7 @@ where
         mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut pace_out_completion_outlet: CompletionOutlet,
         route_out_inlet: DatagramInlet,
-        retransmissions: Arc<RelaxedCounter>,
+        statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
     ) {
         let mut cursor = 0;
@@ -354,7 +358,7 @@ where
                 &mut retransmission_queue,
                 task,
                 &route_out_inlet,
-                retransmissions.as_ref(),
+                statistics.as_ref(),
                 &settings,
             )
             .await
@@ -384,7 +388,7 @@ where
                     &mut retransmission_queue,
                     task,
                     &route_out_inlet,
-                    retransmissions.as_ref(),
+                    statistics.as_ref(),
                     &settings,
                 )
                 .await
@@ -481,7 +485,7 @@ where
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
         task: PaceOutTask,
         route_out_inlet: &DatagramInlet,
-        retransmissions: &RelaxedCounter,
+        statistics: &Statistics,
         settings: &DatagramDispatcherSettings,
     ) -> bool {
         match task {
@@ -505,7 +509,7 @@ where
                     retransmission_queue
                         .push_back((Instant::now() + settings.retransmission_delay, index));
 
-                    retransmissions.inc();
+                    statistics.retransmissions.inc();
 
                     true
                 } else {

@@ -1,6 +1,9 @@
-use atomic_counter::{AtomicCounter, RelaxedCounter};
+use atomic_counter::AtomicCounter;
 
-use crate::{net::Message, sync::fuse::Fuse};
+use crate::{
+    net::{datagram_dispatcher::Statistics, Message},
+    sync::fuse::Fuse,
+};
 
 use rand::prelude::*;
 
@@ -12,7 +15,7 @@ type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
 
 pub struct DatagramSender<S: Message> {
     process_out_inlets: Vec<MessageInlet<S>>,
-    retransmissions: Arc<RelaxedCounter>,
+    statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 
@@ -22,12 +25,12 @@ where
 {
     pub(in crate::net::datagram_dispatcher) fn new(
         process_out_inlets: Vec<MessageInlet<S>>,
-        retransmissions: Arc<RelaxedCounter>,
+        statistics: Arc<Statistics>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramSender {
             process_out_inlets,
-            retransmissions,
+            statistics,
             _fuse: fuse,
         }
     }
@@ -44,6 +47,6 @@ where
     }
 
     pub fn retransmissions(&self) -> usize {
-        self.retransmissions.get()
+        self.statistics.retransmissions.get()
     }
 }
