@@ -496,7 +496,7 @@ where
         // polled unless `next_retransmission` is `Some`.
         let wait_until_next_retransmission = async {
             if let Some(next_retransmission) = next_retransmission {
-                time::sleep(next_retransmission - Instant::now()).await;
+                time::sleep(next_retransmission.saturating_duration_since(Instant::now())).await;
             };
         };
 
