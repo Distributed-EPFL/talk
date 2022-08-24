@@ -29,8 +29,11 @@ use tokio::{
 
 #[cfg(target_os = "linux")]
 use {
-    nix::sys::socket::{sendmmsg, MsgFlags, SendMmsgData, SockaddrStorage},
-    std::io::{IoSlice},
+    nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage},
+    nix::sys::time::TimeSpec,
+    std::convert::TryInto,
+    std::io::{IoSlice, IoSliceMut},
+    std::net::{Ipv4Addr, SocketAddrV4},
     std::os::unix::io::AsRawFd,
     tokio::sync::mpsc::error::TryRecvError,
 };
@@ -212,7 +215,12 @@ where
             let settings = settings.clone();
             
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, settings, statistics)
+                DatagramDispatcher::<S, R>::route_out(
+                    socket,
+                    route_out_outlet,
+                    settings,
+                    statistics,
+                )
             });
         }
 
@@ -284,6 +292,7 @@ where
         (self.sender, self.receiver)
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn route_in(
         socket: Arc<UdpSocket>,
         process_in_inlets: Vec<DatagramInlet>,
@@ -329,6 +338,97 @@ where
             {
                 // `process_in` is too busy: just drop the packet
                 statistics.process_in_drops.inc();
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn route_in(
+        socket: Arc<UdpSocket>,
+        process_in_inlets: Vec<DatagramInlet>,
+        statistics: Arc<Statistics>,
+        settings: DatagramDispatcherSettings,
+        mut relay: Relay,
+    ) {
+        socket
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap(); // TODO: Determine if this call can fail
+        let descriptor = socket.as_raw_fd();
+
+        for robin in 0.. {
+            let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
+
+            let mut data = buffer
+                .chunks_exact_mut(MAXIMUM_TRANSMISSION_UNIT)
+                .map(|chunk| RecvMmsgData {
+                    iov: [IoSliceMut::new(chunk)],
+                    cmsg_buffer: None,
+                })
+                .collect::<Vec<RecvMmsgData<_>>>();
+
+            let messages_res = recvmmsg(
+                descriptor,
+                &mut data,
+                MsgFlags::empty(),
+                Some(TimeSpec::from_duration(Duration::from_secs(1))),
+            );
+
+            if !relay.is_on() {
+                break;
+            }
+
+            let datagrams: Vec<_> = match messages_res {
+                Ok(datagrams) => {
+                    statistics.packets_received.add(datagrams.len());
+                    datagrams
+                        .iter()
+                        .map(|message| {
+                            let sockaddr_storage: SockaddrStorage = message.address.unwrap();
+                            let sockaddr_in = sockaddr_storage.as_sockaddr_in().unwrap();
+
+                            let socketaddr_v4 = SocketAddrV4::new(
+                                Ipv4Addr::from(sockaddr_in.ip()),
+                                sockaddr_in.port(),
+                            );
+
+                            let address = SocketAddr::V4(socketaddr_v4);
+
+                            (address, message.bytes)
+                        })
+                        .collect()
+                }
+                Err(error) => {
+                    if error == nix::errno::Errno::EWOULDBLOCK
+                        || error == nix::errno::Errno::ETIMEDOUT
+                    {
+                        continue;
+                    } else {
+                        panic!("unexpected `ErrorKind` when `recv_from`ing");
+                    }
+                }
+            };
+
+            for (source, message) in datagrams
+                .iter()
+                .zip(buffer.chunks_exact(MAXIMUM_TRANSMISSION_UNIT))
+                .map(|((address, size), buffer)| {
+                    (
+                        address,
+                        Message {
+                            buffer: buffer.try_into().expect("fixed size buffer"),
+                            size: *size,
+                        },
+                    )
+                })
+            {
+                if let Err(TrySendError::Full(..)) = process_in_inlets
+                    .get(robin % settings.process_in_tasks)
+                    .unwrap()
+                    .try_send((*source, message))
+                {
+                    // `process_in` is too busy: just drop the packet
+                    statistics.process_in_drops.inc();
+                }
             }
         }
     }
@@ -696,7 +796,8 @@ where
         statistics: Arc<Statistics>,
     ) {
         loop {
-            let mut batch: Vec<(SocketAddr, Message)> = Vec::with_capacity(settings.route_out_batch_size);
+            let mut batch: Vec<(SocketAddr, Message)> =
+                Vec::with_capacity(settings.route_out_batch_size);
             if let Some(datagram) = route_out_outlet.blocking_recv() {
                 batch.push(datagram)
             } else {
