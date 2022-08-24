@@ -249,14 +249,16 @@ where
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
             let datagram = socket.recv_from(&mut buffer);
-            statistics.packets_received.inc();
 
             if !relay.is_on() {
                 break;
             }
 
             let (size, source) = match datagram {
-                Ok((size, source)) => (size, source),
+                Ok((size, source)) => {
+                    statistics.packets_received.inc();
+                    (size, source)
+                }
                 Err(error) => {
                     if error.kind() == io::ErrorKind::WouldBlock
                         || error.kind() == io::ErrorKind::TimedOut
