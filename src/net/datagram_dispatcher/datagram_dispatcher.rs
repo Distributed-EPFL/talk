@@ -122,6 +122,8 @@ where
             mpsc::channel(settings.route_out_channel_capacity);
 
         let statistics = Statistics {
+            packets_sent: RelaxedCounter::new(0),
+            packets_received: RelaxedCounter::new(0),
             retransmissions: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
             route_out_drops: RelaxedCounter::new(0),
@@ -180,9 +182,10 @@ where
 
         {
             let socket = socket.clone();
+            let statistics = statistics.clone();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet)
+                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, statistics)
             });
         }
 
@@ -200,6 +203,14 @@ where
 
     pub async fn receive(&mut self) -> (SocketAddr, R) {
         self.receiver.receive().await
+    }
+
+    pub fn packets_sent(&self) -> usize {
+        self.sender.packets_sent()
+    }
+
+    pub fn packets_received(&self) -> usize {
+        self.sender.packets_received()
     }
 
     pub fn retransmissions(&self) -> usize {
@@ -233,6 +244,7 @@ where
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
             let datagram = socket.recv_from(&mut buffer);
+            statistics.packets_received.inc();
 
             if !relay.is_on() {
                 break;
@@ -577,7 +589,11 @@ where
         }
     }
 
-    fn route_out(socket: Arc<UdpSocket>, mut route_out_outlet: DatagramOutlet) {
+    fn route_out(
+        socket: Arc<UdpSocket>,
+        mut route_out_outlet: DatagramOutlet,
+        statistics: Arc<Statistics>,
+    ) {
         loop {
             let (destination, message) = if let Some(datagram) = route_out_outlet.blocking_recv() {
                 datagram
@@ -589,6 +605,8 @@ where
             socket
                 .send_to(&message.buffer[..message.size], destination)
                 .unwrap(); // TODO: Determine if this can fail
+
+            statistics.packets_sent.inc();
         }
     }
 }

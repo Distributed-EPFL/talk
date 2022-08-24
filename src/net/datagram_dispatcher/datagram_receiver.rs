@@ -37,6 +37,14 @@ where
         self.receive_outlet.recv().await.unwrap()
     }
 
+    pub fn packets_sent(&self) -> usize {
+        self.statistics.packets_sent.get()
+    }
+
+    pub fn packets_received(&self) -> usize {
+        self.statistics.packets_received.get()
+    }
+
     pub fn retransmissions(&self) -> usize {
         self.statistics.retransmissions.get()
     }
