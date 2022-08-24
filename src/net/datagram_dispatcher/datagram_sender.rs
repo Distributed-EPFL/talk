@@ -49,4 +49,8 @@ where
     pub fn retransmissions(&self) -> usize {
         self.statistics.retransmissions.get()
     }
+
+    pub fn process_in_drops(&self) -> usize {
+        self.statistics.process_in_drops.get()
+    }
 }

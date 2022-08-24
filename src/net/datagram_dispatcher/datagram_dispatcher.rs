@@ -205,6 +205,10 @@ where
         self.sender.retransmissions()
     }
 
+    pub fn process_in_drops(&self) -> usize {
+        self.sender.process_in_drops()
+    }
+
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
         (self.sender, self.receiver)
     }
