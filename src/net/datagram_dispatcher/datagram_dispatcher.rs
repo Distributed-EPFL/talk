@@ -125,6 +125,7 @@ where
             packets_sent: RelaxedCounter::new(0),
             packets_received: RelaxedCounter::new(0),
             retransmissions: RelaxedCounter::new(0),
+            pace_out_chokes: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
             route_out_drops: RelaxedCounter::new(0),
         };
@@ -215,6 +216,10 @@ where
 
     pub fn retransmissions(&self) -> usize {
         self.sender.retransmissions()
+    }
+
+    pub fn pace_out_chokes(&self) -> usize {
+        self.sender.pace_out_chokes()
     }
 
     pub fn process_in_drops(&self) -> usize {
@@ -355,12 +360,15 @@ where
         let mut last_tick = Instant::now();
 
         loop {
-            time::sleep(
-                settings
-                    .minimum_rate_window
-                    .saturating_sub(last_tick.elapsed()),
-            )
-            .await;
+            let sleep_time = settings
+                .minimum_rate_window
+                .saturating_sub(last_tick.elapsed());
+
+            if sleep_time > Duration::ZERO {
+                time::sleep(sleep_time).await;
+            } else {
+                statistics.pace_out_chokes.inc();
+            }
 
             let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_pace_out_task(
                 &mut pace_out_datagram_outlet,

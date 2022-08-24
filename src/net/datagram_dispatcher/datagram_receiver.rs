@@ -49,6 +49,10 @@ where
         self.statistics.retransmissions.get()
     }
 
+    pub fn pace_out_chokes(&self) -> usize {
+        self.statistics.pace_out_chokes.get()
+    }
+
     pub fn process_in_drops(&self) -> usize {
         self.statistics.process_in_drops.get()
     }
