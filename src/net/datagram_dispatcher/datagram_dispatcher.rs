@@ -27,6 +27,14 @@ use tokio::{
     task, time,
 };
 
+#[cfg(target_os = "linux")]
+use {
+    nix::sys::socket::{sendmmsg, MsgFlags, SendMmsgData, SockaddrStorage},
+    std::io::{IoSlice},
+    std::os::unix::io::AsRawFd,
+    tokio::sync::mpsc::error::TryRecvError,
+};
+
 type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
 type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 
@@ -195,7 +203,7 @@ where
             let statistics = statistics.clone();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, statistics)
+                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, settings, statistics)
             });
         }
 
@@ -449,8 +457,7 @@ where
                 &route_out_inlet,
                 statistics.as_ref(),
                 &settings,
-            )
-            {
+            ) {
                 packets_sent += 1;
             }
 
@@ -478,8 +485,7 @@ where
                     &route_out_inlet,
                     statistics.as_ref(),
                     &settings,
-                )
-                {
+                ) {
                     packets_sent += 1;
                 }
             }
@@ -648,9 +654,11 @@ where
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn route_out(
         socket: Arc<UdpSocket>,
         mut route_out_outlet: DatagramOutlet,
+        settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
         loop {
@@ -666,6 +674,58 @@ where
                 .unwrap(); // TODO: Determine if this can fail
 
             statistics.packets_sent.inc();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn route_out(
+        socket: Arc<UdpSocket>,
+        mut route_out_outlet: DatagramOutlet,
+        settings: DatagramDispatcherSettings,
+        statistics: Arc<Statistics>,
+    ) {
+        loop {
+            let mut batch: Vec<(SocketAddr, Message)> = Vec::with_capacity(settings.route_out_batch_size);
+            if let Some(datagram) = route_out_outlet.blocking_recv() {
+                batch.push(datagram)
+            } else {
+                // `DatagramDispatcher` has dropped, shutdown
+                return;
+            };
+            for _ in 1..settings.route_out_batch_size {
+                match route_out_outlet.try_recv() {
+                    Ok(msg) => {
+                        batch.push(msg);
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => return,
+                }
+            }
+
+            let data = batch
+                .iter()
+                .map(|(address, message)| {
+                    let address: SockaddrStorage = (*address).into();
+                    SendMmsgData {
+                        iov: [IoSlice::new(&message.buffer[..message.size])],
+                        cmsgs: &[],
+                        addr: Some(address),
+                        _lt: Default::default(),
+                    }
+                })
+                .collect::<Vec<SendMmsgData<_, _, _>>>();
+
+            let sent = {
+                let descriptor = socket.as_raw_fd();
+                let sizes = sendmmsg(descriptor, &data, MsgFlags::empty()).unwrap();
+                let sent = sizes
+                    .iter()
+                    .position(|size| *size == 0)
+                    .unwrap_or(sizes.len());
+                sent
+            };
+
+            statistics.packets_sent.add(sent);
         }
     }
 }
