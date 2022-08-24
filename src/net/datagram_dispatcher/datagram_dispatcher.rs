@@ -531,7 +531,8 @@ where
             },
             datagram = pace_out_datagram_outlet.recv() => {
                 datagram.map(|(destination, message)| PaceOutTask::Send(destination, message))
-            }
+            },
+            _ = time::sleep(Duration::from_secs(1)) => None
         }
     }
 
