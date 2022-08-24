@@ -209,6 +209,7 @@ where
         for route_out_outlet in route_out_outlets {
             let socket = socket.clone();
             let statistics = statistics.clone();
+            let settings = settings.clone();
             
             task::spawn_blocking(move || {
                 DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, settings, statistics)
