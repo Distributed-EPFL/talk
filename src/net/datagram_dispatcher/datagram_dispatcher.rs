@@ -23,7 +23,7 @@ use std::{
 };
 
 use tokio::{
-    sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender},
+    sync::mpsc::{self, error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
     task, time,
 };
 
@@ -248,12 +248,12 @@ where
 
             let message = Message { buffer, size };
 
-            if process_in_inlets
+            if let Err(TrySendError::Full(..)) = process_in_inlets
                 .get(robin % settings.process_in_tasks)
                 .unwrap()
                 .try_send((source, message))
-                .is_err()
             {
+                // `process_in` is too busy: just drop the packet
                 statistics.process_in_drops.inc();
             }
         }
