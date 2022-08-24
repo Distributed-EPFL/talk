@@ -128,14 +128,14 @@ where
 
         let (pace_out_completion_inlet, pace_out_completion_outlet) =
             mpsc::channel(settings.pace_out_completion_channel_capacity);
-        
+
         let mut route_out_inlets = Vec::new();
         let mut route_out_outlets = Vec::new();
 
         for _ in 0..settings.route_out_tasks {
             let (route_out_inlet, route_out_outlet) =
                 mpsc::channel(settings.route_out_channel_capacity);
-            
+
             route_out_inlets.push(route_out_inlet);
             route_out_outlets.push(route_out_outlet);
         }
@@ -162,17 +162,10 @@ where
         {
             let socket = socket.clone();
             let statistics = statistics.clone();
-            let settings = settings.clone();
             let relay = fuse.relay();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_in(
-                    socket,
-                    process_in_inlets,
-                    statistics,
-                    settings,
-                    relay,
-                )
+                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, statistics, relay)
             });
         }
 
@@ -212,15 +205,9 @@ where
         for route_out_outlet in route_out_outlets {
             let socket = socket.clone();
             let statistics = statistics.clone();
-            let settings = settings.clone();
-            
+
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_out(
-                    socket,
-                    route_out_outlet,
-                    settings,
-                    statistics,
-                )
+                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, statistics)
             });
         }
 
@@ -297,14 +284,13 @@ where
         socket: Arc<UdpSocket>,
         process_in_inlets: Vec<DatagramInlet>,
         statistics: Arc<Statistics>,
-        settings: DatagramDispatcherSettings,
         mut relay: Relay,
     ) {
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
 
-        for robin in 0.. {
+        for process_in_inlet in process_in_inlets.iter().cycle() {
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
             let datagram = socket.recv_from(&mut buffer);
@@ -331,11 +317,7 @@ where
 
             let message = Message { buffer, size };
 
-            if let Err(TrySendError::Full(..)) = process_in_inlets
-                .get(robin % settings.process_in_tasks)
-                .unwrap()
-                .try_send((source, message))
-            {
+            if let Err(TrySendError::Full(..)) = process_in_inlet.try_send((source, message)) {
                 // `process_in` is too busy: just drop the packet
                 statistics.process_in_drops.inc();
             }
@@ -355,7 +337,7 @@ where
             .unwrap(); // TODO: Determine if this call can fail
         let descriptor = socket.as_raw_fd();
 
-        for robin in 0.. {
+        for process_in_inlet in process_in_inlets.iter().cycle() {
             let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
 
             let mut data = buffer
@@ -421,11 +403,7 @@ where
                     )
                 })
             {
-                if let Err(TrySendError::Full(..)) = process_in_inlets
-                    .get(robin % settings.process_in_tasks)
-                    .unwrap()
-                    .try_send((*source, message))
-                {
+                if let Err(TrySendError::Full(..)) = process_in_inlet.try_send((*source, message)) {
                     // `process_in` is too busy: just drop the packet
                     statistics.process_in_drops.inc();
                 }
@@ -769,7 +747,6 @@ where
     fn route_out(
         socket: Arc<UdpSocket>,
         mut route_out_outlet: DatagramOutlet,
-        settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
         loop {
