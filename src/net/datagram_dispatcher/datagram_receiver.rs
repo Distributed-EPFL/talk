@@ -68,4 +68,8 @@ where
     pub fn route_out_drops(&self) -> usize {
         self.statistics.route_out_drops.get()
     }
+
+    pub fn retransmission_queue_len(&self) -> usize {
+        *self.statistics.retransmission_queue_len.lock().unwrap()
+    }
 }

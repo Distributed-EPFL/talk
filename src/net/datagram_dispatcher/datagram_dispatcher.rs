@@ -18,7 +18,7 @@ use std::{
     collections::VecDeque,
     io,
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -130,6 +130,7 @@ where
             pace_out_chokes: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
             route_out_drops: RelaxedCounter::new(0),
+            retransmission_queue_len: Mutex::new(0),
         };
 
         let statistics = Arc::new(statistics);
@@ -241,6 +242,10 @@ where
 
     pub fn route_out_drops(&self) -> usize {
         self.sender.route_out_drops()
+    }
+
+    pub fn retransmission_queue_len(&self) -> usize {
+        self.sender.retransmission_queue_len()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -457,6 +462,8 @@ where
                     packets_sent += 1;
                 }
             }
+
+            *statistics.retransmission_queue_len.lock().unwrap() = retransmission_queue.len();
         }
     }
 
