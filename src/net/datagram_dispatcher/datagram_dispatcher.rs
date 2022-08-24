@@ -131,6 +131,7 @@ where
             process_in_drops: RelaxedCounter::new(0),
             route_out_drops: RelaxedCounter::new(0),
             retransmission_queue_len: Mutex::new(0),
+            next_retransmission: Mutex::new(None),
         };
 
         let statistics = Arc::new(statistics);
@@ -246,6 +247,10 @@ where
 
     pub fn retransmission_queue_len(&self) -> usize {
         self.sender.retransmission_queue_len()
+    }
+
+    pub fn next_retransmission(&self) -> Option<Instant> {
+        self.sender.next_retransmission()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -464,6 +469,10 @@ where
             }
 
             *statistics.retransmission_queue_len.lock().unwrap() = retransmission_queue.len();
+
+            *statistics.next_retransmission.lock().unwrap() = retransmission_queue
+                .front()
+                .map(|(next_retransmission, _)| *next_retransmission);
         }
     }
 

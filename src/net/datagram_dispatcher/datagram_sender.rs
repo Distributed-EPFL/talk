@@ -7,7 +7,7 @@ use crate::{
 
 use rand::prelude::*;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 use tokio::sync::mpsc::Sender as MpscSender;
 
@@ -80,5 +80,9 @@ where
 
     pub fn retransmission_queue_len(&self) -> usize {
         *self.statistics.retransmission_queue_len.lock().unwrap()
+    }
+
+    pub fn next_retransmission(&self) -> Option<Instant> {
+        *self.statistics.next_retransmission.lock().unwrap()
     }
 }
