@@ -123,6 +123,7 @@ where
 
         let statistics = Statistics {
             retransmissions: RelaxedCounter::new(0),
+            process_in_drops: RelaxedCounter::new(0),
         };
 
         let statistics = Arc::new(statistics);
@@ -131,11 +132,18 @@ where
 
         {
             let socket = socket.clone();
+            let statistics = statistics.clone();
             let settings = settings.clone();
             let relay = fuse.relay();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, settings, relay)
+                DatagramDispatcher::<S, R>::route_in(
+                    socket,
+                    process_in_inlets,
+                    statistics,
+                    settings,
+                    relay,
+                )
             });
         }
 
@@ -204,6 +212,7 @@ where
     fn route_in(
         socket: Arc<UdpSocket>,
         process_in_inlets: Vec<DatagramInlet>,
+        statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
         mut relay: Relay,
     ) {
@@ -235,10 +244,14 @@ where
 
             let message = Message { buffer, size };
 
-            let _ = process_in_inlets
+            if process_in_inlets
                 .get(robin % settings.process_in_tasks)
                 .unwrap()
-                .try_send((source, message)); // TODO: Log warning in case of `Err`
+                .try_send((source, message))
+                .is_err()
+            {
+                statistics.process_in_drops.inc();
+            }
         }
     }
 
