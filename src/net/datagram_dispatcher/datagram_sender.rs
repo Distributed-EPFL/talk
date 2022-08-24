@@ -54,6 +54,14 @@ where
         self.statistics.packets_received.get()
     }
 
+    pub fn message_packets_processed(&self) -> usize {
+        self.statistics.message_packets_processed.get()
+    }
+
+    pub fn acknowledgement_packets_processed(&self) -> usize {
+        self.statistics.acknowledgement_packets_processed.get()
+    }
+
     pub fn retransmissions(&self) -> usize {
         self.statistics.retransmissions.get()
     }

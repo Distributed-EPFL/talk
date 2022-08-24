@@ -124,6 +124,8 @@ where
         let statistics = Statistics {
             packets_sent: RelaxedCounter::new(0),
             packets_received: RelaxedCounter::new(0),
+            message_packets_processed: RelaxedCounter::new(0),
+            acknowledgement_packets_processed: RelaxedCounter::new(0),
             retransmissions: RelaxedCounter::new(0),
             pace_out_chokes: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
@@ -152,11 +154,14 @@ where
         }
 
         for process_in_outlet in process_in_outlets {
+            let statistics = statistics.clone();
+
             fuse.spawn(DatagramDispatcher::<S, R>::process_in(
                 process_in_outlet,
                 receive_inlet.clone(),
                 pace_out_acknowledgement_inlet.clone(),
                 pace_out_completion_inlet.clone(),
+                statistics,
             ));
         }
 
@@ -212,6 +217,14 @@ where
 
     pub fn packets_received(&self) -> usize {
         self.sender.packets_received()
+    }
+
+    pub fn message_packets_processed(&self) -> usize {
+        self.sender.message_packets_processed()
+    }
+
+    pub fn acknowledgement_packets_processed(&self) -> usize {
+        self.sender.acknowledgement_packets_processed()
     }
 
     pub fn retransmissions(&self) -> usize {
@@ -288,6 +301,7 @@ where
         receive_inlet: MessageInlet<R>,
         pace_out_acknowledgement_inlet: AcknowledgementInlet,
         pace_out_completion_inlet: CompletionInlet,
+        statistics: Arc<Statistics>,
     ) {
         loop {
             let (source, message) = if let Some(datagram) = process_in_outlet.recv().await {
@@ -310,15 +324,18 @@ where
             if footer[0] == 0 {
                 // First footer byte is 0: MESSAGE
 
-                let _ = pace_out_acknowledgement_inlet.send((source, index)).await;
-
                 if let Ok(payload) = bincode::deserialize::<R>(payload) {
+                    let _ = pace_out_acknowledgement_inlet.send((source, index)).await;
                     let _ = receive_inlet.send((source, payload)).await;
+                    statistics.message_packets_processed.inc();
+                } else {
+                    println!("Failed to deserialize...??");
                 }
             } else if footer[0] == 1 {
                 // First footer byte is 1: ACKNOWLEDGEMENT
 
                 let _ = pace_out_completion_inlet.send(index).await;
+                statistics.acknowledgement_packets_processed.inc();
             }
         }
     }
