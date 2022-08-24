@@ -10,6 +10,7 @@ pub struct DatagramDispatcherSettings {
 
     pub process_in_tasks: usize,
     pub process_out_tasks: usize,
+    pub route_out_tasks: usize,
 
     pub receive_channel_capacity: usize,
     pub process_in_channel_capacity: usize,
@@ -29,6 +30,7 @@ impl Default for DatagramDispatcherSettings {
             maximum_rate_window: Duration::from_millis(20),
             process_in_tasks: 4,
             process_out_tasks: 4,
+            route_out_tasks: 2,
             receive_channel_capacity: 16384,
             process_in_channel_capacity: 4096,
             process_out_channel_capacity: 4096,

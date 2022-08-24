@@ -117,9 +117,17 @@ where
 
         let (pace_out_completion_inlet, pace_out_completion_outlet) =
             mpsc::channel(settings.pace_out_completion_channel_capacity);
+        
+        let mut route_out_inlets = Vec::new();
+        let mut route_out_outlets = Vec::new();
 
-        let (route_out_inlet, route_out_outlet) =
-            mpsc::channel(settings.route_out_channel_capacity);
+        for _ in 0..settings.route_out_tasks {
+            let (route_out_inlet, route_out_outlet) =
+                mpsc::channel(settings.route_out_channel_capacity);
+            
+            route_out_inlets.push(route_out_inlet);
+            route_out_outlets.push(route_out_outlet);
+        }
 
         let statistics = Statistics {
             packets_sent: RelaxedCounter::new(0),
@@ -184,16 +192,16 @@ where
                 pace_out_datagram_outlet,
                 pace_out_acknowledgement_outlet,
                 pace_out_completion_outlet,
-                route_out_inlet,
+                route_out_inlets,
                 statistics,
                 settings,
             ));
         }
 
-        {
+        for route_out_outlet in route_out_outlets {
             let socket = socket.clone();
             let statistics = statistics.clone();
-
+            
             task::spawn_blocking(move || {
                 DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, statistics)
             });
@@ -387,7 +395,7 @@ where
         mut pace_out_datagram_outlet: DatagramOutlet,
         mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut pace_out_completion_outlet: CompletionOutlet,
-        route_out_inlet: DatagramInlet,
+        route_out_inlets: Vec<DatagramInlet>,
         statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
     ) {
@@ -397,6 +405,8 @@ where
         let mut retransmission_queue = VecDeque::new();
 
         let mut last_tick = Instant::now();
+
+        let mut route_out_inlets = route_out_inlets.iter().cycle();
 
         loop {
             let sleep_time = settings
@@ -446,7 +456,7 @@ where
                 &mut datagram_table,
                 &mut retransmission_queue,
                 task,
-                &route_out_inlet,
+                route_out_inlets.next().unwrap(),
                 statistics.as_ref(),
                 &settings,
             )
@@ -475,7 +485,7 @@ where
                     &mut datagram_table,
                     &mut retransmission_queue,
                     task,
-                    &route_out_inlet,
+                    route_out_inlets.next().unwrap(),
                     statistics.as_ref(),
                     &settings,
                 )
