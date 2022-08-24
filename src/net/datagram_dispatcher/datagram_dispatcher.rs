@@ -421,6 +421,8 @@ where
             {
                 task
             } else {
+                println!("`pace_out` shutting down");
+
                 // `DatagramDispatcher` has dropped, shutdown
                 return;
             };
@@ -532,7 +534,6 @@ where
             datagram = pace_out_datagram_outlet.recv() => {
                 datagram.map(|(destination, message)| PaceOutTask::Send(destination, message))
             },
-            _ = time::sleep(Duration::from_secs(1)) => None
         }
     }
 
