@@ -450,7 +450,6 @@ where
                 statistics.as_ref(),
                 &settings,
             )
-            .await
             {
                 packets_sent += 1;
             }
@@ -480,7 +479,6 @@ where
                     statistics.as_ref(),
                     &settings,
                 )
-                .await
                 {
                     packets_sent += 1;
                 }
@@ -574,7 +572,7 @@ where
         None
     }
 
-    async fn fulfill_pace_out_task(
+    fn fulfill_pace_out_task(
         cursor: &mut usize,
         datagram_table: &mut DatagramTable,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
