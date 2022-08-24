@@ -85,4 +85,8 @@ where
     pub fn next_retransmission(&self) -> Option<Instant> {
         *self.statistics.next_retransmission.lock().unwrap()
     }
+
+    pub fn last_tick(&self) -> Option<Instant> {
+        *self.statistics.last_tick.lock().unwrap()
+    }
 }

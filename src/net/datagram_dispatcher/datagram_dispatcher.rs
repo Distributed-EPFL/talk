@@ -132,6 +132,7 @@ where
             route_out_drops: RelaxedCounter::new(0),
             retransmission_queue_len: Mutex::new(0),
             next_retransmission: Mutex::new(None),
+            last_tick: Mutex::new(None),
         };
 
         let statistics = Arc::new(statistics);
@@ -251,6 +252,10 @@ where
 
     pub fn next_retransmission(&self) -> Option<Instant> {
         self.sender.next_retransmission()
+    }
+
+    pub fn last_tick(&self) -> Option<Instant> {
+        self.sender.last_tick()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -415,6 +420,8 @@ where
 
             let window = last_tick.elapsed();
             last_tick = Instant::now();
+
+            *statistics.last_tick.lock().unwrap() = Some(last_tick);
 
             let mut poll = task.poll();
 

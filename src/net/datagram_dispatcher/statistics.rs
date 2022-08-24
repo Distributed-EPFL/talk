@@ -13,4 +13,5 @@ pub(in crate::net::datagram_dispatcher) struct Statistics {
     pub route_out_drops: RelaxedCounter,
     pub retransmission_queue_len: Mutex<usize>,
     pub next_retransmission: Mutex<Option<Instant>>,
+    pub last_tick: Mutex<Option<Instant>>,
 }
