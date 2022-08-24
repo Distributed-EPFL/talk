@@ -124,6 +124,7 @@ where
         let statistics = Statistics {
             retransmissions: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
+            route_out_drops: RelaxedCounter::new(0),
         };
 
         let statistics = Arc::new(statistics);
@@ -207,6 +208,10 @@ where
 
     pub fn process_in_drops(&self) -> usize {
         self.sender.process_in_drops()
+    }
+
+    pub fn route_out_drops(&self) -> usize {
+        self.sender.route_out_drops()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -515,13 +520,24 @@ where
                 buffer[1..9].clone_from_slice((index as u64).to_le_bytes().as_slice());
 
                 let message = Message { buffer, size: 9 };
-                let _ = route_out_inlet.send((destination, message)).await;
+
+                if let Err(TrySendError::Full(..)) =
+                    route_out_inlet.try_send((destination, message))
+                {
+                    // `route_out` is too busy: just drop the packet
+                    statistics.route_out_drops.inc();
+                }
 
                 true
             }
             PaceOutTask::Resend(index) => {
                 if let Some((destination, message)) = datagram_table.get(index) {
-                    let _ = route_out_inlet.send((destination.clone(), message.clone()));
+                    if let Err(TrySendError::Full(..)) =
+                        route_out_inlet.try_send((destination.clone(), message.clone()))
+                    {
+                        // `route_out` is too busy: just drop the packet
+                        statistics.route_out_drops.inc();
+                    }
 
                     retransmission_queue
                         .push_back((Instant::now() + settings.retransmission_delay, index));
@@ -544,9 +560,15 @@ where
 
                 message.size += 9;
 
-                let _ = route_out_inlet.send((destination, message.clone())).await;
+                if let Err(TrySendError::Full(..)) =
+                    route_out_inlet.try_send((destination, message.clone()))
+                {
+                    // `route_out` is too busy: just drop the packet
+                    statistics.route_out_drops.inc();
+                }
 
                 datagram_table.push(destination, message);
+
                 retransmission_queue
                     .push_back((Instant::now() + settings.retransmission_delay, index));
 

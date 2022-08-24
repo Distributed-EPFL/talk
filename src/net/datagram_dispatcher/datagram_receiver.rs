@@ -44,4 +44,8 @@ where
     pub fn process_in_drops(&self) -> usize {
         self.statistics.process_in_drops.get()
     }
+
+    pub fn route_out_drops(&self) -> usize {
+        self.statistics.route_out_drops.get()
+    }
 }
