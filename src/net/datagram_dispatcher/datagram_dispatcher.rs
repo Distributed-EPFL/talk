@@ -226,7 +226,13 @@ where
 
         let fuse = Arc::new(fuse);
 
-        let sender = DatagramSender::new(process_out_inlets, statistics.clone(), fuse.clone());
+        let sender = DatagramSender::new(
+            process_out_inlets,
+            settings.clone(),
+            statistics.clone(),
+            fuse.clone(),
+        );
+
         let receiver = DatagramReceiver::new(receive_outlet, statistics.clone(), fuse);
 
         Ok(DatagramDispatcher { sender, receiver })

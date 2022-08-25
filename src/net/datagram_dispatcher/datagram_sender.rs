@@ -1,7 +1,10 @@
 use atomic_counter::AtomicCounter;
 
 use crate::{
-    net::{datagram_dispatcher::Statistics, Message},
+    net::{
+        datagram_dispatcher::{DatagramDispatcherSettings, Statistics},
+        Message,
+    },
     sync::fuse::Fuse,
 };
 
@@ -9,12 +12,13 @@ use rand::prelude::*;
 
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 
-use tokio::sync::mpsc::Sender as MpscSender;
+use tokio::{sync::mpsc::Sender as MpscSender, time};
 
 type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
 
 pub struct DatagramSender<S: Message> {
     process_out_inlets: Vec<MessageInlet<S>>,
+    settings: DatagramDispatcherSettings,
     statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
@@ -25,11 +29,13 @@ where
 {
     pub(in crate::net::datagram_dispatcher) fn new(
         process_out_inlets: Vec<MessageInlet<S>>,
+        settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramSender {
             process_out_inlets,
+            settings,
             statistics,
             _fuse: fuse,
         }
@@ -44,6 +50,34 @@ where
             .unwrap()
             .send((destination, payload))
             .await;
+    }
+
+    pub async fn pace<I>(&self, datagrams: I, rate: f64)
+    where
+        I: IntoIterator<Item = (SocketAddr, S)>,
+    {
+        let mut datagrams = datagrams.into_iter();
+
+        let start = Instant::now();
+        let mut sent = 0;
+
+        loop {
+            let target = (rate * start.elapsed().as_secs_f64()) as usize;
+
+            for _ in sent..target {
+                let (destination, message) = if let Some(datagram) = datagrams.next() {
+                    datagram
+                } else {
+                    return;
+                };
+
+                self.send(destination, message).await;
+            }
+
+            sent = target;
+
+            time::sleep(self.settings.pace_interval).await;
+        }
     }
 
     pub fn packets_sent(&self) -> usize {
