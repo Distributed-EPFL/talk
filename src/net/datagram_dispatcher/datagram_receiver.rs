@@ -5,7 +5,7 @@ use crate::{
     sync::fuse::Fuse,
 };
 
-use std::{net::SocketAddr, sync::Arc, time::Instant};
+use std::{net::SocketAddr, sync::Arc};
 
 use tokio::sync::mpsc::Receiver as MpscReceiver;
 
@@ -67,21 +67,5 @@ where
 
     pub fn route_out_drops(&self) -> usize {
         self.statistics.route_out_drops.get()
-    }
-
-    pub fn retransmission_queue_len(&self) -> usize {
-        *self.statistics.retransmission_queue_len.lock().unwrap()
-    }
-
-    pub fn next_retransmission(&self) -> Option<Instant> {
-        *self.statistics.next_retransmission.lock().unwrap()
-    }
-
-    pub fn last_tick(&self) -> Option<Instant> {
-        *self.statistics.last_tick.lock().unwrap()
-    }
-
-    pub fn waiting_next_task(&self) -> bool {
-        *self.statistics.waiting_next_task.lock().unwrap()
     }
 }

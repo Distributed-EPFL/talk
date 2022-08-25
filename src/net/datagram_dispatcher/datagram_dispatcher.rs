@@ -18,7 +18,7 @@ use std::{
     collections::VecDeque,
     io,
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -149,10 +149,6 @@ where
             pace_out_chokes: RelaxedCounter::new(0),
             process_in_drops: RelaxedCounter::new(0),
             route_out_drops: RelaxedCounter::new(0),
-            retransmission_queue_len: Mutex::new(0),
-            next_retransmission: Mutex::new(None),
-            last_tick: Mutex::new(None),
-            waiting_next_task: Mutex::new(false),
         };
 
         let statistics = Arc::new(statistics);
@@ -283,22 +279,6 @@ where
 
     pub fn route_out_drops(&self) -> usize {
         self.sender.route_out_drops()
-    }
-
-    pub fn retransmission_queue_len(&self) -> usize {
-        self.sender.retransmission_queue_len()
-    }
-
-    pub fn next_retransmission(&self) -> Option<Instant> {
-        self.sender.next_retransmission()
-    }
-
-    pub fn last_tick(&self) -> Option<Instant> {
-        self.sender.last_tick()
-    }
-
-    pub fn waiting_next_task(&self) -> bool {
-        self.sender.waiting_next_task()
     }
 
     pub fn split(self) -> (DatagramSender<S>, DatagramReceiver<R>) {
@@ -533,8 +513,6 @@ where
                 statistics.pace_out_chokes.inc();
             }
 
-            *statistics.waiting_next_task.lock().unwrap() = true;
-
             let task = if let Some(task) = DatagramDispatcher::<S, R>::wait_pace_out_task(
                 &mut pace_out_datagram_outlet,
                 &mut pace_out_acknowledgement_outlet,
@@ -545,18 +523,12 @@ where
             {
                 task
             } else {
-                println!("`pace_out` shutting down");
-
                 // `DatagramDispatcher` has dropped, shutdown
                 return;
             };
 
-            *statistics.waiting_next_task.lock().unwrap() = false;
-
             let window = last_tick.elapsed();
             last_tick = Instant::now();
-
-            *statistics.last_tick.lock().unwrap() = Some(last_tick);
 
             let mut poll = task.poll();
 
@@ -605,12 +577,6 @@ where
                     packets_sent += 1;
                 }
             }
-
-            *statistics.retransmission_queue_len.lock().unwrap() = retransmission_queue.len();
-
-            *statistics.next_retransmission.lock().unwrap() = retransmission_queue
-                .front()
-                .map(|(next_retransmission, _)| *next_retransmission);
         }
     }
 
