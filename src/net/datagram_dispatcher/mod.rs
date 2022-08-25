@@ -2,12 +2,17 @@ mod datagram_dispatcher;
 mod datagram_dispatcher_settings;
 mod datagram_receiver;
 mod datagram_sender;
-mod udp_wrap;
-mod udp_wrap_settings;
-use udp_wrap::{ReceiveMultiple, UdpWrap};
-use udp_wrap_settings::UdpWrapSettings;
+mod datagram_table;
+mod message;
+mod statistics;
 
-pub use datagram_dispatcher::DatagramDispatcher;
+pub use datagram_dispatcher::{DatagramDispatcher, DatagramDispatcherError};
 pub use datagram_dispatcher_settings::DatagramDispatcherSettings;
 pub use datagram_receiver::DatagramReceiver;
 pub use datagram_sender::DatagramSender;
+
+use datagram_table::DatagramTable;
+use message::Message;
+use statistics::Statistics;
+
+const MAXIMUM_TRANSMISSION_UNIT: usize = 2048;

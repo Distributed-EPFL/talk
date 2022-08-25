@@ -14,6 +14,7 @@ bincode = { version = "~1.3" }
 
 doomstack = { git = "https://github.com/Distributed-EPFL/doomstack" }
 
+atomic-counter = { version = "1.0.1" }
 parking_lot = { version = "0.11.2" }
 rand = { version = "0.7" }
 

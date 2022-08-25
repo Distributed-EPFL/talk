@@ -18,6 +18,23 @@ impl Relay {
         }
     }
 
+    pub fn is_on(&mut self) -> bool {
+        let is_on = match &mut self.state {
+            State::On(receiver) => !receiver.try_recv().is_ok(),
+            State::Off => false,
+        };
+
+        if !is_on {
+            self.state = State::Off;
+        }
+
+        is_on
+    }
+
+    pub fn is_off(&mut self) -> bool {
+        !self.is_on()
+    }
+
     pub fn run<F>(mut self, future: F) -> JoinHandle<Option<F::Output>>
     where
         F: 'static + Send + Future,
