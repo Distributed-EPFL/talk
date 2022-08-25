@@ -161,11 +161,18 @@ where
 
         {
             let socket = socket.clone();
+            let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_in(socket, process_in_inlets, statistics, relay)
+                DatagramDispatcher::<S, R>::route_in(
+                    socket,
+                    process_in_inlets,
+                    settings,
+                    statistics,
+                    relay,
+                )
             });
         }
 
@@ -204,10 +211,16 @@ where
 
         for route_out_outlet in route_out_outlets {
             let socket = socket.clone();
+            let settings = settings.clone();
             let statistics = statistics.clone();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_out(socket, route_out_outlet, statistics)
+                DatagramDispatcher::<S, R>::route_out(
+                    socket,
+                    route_out_outlet,
+                    settings,
+                    statistics,
+                )
             });
         }
 
@@ -283,6 +296,7 @@ where
     fn route_in(
         socket: Arc<UdpSocket>,
         process_in_inlets: Vec<DatagramInlet>,
+        _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         mut relay: Relay,
     ) {
@@ -328,8 +342,8 @@ where
     fn route_in(
         socket: Arc<UdpSocket>,
         process_in_inlets: Vec<DatagramInlet>,
-        statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
+        statistics: Arc<Statistics>,
         mut relay: Relay,
     ) {
         socket
@@ -747,6 +761,7 @@ where
     fn route_out(
         socket: Arc<UdpSocket>,
         mut route_out_outlet: DatagramOutlet,
+        _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
         loop {
