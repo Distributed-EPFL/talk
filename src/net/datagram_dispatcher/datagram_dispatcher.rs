@@ -246,6 +246,13 @@ where
         self.receiver.receive().await
     }
 
+    pub async fn pace<I>(&self, datagrams: I, rate: f64)
+    where
+        I: IntoIterator<Item = (SocketAddr, S)>,
+    {
+        self.sender.pace(datagrams, rate).await
+    }
+
     pub fn packets_sent(&self) -> usize {
         self.sender.packets_sent()
     }
