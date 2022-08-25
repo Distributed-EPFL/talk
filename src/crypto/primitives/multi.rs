@@ -18,7 +18,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-pub const PUBLIC_KEY_LENGTH: usize = 48;
+pub const PUBLIC_KEY_LENGTH: usize = 96;
 pub const SECRET_KEY_LENGTH: usize = 32;
 pub const SIGNATURE_LENGTH: usize = 192;
 
@@ -102,7 +102,7 @@ impl KeyPair {
         let mut keypair_bytes = [0u8; KEYPAIR_LENGTH];
         let (public_bytes, secret_bytes) = keypair_bytes.split_at_mut(PUBLIC_KEY_LENGTH);
 
-        public_bytes.copy_from_slice(&self.public.to_bytes());
+        public_bytes.copy_from_slice(&self.public.serialize());
         secret_bytes.copy_from_slice(&self.secret.to_bytes());
 
         keypair_bytes
@@ -161,7 +161,7 @@ impl PublicKey {
     }
 
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        self.0.to_bytes()
+        self.0.serialize()
     }
 }
 
