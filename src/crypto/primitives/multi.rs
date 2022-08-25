@@ -20,7 +20,7 @@ use std::{
 
 pub const PUBLIC_KEY_LENGTH: usize = 48;
 pub const SECRET_KEY_LENGTH: usize = 32;
-pub const SIGNATURE_LENGTH: usize = 96;
+pub const SIGNATURE_LENGTH: usize = 192;
 
 pub const KEYPAIR_LENGTH: usize = PUBLIC_KEY_LENGTH + SECRET_KEY_LENGTH;
 
@@ -181,7 +181,7 @@ impl Signature {
     }
 
     pub fn to_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
-        self.0.to_bytes()
+        self.0.serialize()
     }
 
     /// Aggregates a set of `Signature`s into a single `Signature`
