@@ -342,6 +342,7 @@ where
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
+
         let descriptor = socket.as_raw_fd();
 
         for process_in_inlet in process_in_inlets.iter().cycle() {
@@ -769,19 +770,27 @@ where
         loop {
             let mut batch: Vec<(SocketAddr, Message)> =
                 Vec::with_capacity(settings.route_out_batch_size);
+
             if let Some(datagram) = route_out_outlet.blocking_recv() {
                 batch.push(datagram)
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
                 return;
             };
+
             for _ in 1..settings.route_out_batch_size {
                 match route_out_outlet.try_recv() {
                     Ok(msg) => {
                         batch.push(msg);
                     }
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => return,
+                    Err(TryRecvError::Empty) => {
+                        // No more datagrams can be pulled on the fly, finalize `batch`.
+                        break;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        // `DatagramDispatcher` has dropped, shutdown
+                        return;
+                    }
                 }
             }
 
