@@ -344,10 +344,9 @@ where
             .unwrap(); // TODO: Determine if this call can fail
 
         let descriptor = socket.as_raw_fd();
+        let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
 
         for process_in_inlet in process_in_inlets.iter().cycle() {
-            let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
-
             let mut data = buffer
                 .chunks_exact_mut(MAXIMUM_TRANSMISSION_UNIT)
                 .map(|chunk| RecvMmsgData {
@@ -767,9 +766,11 @@ where
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
+        let mut batch: Vec<(SocketAddr, Message)> =
+            Vec::with_capacity(settings.route_out_batch_size);
+
         loop {
-            let mut batch: Vec<(SocketAddr, Message)> =
-                Vec::with_capacity(settings.route_out_batch_size);
+            batch.clear();
 
             if let Some(datagram) = route_out_outlet.blocking_recv() {
                 batch.push(datagram)
