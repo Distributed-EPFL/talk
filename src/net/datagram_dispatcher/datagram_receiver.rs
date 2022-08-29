@@ -7,13 +7,11 @@ use crate::{
 
 use std::{net::SocketAddr, sync::Arc};
 
-use tokio::sync::mpsc::Receiver as MpscReceiver;
-
-type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
+type MessageOutlet<M> = flume::Receiver<(SocketAddr, M)>;
 
 pub struct DatagramReceiver<R: Message> {
     receive_outlet: MessageOutlet<R>,
-    statistics: Arc<Statistics>,
+    pub statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 
@@ -34,7 +32,7 @@ where
     }
 
     pub async fn receive(&mut self) -> (SocketAddr, R) {
-        self.receive_outlet.recv().await.unwrap()
+        self.receive_outlet.recv_async().await.unwrap()
     }
 
     pub fn packets_sent(&self) -> usize {
