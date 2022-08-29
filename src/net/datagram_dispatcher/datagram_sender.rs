@@ -19,7 +19,7 @@ type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
 pub struct DatagramSender<S: Message> {
     process_out_inlets: Vec<MessageInlet<S>>,
     settings: DatagramDispatcherSettings,
-    statistics: Arc<Statistics>,
+    pub statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 

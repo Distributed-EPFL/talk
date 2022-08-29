@@ -50,7 +50,7 @@ type CompletionInlet = MpscSender<usize>;
 type CompletionOutlet = MpscReceiver<usize>;
 
 pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
-    sender: DatagramSender<S>,
+    pub sender: DatagramSender<S>,
     receiver: DatagramReceiver<R>,
 }
 
@@ -702,6 +702,8 @@ where
 
                     retransmission_queue
                         .push_back((Instant::now() + settings.retransmission_delay, index));
+
+                    // println!("Retransmitting {}", index);
 
                     statistics.retransmissions.inc();
 
