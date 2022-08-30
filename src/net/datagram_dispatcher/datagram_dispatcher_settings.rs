@@ -33,7 +33,7 @@ impl Default for DatagramDispatcherSettings {
             maximum_packet_rate: 65536.,
             minimum_rate_window: Duration::from_millis(1),
             maximum_rate_window: Duration::from_millis(2),
-            process_in_tasks: 4,
+            process_in_tasks: 8,
             process_out_tasks: 4,
             route_out_tasks: 2,
             receive_channel_capacity: 16384,
