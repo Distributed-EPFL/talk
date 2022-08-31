@@ -30,7 +30,6 @@ use tokio::{
 #[cfg(target_os = "linux")]
 use {
     nix::sys::socket::{recvmmsg, sendmmsg, MsgFlags, RecvMmsgData, SendMmsgData, SockaddrStorage},
-    nix::sys::time::TimeSpec,
     std::convert::TryInto,
     std::io::{IoSlice, IoSliceMut},
     std::net::{Ipv4Addr, SocketAddrV4},
@@ -358,8 +357,11 @@ where
             let messages_res = recvmmsg(
                 descriptor,
                 &mut data,
-                MsgFlags::empty(),
-                Some(TimeSpec::from_duration(Duration::from_secs(1))),
+                unsafe {
+                    // unsafe required as MsgFlags enum does not include `MSG_WAITFORONE`
+                    MsgFlags::from_bits_unchecked(nix::libc::MSG_WAITFORONE)
+                },
+                None,
             );
 
             if !relay.is_on() {
