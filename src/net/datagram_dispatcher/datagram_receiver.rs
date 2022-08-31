@@ -13,7 +13,7 @@ type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
 
 pub struct DatagramReceiver<R: Message> {
     receive_outlet: MessageOutlet<R>,
-    statistics: Arc<Statistics>,
+    pub statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 
