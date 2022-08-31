@@ -113,6 +113,7 @@ async fn main() {
     dbg!(&receiver.statistics);
     println!("Received {} / {}", received, total);
     println!("Packets received: {}", receiver.packets_received());
+    dbg!(max_latency);
     println!(
         "Packet loss: {:.02}%",
         (1. - received as f64 / receiver.packets_received() as f64) * 100.,
