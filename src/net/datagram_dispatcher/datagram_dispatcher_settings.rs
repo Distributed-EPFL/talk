@@ -31,9 +31,9 @@ impl Default for DatagramDispatcherSettings {
         DatagramDispatcherSettings {
             retransmission_delay: Duration::from_millis(100),
             maximum_packet_rate: 65536.,
-            minimum_rate_window: Duration::from_millis(1),
-            maximum_rate_window: Duration::from_millis(2),
-            process_in_tasks: 8,
+            minimum_rate_window: Duration::from_millis(5),
+            maximum_rate_window: Duration::from_millis(10),
+            process_in_tasks: 4,
             process_out_tasks: 4,
             route_out_tasks: 2,
             receive_channel_capacity: 16384,
