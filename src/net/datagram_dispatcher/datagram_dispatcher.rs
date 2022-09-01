@@ -184,9 +184,12 @@ where
         }
 
         for process_out_outlet in process_out_outlets {
+            let relay = fuse.relay();
+
             fuse.spawn(DatagramDispatcher::<S, R>::process_out(
                 process_out_outlet,
                 pace_out_datagram_inlet.clone(),
+                relay,
             ));
         }
 
@@ -467,12 +470,16 @@ where
     async fn process_out(
         mut process_out_outlet: MessageOutlet<S>,
         pace_out_datagram_inlet: DatagramInlet,
+        mut relay: Relay,
     ) {
         loop {
             let (destination, payload) = if let Some(message) = process_out_outlet.recv().await {
                 message
             } else {
-                // `DatagramDispatcher` has dropped, shutdown
+                // The Sender has been dropped. Returning immediately would drop
+                // `pace_out_datagram_inlet` and break the `wait_pace_out_task`.
+                // Let's wait for the receiver to shutdown too.
+                relay.wait().await;
                 return;
             };
 
@@ -853,5 +860,24 @@ mod tests {
             DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
         dispatcher.send("127.0.0.1:1260".parse().unwrap(), 42).await;
         receiver.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn acknowledge_after_sender_dropped() {
+        let receiver = tokio::spawn(async {
+            let dispatcher =
+                DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1261", Default::default()).unwrap();
+            let (sender, mut receiver) = dispatcher.split();
+            drop(sender);
+            let (_, value) = receiver.receive().await;
+            assert_eq!(value, 42);
+            time::sleep(Duration::from_millis(100)).await;
+        });
+
+        let dispatcher =
+            DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
+        dispatcher.send("127.0.0.1:1261".parse().unwrap(), 42).await;
+        receiver.await.unwrap();
+        assert_eq!(dispatcher.receiver.acknowledgement_packets_processed(), 1);
     }
 }
