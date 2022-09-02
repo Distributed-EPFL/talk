@@ -43,8 +43,7 @@ async fn spam(sender: DatagramSender<Message>) {
     dbg!(&sender.statistics);
 }
 
-#[tokio::main]
-async fn main() {
+async fn run() {
     let mut slots = vec![false; MESSAGES];
 
     let mut received = 0;
@@ -61,9 +60,7 @@ async fn main() {
 
     let (sender, mut receiver) = dispatcher.split();
 
-    tokio::spawn(async {
-        spam(sender).await
-    });
+    let sending = tokio::spawn(async { spam(sender).await });
 
     let mut last_print = Instant::now();
     let mut last_received = 0;
@@ -108,6 +105,8 @@ async fn main() {
         }
     }
 
+    sending.await.unwrap();
+
     time::sleep(Duration::from_secs(1)).await;
 
     dbg!(&receiver.statistics);
@@ -118,4 +117,21 @@ async fn main() {
         "Packet loss: {:.02}%",
         (1. - received as f64 / receiver.packets_received() as f64) * 100.,
     )
+}
+
+fn main() {
+    // core_affinity::set_for_current(core_affinity::CoreId { id: 0 });
+    // let core_id = std::sync::Mutex::new(3);
+
+    tokio::runtime::Builder::new_multi_thread()
+        // .worker_threads(2)
+        .enable_all()
+        // .on_thread_start(move || {
+        //     let mut core_id = core_id.lock().unwrap();
+        //     core_affinity::set_for_current(core_affinity::CoreId { id: *core_id });
+        //     *core_id += 1;
+        // })
+        .build()
+        .unwrap()
+        .block_on(async { run().await })
 }

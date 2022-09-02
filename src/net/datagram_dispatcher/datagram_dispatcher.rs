@@ -1,4 +1,5 @@
 use atomic_counter::{AtomicCounter, RelaxedCounter};
+use socket2::Domain;
 
 use crate::{
     net::{
@@ -88,12 +89,7 @@ where
     where
         A: ToSocketAddrs,
     {
-        let socket = UdpSocket::bind(address)
-            .map_err(DatagramDispatcherError::bind_failed)
-            .map_err(DatagramDispatcherError::into_top)
-            .spot(here!())?;
-
-        let socket = Arc::new(socket);
+        // let socket = Arc::new(socket);
 
         let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
 
@@ -154,20 +150,25 @@ where
 
         let fuse = Fuse::new();
 
-        {
-            let socket = socket.clone();
+        for _ in 0..settings.route_in_tasks {
+            let socket = socket2::Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)
+                .and_then(|socket| {
+                    socket.set_reuse_port(true)?;
+                    socket.bind(&address.to_socket_addrs()?.next().unwrap().into())?;
+                    Ok(socket.into())
+                })
+                .map_err(DatagramDispatcherError::bind_failed)
+                .map_err(DatagramDispatcherError::into_top)
+                .spot(here!())?;
+
             let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
+            let inlets = process_in_inlets.clone();
 
             task::spawn_blocking(move || {
-                DatagramDispatcher::<S, R>::route_in(
-                    socket,
-                    process_in_inlets,
-                    settings,
-                    statistics,
-                    relay,
-                )
+                // core_affinity::set_for_current(core_affinity::CoreId { id: 1 });
+                DatagramDispatcher::<S, R>::route_in(&socket, inlets, settings, statistics, relay)
             });
         }
 
@@ -205,13 +206,17 @@ where
         }
 
         for route_out_outlet in route_out_outlets {
-            let socket = socket.clone();
+            let socket = UdpSocket::bind("0.0.0.0:0")
+                .map_err(DatagramDispatcherError::bind_failed)
+                .map_err(DatagramDispatcherError::into_top)
+                .spot(here!())?;
             let settings = settings.clone();
             let statistics = statistics.clone();
 
             task::spawn_blocking(move || {
+                // core_affinity::set_for_current(core_affinity::CoreId { id: 2 });
                 DatagramDispatcher::<S, R>::route_out(
-                    socket,
+                    &socket,
                     route_out_outlet,
                     settings,
                     statistics,
@@ -332,7 +337,7 @@ where
 
     #[cfg(target_os = "linux")]
     fn route_in(
-        socket: Arc<UdpSocket>,
+        socket: &UdpSocket,
         process_in_inlets: Vec<DatagramInlet>,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
@@ -765,7 +770,7 @@ where
 
     #[cfg(target_os = "linux")]
     fn route_out(
-        socket: Arc<UdpSocket>,
+        socket: &UdpSocket,
         mut route_out_outlet: DatagramOutlet,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
