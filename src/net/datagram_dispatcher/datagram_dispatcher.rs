@@ -23,6 +23,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use rand::Rng;
+
 use tokio::{
     sync::mpsc::{self, error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
     task, time,
@@ -77,20 +79,30 @@ enum PaceOutTask {
     Send(SocketAddr, Message),
 }
 
+pub enum DatagramDispatcherMode {
+    /// A broker will use distinct UDP ports for sending and receiving datagrams
+    Broker {
+        bind_addr: SocketAddr,
+        inbound_sockets: usize,
+        outbound_sockets: usize,
+    },
+    /// A client need to be configured with the broker_addr.
+    /// This address is the destination used to acknowledge received messages
+    Client {
+        broker_addr: SocketAddr,
+        sockets: usize,
+    },
+}
+
 impl<S, R> DatagramDispatcher<S, R>
 where
     S: NetMessage,
     R: NetMessage,
 {
-    pub fn bind<A>(
-        address: A,
+    pub fn bind(
+        mode: &DatagramDispatcherMode,
         settings: DatagramDispatcherSettings,
-    ) -> Result<Self, Top<DatagramDispatcherError>>
-    where
-        A: ToSocketAddrs,
-    {
-        // let socket = Arc::new(socket);
-
+    ) -> Result<Self, Top<DatagramDispatcherError>> {
         let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
 
         let mut process_in_inlets = Vec::new();
@@ -127,7 +139,45 @@ where
         let mut route_out_inlets = Vec::new();
         let mut route_out_outlets = Vec::new();
 
-        for _ in 0..settings.route_out_tasks {
+        let nb_outbound_sockets = match *mode {
+            DatagramDispatcherMode::Client { sockets, .. } => sockets,
+            DatagramDispatcherMode::Broker {
+                outbound_sockets, ..
+            } => outbound_sockets,
+        };
+
+        let outbound_sockets: Vec<_> = (0..nb_outbound_sockets)
+            .map(|_| {
+                UdpSocket::bind("0.0.0.0:0")
+                    .map_err(DatagramDispatcherError::bind_failed)
+                    .map_err(DatagramDispatcherError::into_top)
+                    .spot(here!())
+                    .map(Arc::new)
+            })
+            .collect::<Result<_, _>>()?;
+
+        let inbound_sockets: Vec<Arc<UdpSocket>> = match *mode {
+            DatagramDispatcherMode::Broker {
+                bind_addr,
+                inbound_sockets,
+                ..
+            } => (0..inbound_sockets)
+                .map(|_| {
+                    socket2::Socket::new(Domain::for_address(bind_addr), socket2::Type::DGRAM, None)
+                        .and_then(|socket| {
+                            socket.set_reuse_port(true)?;
+                            socket.bind(&bind_addr.into())?;
+                            Ok(Arc::new(socket.into()))
+                        })
+                        .map_err(DatagramDispatcherError::bind_failed)
+                        .map_err(DatagramDispatcherError::into_top)
+                        .spot(here!())
+                })
+                .collect::<Result<_, _>>(),
+            DatagramDispatcherMode::Client { .. } => Ok(outbound_sockets.clone()),
+        }?;
+
+        for _ in 0..nb_outbound_sockets {
             let (route_out_inlet, route_out_outlet) =
                 mpsc::channel(settings.route_out_channel_capacity);
 
@@ -150,17 +200,7 @@ where
 
         let fuse = Fuse::new();
 
-        for _ in 0..settings.route_in_tasks {
-            let socket = socket2::Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)
-                .and_then(|socket| {
-                    socket.set_reuse_port(true)?;
-                    socket.bind(&address.to_socket_addrs()?.next().unwrap().into())?;
-                    Ok(socket.into())
-                })
-                .map_err(DatagramDispatcherError::bind_failed)
-                .map_err(DatagramDispatcherError::into_top)
-                .spot(here!())?;
-
+        for socket in inbound_sockets.iter().cloned() {
             let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
@@ -172,6 +212,11 @@ where
             });
         }
 
+        let forced_ack_destination = match mode {
+            DatagramDispatcherMode::Client { broker_addr, .. } => Some(*broker_addr),
+            DatagramDispatcherMode::Broker { .. } => None,
+        };
+
         for process_in_outlet in process_in_outlets {
             let statistics = statistics.clone();
 
@@ -180,6 +225,7 @@ where
                 receive_inlet.clone(),
                 pace_out_acknowledgement_inlet.clone(),
                 pace_out_completion_inlet.clone(),
+                forced_ack_destination,
                 statistics,
             ));
         }
@@ -205,11 +251,7 @@ where
             ));
         }
 
-        for route_out_outlet in route_out_outlets {
-            let socket = UdpSocket::bind("0.0.0.0:0")
-                .map_err(DatagramDispatcherError::bind_failed)
-                .map_err(DatagramDispatcherError::into_top)
-                .spot(here!())?;
+        for (route_out_outlet, socket) in route_out_outlets.into_iter().zip(outbound_sockets) {
             let settings = settings.clone();
             let statistics = statistics.clone();
 
@@ -350,7 +392,10 @@ where
         let descriptor = socket.as_raw_fd();
         let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
 
-        for process_in_inlet in process_in_inlets.iter().cycle() {
+        let mut rng = rand::thread_rng();
+        let random_first = rng.gen_range(0, process_in_inlets.len());
+
+        for process_in_inlet in process_in_inlets.iter().cycle().skip(random_first) {
             let mut data = buffer
                 .chunks_exact_mut(MAXIMUM_TRANSMISSION_UNIT)
                 .map(|chunk| RecvMmsgData {
@@ -430,6 +475,7 @@ where
         receive_inlet: MessageInlet<R>,
         pace_out_acknowledgement_inlet: AcknowledgementInlet,
         pace_out_completion_inlet: CompletionInlet,
+        ack_destination: Option<SocketAddr>,
         statistics: Arc<Statistics>,
     ) {
         loop {
@@ -454,7 +500,10 @@ where
                 // First footer byte is 0: MESSAGE
 
                 if let Ok(payload) = bincode::deserialize::<R>(payload) {
-                    let _ = pace_out_acknowledgement_inlet.send((source, index)).await;
+                    let ack_destination = ack_destination.unwrap_or(source);
+                    let _ = pace_out_acknowledgement_inlet
+                        .send((ack_destination, index))
+                        .await;
                     let _ = receive_inlet.send((source, payload)).await;
                     statistics.message_packets_processed.inc();
                 } else {
@@ -699,7 +748,7 @@ where
             PaceOutTask::Resend(index) => {
                 if let Some((destination, message)) = datagram_table.get(index) {
                     if let Err(TrySendError::Full(..)) =
-                        route_out_inlet.try_send((destination.clone(), message.clone()))
+                        route_out_inlet.try_send((*destination, message.clone()))
                     {
                         // `route_out` is too busy: just drop the packet
                         statistics.route_out_drops.inc();
@@ -849,16 +898,17 @@ mod tests {
 
     #[tokio::test]
     async fn single() {
-        let receiver = tokio::spawn(async {
+        let broker_addr = "127.0.0.1:1260".parse().unwrap();
+        let receiver = tokio::spawn(async move {
             let mut dispatcher =
-                DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1260", Default::default()).unwrap();
+                DatagramDispatcher::<u64, u64>::bind(&DatagramDispatcherMode::Broker { bind_addr: broker_addr, inbound_sockets: 1, outbound_sockets: 1 }, Default::default()).unwrap();
             let (_, value) = dispatcher.receive().await;
             assert_eq!(value, 42);
         });
 
         let dispatcher =
-            DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
-        dispatcher.send("127.0.0.1:1260".parse().unwrap(), 42).await;
+            DatagramDispatcher::<u64, u64>::bind(&DatagramDispatcherMode::Client { broker_addr, sockets: 1 }, Default::default()).unwrap();
+        dispatcher.send(broker_addr, 42).await;
         receiver.await.unwrap();
     }
 }
