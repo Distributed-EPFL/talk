@@ -20,7 +20,6 @@ use std::{
     io,
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
     sync::Arc,
-    time::{Duration, Instant},
 };
 
 use rand::Rng;
@@ -28,6 +27,7 @@ use rand::Rng;
 use tokio::{
     sync::mpsc::{self, error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
     task, time,
+    time::{Duration, Instant},
 };
 
 #[cfg(target_os = "linux")]
@@ -556,7 +556,10 @@ where
 
         let mut last_tick = Instant::now();
 
-        let mut route_out_inlets = route_out_inlets.iter().cycle();
+        let mut route_out_inlets = route_out_inlets
+            .iter()
+            .flat_map(|n| std::iter::repeat(n).take(settings.route_out_batch_size))
+            .cycle();
 
         loop {
             let sleep_time = settings
@@ -656,7 +659,7 @@ where
         // polled unless `next_retransmission` is `Some`.
         let wait_until_next_retransmission = async {
             if let Some(next_retransmission) = next_retransmission {
-                time::sleep(next_retransmission.saturating_duration_since(Instant::now())).await;
+                time::sleep_until(next_retransmission).await;
             };
         };
 
@@ -900,14 +903,27 @@ mod tests {
     async fn single() {
         let broker_addr = "127.0.0.1:1260".parse().unwrap();
         let receiver = tokio::spawn(async move {
-            let mut dispatcher =
-                DatagramDispatcher::<u64, u64>::bind(&DatagramDispatcherMode::Broker { bind_addr: broker_addr, inbound_sockets: 1, outbound_sockets: 1 }, Default::default()).unwrap();
+            let mut dispatcher = DatagramDispatcher::<u64, u64>::bind(
+                &DatagramDispatcherMode::Broker {
+                    bind_addr: broker_addr,
+                    inbound_sockets: 1,
+                    outbound_sockets: 1,
+                },
+                Default::default(),
+            )
+            .unwrap();
             let (_, value) = dispatcher.receive().await;
             assert_eq!(value, 42);
         });
 
-        let dispatcher =
-            DatagramDispatcher::<u64, u64>::bind(&DatagramDispatcherMode::Client { broker_addr, sockets: 1 }, Default::default()).unwrap();
+        let dispatcher = DatagramDispatcher::<u64, u64>::bind(
+            &DatagramDispatcherMode::Client {
+                broker_addr,
+                sockets: 1,
+            },
+            Default::default(),
+        )
+        .unwrap();
         dispatcher.send(broker_addr, 42).await;
         receiver.await.unwrap();
     }
