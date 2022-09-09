@@ -12,9 +12,9 @@ use rand::prelude::*;
 
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 
-use tokio::{sync::mpsc::Sender as MpscSender, time};
+use tokio::time;
 
-type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
+type MessageInlet<M> = flume::Sender<(SocketAddr, M)>;
 
 pub struct DatagramSender<S: Message> {
     process_out_inlets: Vec<MessageInlet<S>>,
@@ -48,7 +48,7 @@ where
             .process_out_inlets
             .get(inlet)
             .unwrap()
-            .send((destination, payload))
+            .send_async((destination, payload))
             .await;
     }
 

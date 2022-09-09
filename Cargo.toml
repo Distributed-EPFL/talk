@@ -34,3 +34,4 @@ nix = { version = "0.24.2" }
 num_cpus = { version = "1.13" }
 
 core_affinity = "0.5.10"
+flume = "0.10.14"

@@ -34,7 +34,7 @@ async fn spam(sender: DatagramSender<Message>, destination: SocketAddr) {
         (destination, message)
     });
 
-    sender.pace(messages_iter, 250000.).await;
+    sender.pace(messages_iter, 300_000.).await;
 
     time::sleep(Duration::from_secs(2)).await;
 
@@ -65,7 +65,7 @@ async fn run() {
     let dispatcher: DatagramDispatcher<Message, Message> = DatagramDispatcher::bind(
         &mode,
         DatagramDispatcherSettings {
-            maximum_packet_rate: 450000.,
+            maximum_packet_rate: 350000.,
             ..Default::default()
         },
     )

@@ -48,6 +48,10 @@ impl DatagramTable {
             None
         }
     }
+
+    pub fn cursor(&self) -> usize {
+        self.offset + self.datagrams.len()
+    }
 }
 
 #[cfg(test)]
