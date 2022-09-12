@@ -7,7 +7,6 @@ use crate::{
 
 use std::{net::SocketAddr, sync::Arc};
 
-
 type MessageOutlet<M> = flume::Receiver<(SocketAddr, M)>;
 
 pub struct DatagramReceiver<R: Message> {

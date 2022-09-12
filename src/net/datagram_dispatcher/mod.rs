@@ -6,9 +6,7 @@ mod datagram_table;
 mod message;
 mod statistics;
 
-pub use datagram_dispatcher::{
-    DatagramDispatcher, DatagramDispatcherError, DatagramDispatcherMode,
-};
+pub use datagram_dispatcher::{DatagramDispatcher, DatagramDispatcherError};
 pub use datagram_dispatcher_settings::DatagramDispatcherSettings;
 pub use datagram_receiver::DatagramReceiver;
 pub use datagram_sender::DatagramSender;

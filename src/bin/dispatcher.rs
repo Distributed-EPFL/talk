@@ -1,11 +1,8 @@
 use std::convert::TryInto;
-use std::net::SocketAddr;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time;
 
-use talk::net::{
-    DatagramDispatcher, DatagramDispatcherMode, DatagramDispatcherSettings, DatagramSender,
-};
+use talk::net::{DatagramDispatcher, DatagramDispatcherSettings, DatagramSender};
 
 type Message = Vec<u8>;
 
@@ -18,7 +15,12 @@ fn get_latency(ts: u128) -> Duration {
     Duration::from_millis((now as i128 - ts as i128) as u64)
 }
 
-async fn spam(sender: DatagramSender<Message>, destination: SocketAddr) {
+async fn spam(sender: DatagramSender<Message>) {
+    let destination = std::env::var("SERVER")
+        .unwrap_or("127.0.0.1:1234".to_owned())
+        .parse()
+        .unwrap();
+
     time::sleep(Duration::from_secs(2)).await;
 
     let messages_iter = (0..MESSAGES).map(|index| {
@@ -47,23 +49,8 @@ async fn run() {
     let mut received = 0;
     let mut total = 0;
 
-    let mode = match std::env::var("BROKER_ADDR") {
-        Ok(broker_addr) if broker_addr != "" => DatagramDispatcherMode::Client {
-            broker_addr: broker_addr.parse().unwrap(),
-            sockets: 1,
-        },
-        _ => {
-            let port: u16 = std::env::var("PORT").unwrap().parse().unwrap();
-            DatagramDispatcherMode::Broker {
-                bind_addr: format!("0.0.0.0:{port}").parse().unwrap(),
-                inbound_sockets: 1,
-                outbound_sockets: 1,
-            }
-        }
-    };
-
     let dispatcher: DatagramDispatcher<Message, Message> = DatagramDispatcher::bind(
-        &mode,
+        "0.0.0.0:1234",
         DatagramDispatcherSettings {
             maximum_packet_rate: 350000.,
             ..Default::default()
@@ -73,12 +60,7 @@ async fn run() {
 
     let (sender, mut receiver) = dispatcher.split();
 
-    let sending = match mode {
-        DatagramDispatcherMode::Client { broker_addr, .. } => {
-            tokio::spawn(async move { spam(sender, broker_addr).await })
-        }
-        _ => tokio::spawn(async {}),
-    };
+    let sending = tokio::spawn(async { spam(sender).await });
 
     let mut last_print = Instant::now();
     let mut last_received = 0;
@@ -142,7 +124,7 @@ fn main() {
     // let core_id = std::sync::Mutex::new(3);
 
     tokio::runtime::Builder::new_multi_thread()
-        // .worker_threads(4)
+        // .worker_threads(2)
         .enable_all()
         // .on_thread_start(move || {
         //     let mut core_id = core_id.lock().unwrap();

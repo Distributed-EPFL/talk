@@ -32,8 +32,8 @@ use unit_sender::UnitSender;
 pub use connection_settings::ConnectionSettings;
 pub use connector::Connector;
 pub use datagram_dispatcher::{
-    DatagramDispatcher, DatagramDispatcherError, DatagramDispatcherMode,
-    DatagramDispatcherSettings, DatagramReceiver, DatagramSender,
+    DatagramDispatcher, DatagramDispatcherError, DatagramDispatcherSettings, DatagramReceiver,
+    DatagramSender,
 };
 pub use listener::Listener;
 pub use message::Message;
