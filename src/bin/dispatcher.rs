@@ -36,7 +36,7 @@ async fn spam(sender: DatagramSender<Message>) {
         (destination, message)
     });
 
-    sender.pace(messages_iter, 300_000.).await;
+    sender.pace(messages_iter, 150_000.).await;
 
     time::sleep(Duration::from_secs(2)).await;
 
@@ -49,8 +49,13 @@ async fn run() {
     let mut received = 0;
     let mut total = 0;
 
+    let port: u16 = std::env::var("PORT")
+        .unwrap_or("1234".into())
+        .parse()
+        .unwrap();
+
     let dispatcher: DatagramDispatcher<Message, Message> = DatagramDispatcher::bind(
-        "0.0.0.0:1234",
+        ("0.0.0.0", port),
         DatagramDispatcherSettings {
             maximum_packet_rate: 350000.,
             ..Default::default()
@@ -124,7 +129,7 @@ fn main() {
     // let core_id = std::sync::Mutex::new(3);
 
     tokio::runtime::Builder::new_multi_thread()
-        // .worker_threads(2)
+        // .worker_threads(4)
         .enable_all()
         // .on_thread_start(move || {
         //     let mut core_id = core_id.lock().unwrap();

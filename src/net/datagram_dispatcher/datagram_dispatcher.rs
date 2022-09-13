@@ -125,7 +125,7 @@ where
         let mut route_out_inlets = Vec::new();
         let mut route_out_outlets = Vec::new();
 
-        for _ in 0..settings.route_out_tasks {
+        for _ in 0..settings.sockets {
             let (route_out_inlet, route_out_outlet) =
                 flume::bounded(settings.route_out_channel_capacity);
 
@@ -148,17 +148,21 @@ where
 
         let fuse = Fuse::new();
 
-        for _ in 0..settings.route_in_tasks {
-            let socket = socket2::Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)
-                .and_then(|socket| {
-                    socket.set_reuse_port(true)?;
-                    socket.bind(&address.to_socket_addrs()?.next().unwrap().into())?;
-                    Ok(socket.into())
-                })
-                .map_err(DatagramDispatcherError::bind_failed)
-                .map_err(DatagramDispatcherError::into_top)
-                .spot(here!())?;
+        let sockets: Vec<Arc<UdpSocket>> = (0..settings.sockets)
+            .map(|_| {
+                socket2::Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)
+                    .and_then(|socket| {
+                        socket.set_reuse_port(true)?;
+                        socket.bind(&address.to_socket_addrs()?.next().unwrap().into())?;
+                        Ok(Arc::new(socket.into()))
+                    })
+                    .map_err(DatagramDispatcherError::bind_failed)
+                    .map_err(DatagramDispatcherError::into_top)
+                    .spot(here!())
+            })
+            .collect::<Result<_, _>>()?;
 
+        for socket in sockets.iter().cloned() {
             let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
@@ -206,11 +210,7 @@ where
             ));
         }
 
-        for route_out_outlet in route_out_outlets {
-            let socket = UdpSocket::bind("0.0.0.0:0")
-                .map_err(DatagramDispatcherError::bind_failed)
-                .map_err(DatagramDispatcherError::into_top)
-                .spot(here!())?;
+        for (route_out_outlet, socket) in route_out_outlets.into_iter().zip(sockets) {
             let settings = settings.clone();
             let statistics = statistics.clone();
 
