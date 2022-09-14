@@ -292,7 +292,7 @@ where
 
     #[cfg(not(target_os = "linux"))]
     fn route_in(
-        socket: Arc<UdpSocket>,
+        socket: &UdpSocket,
         process_in_inlets: Vec<DatagramInlet>,
         _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
@@ -760,13 +760,13 @@ where
 
     #[cfg(not(target_os = "linux"))]
     fn route_out(
-        socket: Arc<UdpSocket>,
-        mut route_out_outlet: DatagramOutlet,
+        socket: &UdpSocket,
+        route_out_outlet: DatagramOutlet,
         _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
         loop {
-            let (destination, message) = if let Some(datagram) = route_out_outlet.blocking_recv() {
+            let (destination, message) = if let Ok(datagram) = route_out_outlet.recv() {
                 datagram
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
