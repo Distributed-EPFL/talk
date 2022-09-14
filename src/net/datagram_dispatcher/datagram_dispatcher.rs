@@ -122,16 +122,8 @@ where
         let (pace_out_completion_inlet, pace_out_completion_outlet) =
             flume::bounded(settings.pace_out_completion_channel_capacity);
 
-        let mut route_out_inlets = Vec::new();
-        let mut route_out_outlets = Vec::new();
-
-        for _ in 0..settings.sockets {
-            let (route_out_inlet, route_out_outlet) =
-                flume::bounded(settings.route_out_channel_capacity);
-
-            route_out_inlets.push(route_out_inlet);
-            route_out_outlets.push(route_out_outlet);
-        }
+        let (route_out_inlet, route_out_outlet) =
+            flume::bounded(settings.route_out_channel_capacity);
 
         let statistics = Statistics {
             packets_sent: RelaxedCounter::new(0),
@@ -204,15 +196,16 @@ where
                 pace_out_datagram_outlet.clone(),
                 pace_out_acknowledgement_outlet.clone(),
                 pace_out_completion_outlet.clone(),
-                route_out_inlets.clone(),
+                route_out_inlet.clone(),
                 statistics,
                 settings,
             ));
         }
 
-        for (route_out_outlet, socket) in route_out_outlets.into_iter().zip(sockets) {
+        for socket in sockets {
             let settings = settings.clone();
             let statistics = statistics.clone();
+            let route_out_outlet = route_out_outlet.clone();
 
             task::spawn_blocking(move || {
                 // core_affinity::set_for_current(core_affinity::CoreId { id: 2 });
@@ -503,18 +496,13 @@ where
         mut pace_out_datagram_outlet: DatagramOutlet,
         mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut pace_out_completion_outlet: CompletionOutlet,
-        route_out_inlets: Vec<DatagramInlet>,
+        route_out_inlet: DatagramInlet,
         statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
     ) {
         let mut retransmission_queue = VecDeque::new();
 
         let mut last_tick = Instant::now();
-
-        let mut route_out_inlets = route_out_inlets
-            .iter()
-            .flat_map(|n| std::iter::repeat(n).take(settings.route_out_batch_size))
-            .cycle();
 
         loop {
             let sleep_time = settings
@@ -556,7 +544,7 @@ where
                 &datagram_table,
                 &mut retransmission_queue,
                 task,
-                route_out_inlets.next().unwrap(),
+                &route_out_inlet,
                 statistics.as_ref(),
                 &settings,
             ) {
@@ -583,7 +571,7 @@ where
                     &datagram_table,
                     &mut retransmission_queue,
                     task,
-                    route_out_inlets.next().unwrap(),
+                    &route_out_inlet,
                     statistics.as_ref(),
                     &settings,
                 ) {
@@ -676,7 +664,6 @@ where
     fn fulfill_pace_out_task(
         datagram_table: &Mutex<DatagramTable>,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
-        // TO BE SHARED between pace_out tasks ????
         task: PaceOutTask,
         route_out_inlet: &DatagramInlet,
         statistics: &Statistics,
