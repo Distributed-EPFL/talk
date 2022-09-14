@@ -91,16 +91,7 @@ where
     {
         let (receive_inlet, receive_outlet) = flume::bounded(settings.receive_channel_capacity);
 
-        let mut process_in_inlets = Vec::new();
-        let mut process_in_outlets = Vec::new();
-
-        for _ in 0..settings.process_in_tasks {
-            let (process_in_inlet, process_in_outlet) =
-                flume::bounded(settings.process_in_channel_capacity);
-
-            process_in_inlets.push(process_in_inlet);
-            process_in_outlets.push(process_in_outlet);
-        }
+        let (process_in_inlet, process_in_outlet) = flume::bounded(settings.process_in_channel_capacity);
 
         let mut process_out_inlets = Vec::new();
         let mut process_out_outlets = Vec::new();
@@ -170,16 +161,17 @@ where
             let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
-            let inlets = process_in_inlets.clone();
+            let process_in_inlet = process_in_inlet.clone();
 
             task::spawn_blocking(move || {
                 // core_affinity::set_for_current(core_affinity::CoreId { id: 1 });
-                DatagramDispatcher::<S, R>::route_in(&socket, inlets, settings, statistics, relay)
+                DatagramDispatcher::<S, R>::route_in(&socket, process_in_inlet, settings, statistics, relay)
             });
         }
 
-        for process_in_outlet in process_in_outlets {
+        for _ in 0..settings.process_in_tasks {
             let statistics = statistics.clone();
+            let process_in_outlet = process_in_outlet.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::process_in(
                 process_in_outlet,
@@ -298,7 +290,7 @@ where
     #[cfg(not(target_os = "linux"))]
     fn route_in(
         socket: &UdpSocket,
-        process_in_inlets: Vec<DatagramInlet>,
+        process_in_inlet: DatagramInlet,
         _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         mut relay: Relay,
@@ -307,7 +299,7 @@ where
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
 
-        for process_in_inlet in process_in_inlets.iter().cycle() {
+        loop {
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
             let datagram = socket.recv_from(&mut buffer);
@@ -344,7 +336,7 @@ where
     #[cfg(target_os = "linux")]
     fn route_in(
         socket: &UdpSocket,
-        process_in_inlets: Vec<DatagramInlet>,
+        process_in_inlet: DatagramInlet,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         mut relay: Relay,
@@ -356,7 +348,7 @@ where
         let descriptor = socket.as_raw_fd();
         let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
 
-        for process_in_inlet in process_in_inlets.iter().cycle() {
+        loop {
             let mut data = buffer
                 .chunks_exact_mut(MAXIMUM_TRANSMISSION_UNIT)
                 .map(|chunk| RecvMmsgData {
