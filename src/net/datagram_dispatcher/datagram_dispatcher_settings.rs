@@ -40,7 +40,7 @@ impl Default for DatagramDispatcherSettings {
             receive_channel_capacity: 16384,
             process_in_channel_capacity: 4096,
             process_out_channel_capacity: 4096,
-            pace_out_tasks: 4,
+            pace_out_tasks: 2,
             pace_out_datagram_channel_capacity: 16384,
             pace_out_acknowledgement_channel_capacity: 16384,
             pace_out_completion_channel_capacity: 16384,

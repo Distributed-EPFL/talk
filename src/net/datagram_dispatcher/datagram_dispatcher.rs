@@ -17,7 +17,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::{
     cmp,
     collections::VecDeque,
-    io,
+    io::{self, ErrorKind},
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
     sync::{Arc, Mutex},
 };
@@ -51,7 +51,7 @@ type CompletionInlet = flume::Sender<usize>;
 type CompletionOutlet = flume::Receiver<usize>;
 
 pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
-    pub sender: DatagramSender<S>,
+    sender: DatagramSender<S>,
     receiver: DatagramReceiver<R>,
 }
 
@@ -142,11 +142,23 @@ where
 
         let sockets: Vec<Arc<UdpSocket>> = (0..settings.sockets)
             .map(|_| {
-                socket2::Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)
-                    .and_then(|socket| {
-                        socket.set_reuse_port(true)?;
-                        socket.bind(&address.to_socket_addrs()?.next().unwrap().into())?;
-                        Ok(Arc::new(socket.into()))
+                address
+                    .to_socket_addrs()
+                    .and_then(|mut iter| {
+                        iter.next()
+                            .ok_or(io::Error::new(ErrorKind::InvalidInput, "no addr found"))
+                    })
+                    .and_then(|bind_addr| {
+                        socket2::Socket::new(
+                            Domain::for_address(bind_addr),
+                            socket2::Type::DGRAM,
+                            None,
+                        )
+                        .and_then(|socket| {
+                            socket.set_reuse_port(true)?;
+                            socket.bind(&bind_addr.into())?;
+                            Ok(Arc::new(socket.into()))
+                        })
                     })
                     .map_err(DatagramDispatcherError::bind_failed)
                     .map_err(DatagramDispatcherError::into_top)
@@ -702,8 +714,6 @@ where
 
                     retransmission_queue
                         .push_back((Instant::now() + settings.retransmission_delay, index));
-
-                    // println!("Retransmitting {}", index);
 
                     statistics.retransmissions.inc();
 
