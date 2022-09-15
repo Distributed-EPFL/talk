@@ -93,16 +93,8 @@ where
 
         let (process_in_inlet, process_in_outlet) = flume::bounded(settings.process_in_channel_capacity);
 
-        let mut process_out_inlets = Vec::new();
-        let mut process_out_outlets = Vec::new();
-
-        for _ in 0..settings.process_out_tasks {
-            let (process_out_inlet, process_out_outlet) =
+        let (process_out_inlet, process_out_outlet) =
                 flume::bounded(settings.process_out_channel_capacity);
-
-            process_out_inlets.push(process_out_inlet);
-            process_out_outlets.push(process_out_outlet);
-        }
 
         let (pace_out_datagram_inlet, pace_out_datagram_outlet) =
             flume::bounded(settings.pace_out_datagram_channel_capacity);
@@ -182,7 +174,8 @@ where
             ));
         }
 
-        for process_out_outlet in process_out_outlets {
+        for _ in 0..settings.process_out_tasks {
+            let process_out_outlet = process_out_outlet.clone();
             fuse.spawn(DatagramDispatcher::<S, R>::process_out(
                 process_out_outlet,
                 pace_out_datagram_inlet.clone(),
@@ -225,7 +218,7 @@ where
         let fuse = Arc::new(fuse);
 
         let sender = DatagramSender::new(
-            process_out_inlets,
+            process_out_inlet,
             settings.clone(),
             statistics.clone(),
             fuse.clone(),
