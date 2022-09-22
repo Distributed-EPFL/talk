@@ -91,10 +91,11 @@ where
     {
         let (receive_inlet, receive_outlet) = flume::bounded(settings.receive_channel_capacity);
 
-        let (process_in_inlet, process_in_outlet) = flume::bounded(settings.process_in_channel_capacity);
+        let (process_in_inlet, process_in_outlet) =
+            flume::bounded(settings.process_in_channel_capacity);
 
         let (process_out_inlet, process_out_outlet) =
-                flume::bounded(settings.process_out_channel_capacity);
+            flume::bounded(settings.process_out_channel_capacity);
 
         let (pace_out_datagram_inlet, pace_out_datagram_outlet) =
             flume::bounded(settings.pace_out_datagram_channel_capacity);
@@ -157,7 +158,13 @@ where
 
             task::spawn_blocking(move || {
                 // core_affinity::set_for_current(core_affinity::CoreId { id: 1 });
-                DatagramDispatcher::<S, R>::route_in(&socket, process_in_inlet, settings, statistics, relay)
+                DatagramDispatcher::<S, R>::route_in(
+                    &socket,
+                    process_in_inlet,
+                    settings,
+                    statistics,
+                    relay,
+                )
             });
         }
 

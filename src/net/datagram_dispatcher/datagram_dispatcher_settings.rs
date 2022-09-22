@@ -36,7 +36,7 @@ impl Default for DatagramDispatcherSettings {
             maximum_rate_window: Duration::from_millis(10),
             process_in_tasks: 4,
             process_out_tasks: 4,
-            sockets: 2,
+            sockets: 4,
             receive_channel_capacity: 16384,
             process_in_channel_capacity: 16384,
             process_out_channel_capacity: 16384,

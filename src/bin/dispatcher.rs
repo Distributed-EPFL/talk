@@ -1,12 +1,15 @@
 use std::convert::TryInto;
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, SystemTime};
 use tokio::time;
+
+use atomic_counter::{AtomicCounter, RelaxedCounter};
 
 use talk::net::{DatagramDispatcher, DatagramDispatcherSettings, DatagramSender};
 
 type Message = Vec<u8>;
 
-const MESSAGES: usize = 20_000_000;
+const MESSAGES: usize = 4_000_000;
 
 fn get_latency(ts: u128) -> Duration {
     let now = (SystemTime::now().duration_since(SystemTime::UNIX_EPOCH))
@@ -16,10 +19,12 @@ fn get_latency(ts: u128) -> Duration {
 }
 
 async fn spam(sender: DatagramSender<Message>) {
-    let destination = std::env::var("SERVER")
-        .unwrap_or("127.0.0.1:1234".to_owned())
-        .parse()
-        .unwrap();
+    let destination = match std::env::var("SERVER") {
+        Ok(dest) => dest.parse().unwrap(),
+        Err(_) => loop {
+            time::sleep(Duration::from_secs(2)).await;
+        },
+    };
 
     time::sleep(Duration::from_secs(2)).await;
 
@@ -36,7 +41,7 @@ async fn spam(sender: DatagramSender<Message>) {
         (destination, message)
     });
 
-    sender.pace(messages_iter, 150_000.).await;
+    sender.pace(messages_iter, 120_000.).await;
 
     time::sleep(Duration::from_secs(2)).await;
 
@@ -44,15 +49,9 @@ async fn spam(sender: DatagramSender<Message>) {
 }
 
 async fn run() {
-    let mut slots = vec![false; MESSAGES];
+    let total = Arc::new(RelaxedCounter::new(0));
 
-    let mut received = 0;
-    let mut total = 0;
-
-    let port: u16 = std::env::var("PORT")
-        .unwrap_or("1234".into())
-        .parse()
-        .unwrap();
+    let port: u16 = std::env::var("PORT").unwrap_or("0".into()).parse().unwrap();
 
     let dispatcher: DatagramDispatcher<Message, Message> = DatagramDispatcher::bind(
         ("0.0.0.0", port),
@@ -65,63 +64,67 @@ async fn run() {
 
     let (sender, mut receiver) = dispatcher.split();
 
-    let sending = tokio::spawn(async { spam(sender).await });
+    tokio::spawn(async { spam(sender).await });
 
-    let mut last_print = Instant::now();
-    let mut last_received = 0;
     let mut last_total = 0;
 
-    let mut max_latency = Duration::ZERO;
+    let max_latency = Arc::new(RwLock::new(Duration::ZERO));
 
-    while received < MESSAGES {
+    tokio::spawn({
+        let max_latency = max_latency.clone();
+        let total = total.clone();
+        let statistics = receiver.statistics.clone();
+
+        async move {
+            loop {
+                time::sleep(Duration::from_secs(1)).await;
+                let instant_total = total.get() - last_total;
+
+                println!(
+                    "Received{} ({} instant). Max latency: {:?}",
+                    total.get(),
+                    instant_total,
+                    max_latency.read().unwrap(),
+                );
+
+                dbg!(&statistics);
+
+                last_total = total.get();
+            }
+        }
+    });
+
+    loop {
         let (_, message) = receiver.receive().await;
 
         let mut index = [0u8; 8];
         (&mut index[..]).clone_from_slice(&message.as_slice()[..8]);
-        let index = u64::from_be_bytes(index) as usize;
+        let _index = u64::from_be_bytes(index) as usize;
 
         let ts = u128::from_be_bytes(message[8..24].try_into().unwrap());
         let latency = get_latency(ts);
-        if latency > max_latency {
-            max_latency = latency;
+        {
+            let mut max_latency = max_latency.write().unwrap();
+            if latency > *max_latency {
+                *max_latency = latency;
+            }
         }
 
-        if !slots[index] {
-            slots[index] = true;
-            received += 1;
-        }
-
-        total += 1;
-
-        if last_print.elapsed().as_secs_f64() >= 1. {
-            let instant_received = received - last_received;
-            let instant_total = total - last_total;
-
-            println!(
-                "Received {} / {} ({} / {} instant). Max latency: {:?}",
-                received, total, instant_received, instant_total, max_latency,
-            );
-
-            dbg!(&receiver.statistics);
-
-            last_print = Instant::now();
-            last_received = received;
-            last_total = total;
-        }
+        total.inc();
     }
 
-    sending.await.unwrap();
+    // sending.await.unwrap();
 
-    time::sleep(Duration::from_secs(1)).await;
+    // time::sleep(Duration::from_secs(1)).await;
 
-    dbg!(&receiver.statistics);
-    println!("Received {} / {}", received, total);
-    println!("Packets received: {}", receiver.packets_received());
-    dbg!(max_latency);
-    println!(
-        "Packet loss: {:.02}%",
-        (1. - received as f64 / receiver.packets_received() as f64) * 100.,
-    )
+    // dbg!(&receiver.statistics);
+    // println!("Received {} / {}", received, total);
+    // println!("Packets received: {}", receiver.packets_received());
+    // dbg!(max_latency);
+    // println!(
+    //     "Packet loss: {:.02}%",
+    //     (1. - received as f64 / receiver.packets_received() as f64) * 100.,
+    // )
 }
 
 fn main() {
