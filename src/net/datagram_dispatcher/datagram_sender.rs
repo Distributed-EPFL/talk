@@ -17,7 +17,7 @@ type MessageInlet<M> = flume::Sender<(SocketAddr, M)>;
 pub struct DatagramSender<S: Message> {
     process_out_inlet: MessageInlet<S>,
     settings: DatagramDispatcherSettings,
-    pub statistics: Arc<Statistics>,
+    statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 

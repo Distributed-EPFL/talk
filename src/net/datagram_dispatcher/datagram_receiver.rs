@@ -11,7 +11,7 @@ type MessageOutlet<M> = flume::Receiver<(SocketAddr, M)>;
 
 pub struct DatagramReceiver<R: Message> {
     receive_outlet: MessageOutlet<R>,
-    pub statistics: Arc<Statistics>,
+    statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
 }
 

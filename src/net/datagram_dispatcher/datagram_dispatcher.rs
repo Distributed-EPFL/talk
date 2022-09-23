@@ -130,7 +130,7 @@ where
                     .to_socket_addrs()
                     .and_then(|mut iter| {
                         iter.next()
-                            .ok_or(io::Error::new(ErrorKind::InvalidInput, "no addr found"))
+                            .ok_or_else(|| io::Error::new(ErrorKind::InvalidInput, "no addr found"))
                     })
                     .and_then(|bind_addr| {
                         socket2::Socket::new(
@@ -226,12 +226,12 @@ where
 
         let sender = DatagramSender::new(
             process_out_inlet,
-            settings.clone(),
+            settings,
             statistics.clone(),
             fuse.clone(),
         );
 
-        let receiver = DatagramReceiver::new(receive_outlet, statistics.clone(), fuse);
+        let receiver = DatagramReceiver::new(receive_outlet, statistics, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
     }
@@ -617,7 +617,7 @@ where
             biased;
 
             completion = pace_out_completion_outlet.recv_async() => {
-                completion.map(|index| PaceOutTask::Complete(index)).ok()
+                completion.map(PaceOutTask::Complete).ok()
             }
             acknowledgement = pace_out_acknowledgement_outlet.recv_async() => {
                 acknowledgement.map(|(destination, index)| PaceOutTask::Acknowledge(destination, index)).ok()
@@ -702,7 +702,7 @@ where
                 let datagram_table = datagram_table.lock().unwrap();
                 if let Some((destination, message)) = datagram_table.get(index) {
                     if let Err(TrySendError::Full(..)) =
-                        route_out_inlet.try_send((destination.clone(), message.clone()))
+                        route_out_inlet.try_send((*destination, message.clone()))
                     {
                         // `route_out` is too busy: just drop the packet
                         statistics.route_out_drops.inc();
