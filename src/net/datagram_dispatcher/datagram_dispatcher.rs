@@ -727,6 +727,7 @@ where
                     message
                 };
 
+                // The message is copied before the footer is written, to avoid holding the mutex while cloning.
                 let message2 = message.clone();
 
                 let index = {
