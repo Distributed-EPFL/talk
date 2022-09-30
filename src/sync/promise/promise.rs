@@ -118,4 +118,14 @@ mod tests {
 
         assert_eq!(promise.as_mut().await.unwrap(), &mut 33);
     }
+
+    #[tokio::test]
+    async fn drop() {
+        let (promise, _) = Promise::<u32>::pending();
+        assert_eq!(promise.take().await, None);
+
+        let (mut promise, _) = Promise::<u32>::pending();
+        assert_eq!(promise.as_ref().await, None);
+        assert_eq!(promise.as_mut().await, None);
+    }
 }

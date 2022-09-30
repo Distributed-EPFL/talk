@@ -90,4 +90,10 @@ mod tests {
 
         assert_eq!(board.as_ref().await.unwrap(), &33);
     }
+
+    #[tokio::test]
+    async fn drop() {
+        let (mut board, _) = Board::<u32>::blank();
+        assert_eq!(board.as_ref().await, None);
+    }
 }
