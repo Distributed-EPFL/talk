@@ -27,7 +27,7 @@ use tokio::{
     time::{Duration, Instant},
 };
 
-use flume::{TryRecvError, TrySendError};
+use flume::TrySendError;
 
 #[cfg(target_os = "linux")]
 use {
