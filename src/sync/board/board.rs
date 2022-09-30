@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use tokio::sync::watch::{self, Receiver as WatchOutlet};
 
+#[derive(Clone)]
 pub struct Board<T> {
     state: State<T>,
 }
 
+#[derive(Clone)]
 enum State<T> {
     Posted(Arc<T>),
     Dropped,
