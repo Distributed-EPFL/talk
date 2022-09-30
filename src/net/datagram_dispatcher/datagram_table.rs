@@ -23,8 +23,7 @@ impl DatagramTable {
         if index >= self.offset {
             self.datagrams
                 .get(index - self.offset)
-                .map(Option::as_ref)
-                .flatten()
+                .and_then(Option::as_ref)
         } else {
             None
         }
@@ -35,8 +34,7 @@ impl DatagramTable {
             let datagram = self
                 .datagrams
                 .get_mut(index - self.offset)
-                .map(Option::take)
-                .flatten();
+                .and_then(Option::take);
 
             while let Some(None) = self.datagrams.front() {
                 self.datagrams.pop_front();
@@ -47,6 +45,10 @@ impl DatagramTable {
         } else {
             None
         }
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.offset + self.datagrams.len()
     }
 }
 

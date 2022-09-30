@@ -8,16 +8,14 @@ use crate::{
     sync::fuse::Fuse,
 };
 
-use rand::prelude::*;
-
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 
-use tokio::{sync::mpsc::Sender as MpscSender, time};
+use tokio::time;
 
-type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
+type MessageInlet<M> = flume::Sender<(SocketAddr, M)>;
 
 pub struct DatagramSender<S: Message> {
-    process_out_inlets: Vec<MessageInlet<S>>,
+    process_out_inlet: MessageInlet<S>,
     settings: DatagramDispatcherSettings,
     statistics: Arc<Statistics>,
     _fuse: Arc<Fuse>,
@@ -28,13 +26,13 @@ where
     S: Message,
 {
     pub(in crate::net::datagram_dispatcher) fn new(
-        process_out_inlets: Vec<MessageInlet<S>>,
+        process_out_inlet: MessageInlet<S>,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         fuse: Arc<Fuse>,
     ) -> Self {
         DatagramSender {
-            process_out_inlets,
+            process_out_inlet,
             settings,
             statistics,
             _fuse: fuse,
@@ -42,13 +40,9 @@ where
     }
 
     pub async fn send(&self, destination: SocketAddr, payload: S) {
-        let inlet = random::<usize>() % self.process_out_inlets.len();
-
         let _ = self
-            .process_out_inlets
-            .get(inlet)
-            .unwrap()
-            .send((destination, payload))
+            .process_out_inlet
+            .send_async((destination, payload))
             .await;
     }
 
