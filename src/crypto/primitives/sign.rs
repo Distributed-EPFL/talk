@@ -28,6 +28,10 @@ pub struct PublicKey(EdPublicKey);
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signature(EdSignature);
 
+pub trait Signer {
+    fn public_key(&self) -> &PublicKey;
+}
+
 #[derive(Doom)]
 pub enum SignError {
     #[doom(description("Incorrect buffer size"))]
@@ -187,7 +191,7 @@ impl Signature {
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn verify_raw<M>(&self, public_key: PublicKey, message: &M) -> Result<(), Top<SignError>>
+    pub fn verify_raw<M>(&self, public_key: &PublicKey, message: &M) -> Result<(), Top<SignError>>
     where
         M: Serialize,
     {
@@ -275,6 +279,12 @@ impl Signature {
     }
 }
 
+impl Signer for PublicKey {
+    fn public_key(&self) -> &PublicKey {
+        self
+    }
+}
+
 impl Debug for PublicKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         let bytes = self
@@ -359,7 +369,7 @@ mod tests {
         let message: u32 = 1234;
         let signature = keypair.sign_raw(&message).unwrap();
 
-        signature.verify_raw(keypair.public(), &message).unwrap();
+        signature.verify_raw(&keypair.public(), &message).unwrap();
     }
 
     #[test]
@@ -370,7 +380,7 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(signature.verify_raw(keypair.public(), &message).is_err());
+        assert!(signature.verify_raw(&keypair.public(), &message).is_err());
     }
 
     #[test]
@@ -383,7 +393,7 @@ mod tests {
         signature[4] = signature[4].wrapping_add(1);
         let signature: Signature = bincode::deserialize(&signature).unwrap();
 
-        assert!(signature.verify_raw(keypair.public(), &message).is_err());
+        assert!(signature.verify_raw(&keypair.public(), &message).is_err());
     }
 
     #[test]
@@ -396,6 +406,6 @@ mod tests {
 
         let message = 42u64;
         let signature = deserialized.sign_raw(&message).unwrap();
-        signature.verify_raw(original.public(), &message).unwrap();
+        signature.verify_raw(&original.public(), &message).unwrap();
     }
 }

@@ -1,8 +1,13 @@
 use crate::crypto::{
     primitives::{
         hash,
-        multi::{MultiError, PublicKey as MultiPublicKey, Signature as MultiSignature},
-        sign::{PublicKey as SignPublicKey, SignError, Signature as SignSignature},
+        multi::{
+            MultiError, PublicKey as MultiPublicKey, Signature as MultiSignature,
+            Signer as MultiSigner,
+        },
+        sign::{
+            PublicKey as SignPublicKey, SignError, Signature as SignSignature, Signer as SignSigner,
+        },
     },
     Identity, KeyChain, Statement,
 };
@@ -49,11 +54,12 @@ impl KeyCard {
 }
 
 impl SignSignature {
-    pub fn verify<S>(&self, keycard: &KeyCard, message: &S) -> Result<(), Top<SignError>>
+    pub fn verify<R, S>(&self, signer: &R, message: &S) -> Result<(), Top<SignError>>
     where
+        R: SignSigner,
         S: Statement,
     {
-        self.verify_raw(keycard.keys.sign, &(S::SCOPE, S::HEADER, message))
+        self.verify_raw(signer.public_key(), &(S::SCOPE, S::HEADER, message))
     }
 
     pub fn batch_verify<'a, KI, MI, M, SI>(
@@ -86,15 +92,28 @@ impl SignSignature {
 }
 
 impl MultiSignature {
-    pub fn verify<'c, C, S>(&self, cards: C, message: &S) -> Result<(), Top<MultiError>>
+    pub fn verify<'c, Q, R, S>(&self, signers: Q, message: &S) -> Result<(), Top<MultiError>>
     where
-        C: IntoIterator<Item = &'c KeyCard>,
+        Q: IntoIterator<Item = &'c R>,
+        R: 'c + MultiSigner,
         S: Statement,
     {
         self.verify_raw(
-            cards.into_iter().map(|card| &card.keys.multi),
+            signers.into_iter().map(|signer| signer.public_key()),
             &(S::SCOPE, S::HEADER, message),
         )
+    }
+}
+
+impl SignSigner for KeyCard {
+    fn public_key(&self) -> &SignPublicKey {
+        &self.keys.sign
+    }
+}
+
+impl MultiSigner for KeyCard {
+    fn public_key(&self) -> &MultiPublicKey {
+        &self.keys.multi
     }
 }
 

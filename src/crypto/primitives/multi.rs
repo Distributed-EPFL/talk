@@ -37,6 +37,10 @@ pub struct PublicKey(BlstPublicKey);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Signature(BlstSignature);
 
+pub trait Signer {
+    fn public_key(&self) -> &PublicKey;
+}
+
 #[derive(Doom)]
 pub enum MultiError {
     #[doom(description("Failed to `aggregate` signatures: {}", source))]
@@ -290,6 +294,12 @@ impl Signature {
             .map_err(MultiError::verify_failed)
             .map_err(Doom::into_top)
             .spot(here!())
+    }
+}
+
+impl Signer for PublicKey {
+    fn public_key(&self) -> &PublicKey {
+        self
     }
 }
 
