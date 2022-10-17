@@ -35,16 +35,16 @@ struct PublicKeys {
 
 impl KeyCard {
     pub fn from_keychain(keychain: &KeyChain) -> Self {
-        let keys = PublicKeys {
-            sign: keychain.keypairs.sign.public(),
-            multi: keychain.keypairs.multi.public(),
-        };
-
-        KeyCard::from_keys(keys)
+        KeyCard::from_public_keys(
+            keychain.keypairs.sign.public(),
+            keychain.keypairs.multi.public(),
+        )
     }
 
-    fn from_keys(keys: PublicKeys) -> Self {
+    pub fn from_public_keys(sign: SignPublicKey, multi: MultiPublicKey) -> Self {
+        let keys = PublicKeys { sign, multi };
         let identity = Identity::from_hash(hash::hash(&keys).unwrap());
+
         KeyCard { identity, keys }
     }
 
@@ -163,6 +163,6 @@ impl<'de> Deserialize<'de> for KeyCard {
         D: Deserializer<'de>,
     {
         let keys = PublicKeys::deserialize(deserializer)?;
-        Ok(KeyCard::from_keys(keys))
+        Ok(KeyCard::from_public_keys(keys.sign, keys.multi))
     }
 }
