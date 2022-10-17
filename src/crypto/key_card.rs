@@ -62,20 +62,22 @@ impl SignSignature {
         self.verify_raw(signer.public_key(), &(S::SCOPE, S::HEADER, message))
     }
 
-    pub fn batch_verify<'a, KI, MI, M, SI>(
-        keycards: KI,
+    pub fn batch_verify<'a, RI, R, MI, M, SI>(
+        signers: RI,
         messages: MI,
         signatures: SI,
     ) -> Result<(), Top<SignError>>
     where
-        KI: IntoIterator<Item = &'a KeyCard>,
+        RI: IntoIterator<Item = &'a R>,
+        R: 'a + SignSigner,
         MI: IntoIterator<Item = &'a M>,
         M: 'a + Statement,
         SI: IntoIterator<Item = &'a SignSignature>,
     {
-        let public_keys = keycards
+        let public_keys = signers
             .into_iter()
-            .map(|keycard| keycard.keys.sign)
+            .map(SignSigner::public_key)
+            .copied()
             .collect::<Vec<_>>();
 
         let messages = messages
@@ -92,9 +94,9 @@ impl SignSignature {
 }
 
 impl MultiSignature {
-    pub fn verify<'c, Q, R, S>(&self, signers: Q, message: &S) -> Result<(), Top<MultiError>>
+    pub fn verify<'c, RI, R, S>(&self, signers: RI, message: &S) -> Result<(), Top<MultiError>>
     where
-        Q: IntoIterator<Item = &'c R>,
+        RI: IntoIterator<Item = &'c R>,
         R: 'c + MultiSigner,
         S: Statement,
     {
