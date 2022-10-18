@@ -89,12 +89,12 @@ impl TcpProxy {
 
     pub async fn start(&mut self) {
         let _ = self.state_inlet.send(State::On);
-        self.off_lock.write().await;
+        let _ = self.off_lock.write().await;
     }
 
     pub async fn stop(&mut self) {
         let _ = self.state_inlet.send(State::Off);
-        self.on_lock.write().await;
+        let _ = self.on_lock.write().await;
     }
 
     pub async fn reset(&mut self) {
