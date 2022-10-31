@@ -5,7 +5,7 @@ use ed25519_dalek::{
     Verifier as EdVerifier,
 };
 
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, CryptoRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +65,14 @@ pub enum SignError {
 impl KeyPair {
     /// Generates a random `KeyPair` to be used for signing.
     pub fn random() -> Self {
-        let keypair = EdKeyPair::generate(&mut OsRng);
+        KeyPair::from_rng(&mut OsRng)
+    }
+
+    pub fn from_rng<R>(rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        let keypair = EdKeyPair::generate(rng);
         KeyPair(keypair)
     }
 

@@ -8,6 +8,8 @@ use crate::crypto::{
 
 use doomstack::Top;
 
+use rand::{CryptoRng, RngCore};
+
 use serde::{Deserialize, Serialize};
 
 use std::sync::Arc;
@@ -28,6 +30,18 @@ impl KeyChain {
         let keypairs = Arc::new(KeyPairs {
             sign: SignKeyPair::random(),
             multi: MultiKeyPair::random(),
+        });
+
+        KeyChain { keypairs }
+    }
+
+    pub fn from_rng<R>(rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        let keypairs = Arc::new(KeyPairs {
+            sign: SignKeyPair::from_rng(rng),
+            multi: MultiKeyPair::from_rng(rng),
         });
 
         KeyChain { keypairs }
