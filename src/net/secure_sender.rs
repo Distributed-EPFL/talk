@@ -31,6 +31,10 @@ impl SecureSender {
         self.settings = settings;
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_sender.free_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,

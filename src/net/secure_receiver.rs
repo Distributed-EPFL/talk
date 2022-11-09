@@ -31,6 +31,10 @@ impl SecureReceiver {
         self.settings = settings;
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_receiver.free_buffer();
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: for<'de> Deserialize<'de>,

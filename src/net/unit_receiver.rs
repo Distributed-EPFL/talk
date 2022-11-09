@@ -32,6 +32,10 @@ impl UnitReceiver {
         &mut self.buffer
     }
 
+    pub fn free_buffer(&mut self) {
+        mem::take(&mut self.buffer);
+    }
+
     pub async fn receive(&mut self) -> io::Result<()> {
         let size = self.receive_size().await?;
         self.buffer.resize(size, 0);

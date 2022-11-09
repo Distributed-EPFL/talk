@@ -1,5 +1,7 @@
 use crate::net::Socket;
 
+use std::mem;
+
 use tokio::{
     io,
     io::{AsyncWriteExt, WriteHalf},
@@ -24,6 +26,10 @@ impl UnitSender {
 
     pub fn as_vec(&mut self) -> &mut Vec<u8> {
         &mut self.buffer
+    }
+
+    pub fn free_buffer(&mut self) {
+        mem::take(&mut self.buffer);
     }
 
     pub async fn flush(&mut self) -> io::Result<()> {

@@ -73,6 +73,14 @@ impl PlainConnection {
         self.receiver.configure(receiver_settings);
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.sender.free_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.receiver.free_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,

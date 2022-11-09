@@ -108,6 +108,14 @@ impl SecureConnection {
         self.receiver.configure(receiver_settings);
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.sender.free_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.receiver.free_buffer();
+    }
+
     pub async fn authenticate(
         &mut self,
         keychain: &KeyChain,

@@ -34,6 +34,14 @@ impl Session {
         self.connection.configure(settings)
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.connection.free_send_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.connection.free_receive_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,

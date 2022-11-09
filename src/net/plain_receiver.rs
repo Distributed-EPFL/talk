@@ -34,6 +34,10 @@ impl PlainReceiver {
         self.unit_receiver.read_half()
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_receiver.free_buffer();
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
         M: for<'de> Deserialize<'de>,

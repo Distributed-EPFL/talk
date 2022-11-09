@@ -34,6 +34,10 @@ impl PlainSender {
         self.unit_sender.write_half()
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_sender.free_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
