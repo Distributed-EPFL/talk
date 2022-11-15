@@ -154,11 +154,22 @@ impl SecureConnection {
         self.sender.send(message).await
     }
 
+    pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<SecureConnectionError>> {
+        self.sender.send_bytes(message).await
+    }
+
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.sender.send_plain(message).await
+    }
+
+    pub async fn send_plain_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
+        self.sender.send_plain_bytes(message).await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
@@ -182,11 +193,19 @@ impl SecureConnection {
         self.receiver.receive().await
     }
 
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receiver.receive_bytes().await
+    }
+
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: DeserializeOwned,
     {
         self.receiver.receive_plain().await
+    }
+
+    pub async fn receive_plain_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receiver.receive_plain_bytes().await
     }
 
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>

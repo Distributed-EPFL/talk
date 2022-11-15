@@ -44,6 +44,14 @@ impl SecureReceiver {
             .pot(SecureConnectionError::DecryptFailed, here!())
     }
 
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receive_unit().await?;
+
+        self.channel_receiver
+            .decrypt_bytes(self.unit_receiver.as_vec())
+            .pot(SecureConnectionError::DecryptFailed, here!())
+    }
+
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
         M: DeserializeOwned,
@@ -60,7 +68,7 @@ impl SecureReceiver {
 
         let message = self
             .channel_receiver
-            .authenticate_bytes(self.unit_receiver.as_vec().as_slice())
+            .authenticate_bytes(self.unit_receiver.as_vec())
             .pot(SecureConnectionError::MacVerifyFailed, here!())?;
 
         Ok(message.to_vec())
