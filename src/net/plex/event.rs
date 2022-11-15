@@ -1,7 +1,7 @@
-use crate::net::plex::Security;
+use crate::net::plex::{Message, Security};
 use tokio::sync::mpsc::Sender as MpscSender;
 
-type MessageInlet = MpscSender<(Security, Vec<u8>)>;
+type MessageInlet = MpscSender<Message>;
 
 pub(in crate::net::plex) enum Event {
     NewPlex {

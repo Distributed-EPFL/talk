@@ -1,4 +1,4 @@
-use crate::net::plex::{Event, Payload, Security};
+use crate::net::plex::{Event, Message, Payload, Security};
 use doomstack::{here, Doom, ResultExt, Top};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
@@ -9,7 +9,8 @@ type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
 type EventInlet = MpscSender<Event>;
-type MessageOutlet = MpscReceiver<(Security, Vec<u8>)>;
+
+type MessageOutlet = MpscReceiver<Message>;
 
 #[derive(Doom)]
 pub enum PlexError {
@@ -163,7 +164,7 @@ impl Plex {
         &mut self,
         expected_security: Security,
     ) -> Result<Vec<u8>, Top<PlexError>> {
-        let (security, message) = self
+        let Message { security, message } = self
             .receive_outlet
             .recv()
             .await
