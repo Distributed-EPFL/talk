@@ -59,6 +59,12 @@ impl Sender {
         Ok(buffer)
     }
 
+    pub fn encrypt_bytes(&mut self, message: &[u8]) -> Vec<u8> {
+        let mut buffer = Vec::new(); // Create a `buffer` to encrypt into
+        self.encrypt_bytes_into(message, &mut buffer); // Encrypt `message` into `buffer`
+        buffer
+    }
+
     pub fn encrypt_into<M>(
         &mut self,
         message: &M,
@@ -72,18 +78,23 @@ impl Sender {
             .map_err(Doom::into_top)
             .spot(here!())?; // Serialize `message` into `buffer`
 
+        self.encrypt_buffer(buffer);
+
+        Ok(())
+    }
+
+    pub fn encrypt_bytes_into(&mut self, message: &[u8], buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&message);
+        self.encrypt_buffer(buffer);
+    }
+
+    fn encrypt_buffer(&mut self, buffer: &mut Vec<u8>) {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
             .cipher
-            .encrypt_in_place(
-                &ChaChaNonce::from_slice(&nonce),
-                &[],
-                buffer as &mut Vec<u8>,
-            )
+            .encrypt_in_place(&ChaChaNonce::from_slice(&nonce), &[], buffer)
             .unwrap(); // Encrypt `buffer` in place
-
-        Ok(())
     }
 
     pub fn authenticate<M>(&mut self, message: &M) -> Result<Vec<u8>, Top<ChannelError>>
@@ -93,6 +104,12 @@ impl Sender {
         let mut buffer = Vec::new(); // Create a `buffer` to authenticate into
         self.authenticate_into(message, &mut buffer)?; // Authenticate `message` into `buffer`
         Ok(buffer)
+    }
+
+    pub fn authenticate_bytes(&mut self, message: &[u8]) -> Vec<u8> {
+        let mut buffer = Vec::new(); // Create a `buffer` to authenticate into
+        self.authenticate_bytes_into(message, &mut buffer); // Authenticate `message` into `buffer`
+        buffer
     }
 
     pub fn authenticate_into<M>(
@@ -108,6 +125,17 @@ impl Sender {
             .map_err(Doom::into_top)
             .spot(here!())?; // Serialize `message` into `buffer`
 
+        self.authenticate_buffer(buffer);
+
+        Ok(())
+    }
+
+    pub fn authenticate_bytes_into(&mut self, message: &[u8], buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&message);
+        self.authenticate_buffer(buffer);
+    }
+
+    fn authenticate_buffer(&mut self, buffer: &mut Vec<u8>) {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0.hasher.reset(); // Compute the keyed hash..
@@ -117,8 +145,6 @@ impl Sender {
         let tag = self.0.hasher.finalize(); // .. to obtain `tag`
 
         buffer.extend_from_slice(tag.as_bytes()); // Append `tag` to `buffer`
-
-        Ok(())
     }
 }
 
