@@ -1,6 +1,4 @@
-use crate::net::plex::Header;
-
-use super::security::Security;
+use crate::net::plex::{Header, Security};
 
 pub(in crate::net::plex) enum Payload {
     NewPlex {
@@ -11,7 +9,7 @@ pub(in crate::net::plex) enum Payload {
         security: Security,
         message: Vec<u8>,
     },
-    ClosePlex {
+    DropPlex {
         plex: u32,
     },
 }
@@ -24,7 +22,7 @@ impl Payload {
                 plex: *plex,
                 security: *security,
             },
-            Payload::ClosePlex { plex } => Header::ClosePlex { plex: *plex },
+            Payload::DropPlex { plex } => Header::DropPlex { plex: *plex },
         }
     }
 }

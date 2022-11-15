@@ -5,5 +5,5 @@ use serde::{Deserialize, Serialize};
 pub(in crate::net::plex) enum Header {
     NewPlex { plex: u32 },
     Message { plex: u32, security: Security },
-    ClosePlex { plex: u32 },
+    DropPlex { plex: u32 },
 }

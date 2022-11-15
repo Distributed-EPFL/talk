@@ -96,7 +96,7 @@ impl ConnectMultiplex {
                     security,
                     message,
                 } => todo!(),
-                Event::ClosePlex { plex } => todo!(),
+                Event::DropPlex { plex } => todo!(),
             }
         }
     }
@@ -180,7 +180,7 @@ impl ConnectMultiplex {
                         message,
                     }
                 }
-                Header::ClosePlex { plex } => Payload::ClosePlex { plex },
+                Header::DropPlex { plex } => Payload::DropPlex { plex },
             };
 
             let _ = run_route_in_inlet.send(payload).await;
