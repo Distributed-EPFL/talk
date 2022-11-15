@@ -20,7 +20,7 @@ const RUN_SEND_CHANNEL_CAPACITY: usize = 128;
 const RUN_ROUTE_IN_CHANNEL_CAPACITY: usize = 128;
 const ROUTE_OUT_CHANNEL_CAPACITY: usize = 128;
 
-pub(in crate::net::plex) struct ConnectMultiplex {
+pub(in crate::net::plex) struct Multiplex {
     cursor: Cursor,
     run_send_inlet: EventInlet,
     _fuse: Fuse,
@@ -43,16 +43,16 @@ pub enum RouteInError {
     ConnectionError,
 }
 
-impl ConnectMultiplex {
+impl Multiplex {
     pub fn new(role: Role, connection: SecureConnection) -> Self {
         let cursor = Cursor::new(role);
 
         let (run_send_inlet, run_send_outlet) = mpsc::channel(RUN_SEND_CHANNEL_CAPACITY);
         let fuse = Fuse::new();
 
-        fuse.spawn(ConnectMultiplex::run(connection, run_send_outlet));
+        fuse.spawn(Multiplex::run(connection, run_send_outlet));
 
-        ConnectMultiplex {
+        Multiplex {
             cursor,
             run_send_inlet,
             _fuse: fuse,
@@ -69,8 +69,8 @@ impl ConnectMultiplex {
 
         let fuse = Fuse::new();
 
-        fuse.spawn(ConnectMultiplex::route_in(receiver, run_route_in_inlet));
-        fuse.spawn(ConnectMultiplex::route_out(sender, route_out_outlet));
+        fuse.spawn(Multiplex::route_in(receiver, run_route_in_inlet));
+        fuse.spawn(Multiplex::route_out(sender, route_out_outlet));
 
         let mut receive_inlets = HashMap::new();
 
