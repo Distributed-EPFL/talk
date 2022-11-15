@@ -47,17 +47,17 @@ impl PlainSender {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.flush().await
+        self.send_unit().await
     }
 
     pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlainConnectionError>> {
         self.unit_sender.as_vec().clear();
         self.unit_sender.as_vec().extend_from_slice(message);
 
-        self.flush().await
+        self.send_unit().await
     }
 
-    async fn flush(&mut self) -> Result<(), Top<PlainConnectionError>> {
+    async fn send_unit(&mut self) -> Result<(), Top<PlainConnectionError>> {
         time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
             .await
             .pot(PlainConnectionError::SendTimeout, here!())?
