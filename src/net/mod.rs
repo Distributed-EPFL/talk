@@ -6,6 +6,7 @@ mod message;
 mod plain_connection;
 mod plain_receiver;
 mod plain_sender;
+mod plex;
 mod receiver_settings;
 mod secure_connection;
 mod secure_receiver;
