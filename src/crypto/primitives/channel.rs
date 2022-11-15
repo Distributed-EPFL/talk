@@ -153,14 +153,7 @@ impl Receiver {
     where
         M: for<'de> Deserialize<'de>,
     {
-        let nonce = self.0.nonce(); // Generate a new `nonce`
-
-        let message = self
-            .0
-            .cipher
-            .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
-            .map_err(|_| ChannelError::DecryptFailed.into_top())
-            .spot(here!())?; // Decrypt `ciphertext` to obtain `message`
+        let message = self.decrypt_bytes(ciphertext)?; // Decrypt `ciphertext` to obtain `message`
 
         bincode::deserialize(&message)
             .map_err(ChannelError::deserialize_failed)
@@ -168,10 +161,33 @@ impl Receiver {
             .spot(here!()) // Deserialize `message`
     }
 
+    pub fn decrypt_bytes(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, Top<ChannelError>> {
+        let nonce = self.0.nonce(); // Generate a new `nonce`
+
+        self.0
+            .cipher
+            .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
+            .map_err(|_| ChannelError::DecryptFailed.into_top())
+            .spot(here!())
+    }
+
     pub fn decrypt_in_place<M>(&mut self, ciphertext: &mut Vec<u8>) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
+        self.decrypt_bytes_in_place(ciphertext)?;
+        let plaintext = ciphertext; // `ciphertext` is now `plaintext`
+
+        bincode::deserialize(plaintext)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!()) // Deserialize `plaintext`
+    }
+
+    pub fn decrypt_bytes_in_place(
+        &mut self,
+        ciphertext: &mut Vec<u8>,
+    ) -> Result<(), Top<ChannelError>> {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
@@ -182,19 +198,25 @@ impl Receiver {
                 ciphertext as &mut Vec<u8>,
             )
             .map_err(|_| ChannelError::DecryptFailed.into_top())
-            .spot(here!())?; // Decrypt `ciphertext` in place
-
-        let plaintext = ciphertext; // `ciphertext` is now `plaintext`
-        bincode::deserialize(plaintext)
-            .map_err(ChannelError::deserialize_failed)
-            .map_err(Doom::into_top)
-            .spot(here!()) // Deserialize `plaintext`
+            .spot(here!()) // Decrypt `ciphertext` in place
     }
 
     pub fn authenticate<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
         M: for<'de> Deserialize<'de>,
     {
+        let message = self.authenticate_bytes(ciphertext)?;
+
+        bincode::deserialize(message)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
+    }
+
+    pub fn authenticate_bytes<'a>(
+        &mut self,
+        ciphertext: &'a [u8],
+    ) -> Result<&'a [u8], Top<ChannelError>> {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         if ciphertext.len() < HASH_LENGTH {
@@ -214,10 +236,7 @@ impl Receiver {
 
             // IMPORTANT: The following equality MUST be computed between `Hash`es to ensure constant-time comparison!
             if tag == digest {
-                bincode::deserialize(message)
-                    .map_err(ChannelError::deserialize_failed)
-                    .map_err(Doom::into_top)
-                    .spot(here!()) // If `tag` is correct, deserialize `message`..
+                Ok(message)
             } else {
                 ChannelError::AuthenticateFailed.fail().spot(here!()) // .. otherwise, authentication failed
             }
