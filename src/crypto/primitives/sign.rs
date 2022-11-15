@@ -116,7 +116,7 @@ impl KeyPair {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
@@ -194,7 +194,7 @@ impl Signature {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
@@ -241,7 +241,7 @@ impl Signature {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
