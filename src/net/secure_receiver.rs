@@ -3,9 +3,7 @@ use crate::{
     net::{ReceiverSettings, SecureConnectionError, UnitReceiver},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::de::DeserializeOwned;
 
 pub struct SecureReceiver {

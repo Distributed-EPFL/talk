@@ -1,7 +1,5 @@
 use doomstack::{here, Doom, ResultExt, Top};
-
 use std::{future::Future, time::Duration};
-
 use tokio::time;
 
 #[derive(Doom)]

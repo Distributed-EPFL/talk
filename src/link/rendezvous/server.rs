@@ -4,17 +4,13 @@ use crate::{
     net::PlainConnection,
     sync::fuse::Fuse,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use parking_lot::Mutex;
-
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::Arc,
 };
-
 use tokio::{
     io,
     net::{TcpListener, ToSocketAddrs},

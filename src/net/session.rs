@@ -2,11 +2,8 @@ use crate::{
     crypto::Identity,
     net::{ConnectionSettings, SecureConnection, SecureConnectionError},
 };
-
 use doomstack::Top;
-
 use serde::{de::DeserializeOwned, Serialize};
-
 use tokio::sync::mpsc::Sender;
 
 type ConnectionInlet = Sender<(Identity, SecureConnection)>;

@@ -1,7 +1,5 @@
 use crate::sync::board::Poster;
-
 use std::sync::Arc;
-
 use tokio::sync::watch::{self, Receiver as WatchOutlet};
 
 #[derive(Clone)]

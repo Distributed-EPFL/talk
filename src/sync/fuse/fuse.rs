@@ -1,7 +1,5 @@
 use crate::sync::fuse::Relay;
-
 use std::future::Future;
-
 use tokio::{
     sync::{broadcast, broadcast::Sender},
     task::JoinHandle,

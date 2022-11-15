@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-
 use std::cmp::{Ord, Ordering, PartialOrd};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

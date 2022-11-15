@@ -4,9 +4,7 @@ use crate::{
     sync::fuse::Fuse,
     unicast::{Acknowledgement, Acknowledger, ReceiverSettings, Request, Response},
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use tokio::sync::{
     mpsc,
     mpsc::{Receiver as TokioReceiver, Sender as TokioSender},

@@ -1,7 +1,5 @@
 use crate::{crypto::KeyCard, link::rendezvous::ShardId};
-
 use serde::{Deserialize, Serialize};
-
 use std::net::SocketAddr;
 
 #[derive(Debug, Serialize, Deserialize)]

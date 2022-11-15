@@ -3,11 +3,8 @@ use crate::{
     net::{PlainConnectionError, ReceiverSettings, SecureReceiver, Socket, UnitReceiver},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::de::DeserializeOwned;
-
 use tokio::io::ReadHalf;
 
 pub struct PlainReceiver {

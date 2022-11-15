@@ -5,9 +5,7 @@ use crate::{
         Connector, Listener,
     },
 };
-
 use futures::stream::{FuturesOrdered, StreamExt};
-
 use std::{collections::HashMap, net::SocketAddr};
 
 pub struct System {

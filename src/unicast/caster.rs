@@ -4,21 +4,15 @@ use crate::{
     sync::fuse::Fuse,
     unicast::{Acknowledgement, CasterSettings, Request, Response},
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use parking_lot::Mutex;
-
-use std::sync::Arc;
-
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{
     mpsc,
     mpsc::{error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
     oneshot,
     oneshot::{Receiver as OneshotReceiver, Sender as OneshotSender},
 };
-
-use std::collections::HashMap;
 
 type RequestInlet<Message> = MpscSender<(Request<Message>, AcknowledgementInlet)>;
 type RequestOutlet<Message> = MpscReceiver<(Request<Message>, AcknowledgementInlet)>;

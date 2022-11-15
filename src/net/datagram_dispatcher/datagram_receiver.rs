@@ -1,10 +1,8 @@
-use atomic_counter::AtomicCounter;
-
 use crate::{
     net::{datagram_dispatcher::Statistics, Message},
     sync::fuse::Fuse,
 };
-
+use atomic_counter::AtomicCounter;
 use std::{net::SocketAddr, sync::Arc};
 
 type MessageOutlet<M> = flume::Receiver<(SocketAddr, M)>;

@@ -1,19 +1,14 @@
-use blake3::{Hash, Hasher};
-
-use chacha20poly1305::{
-    aead::{Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace, NewAead as ChaChaNewAead},
-    ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
-};
-
 use crate::crypto::primitives::{
     exchange::{Role, SharedKey},
     hash::HASH_LENGTH,
 };
-
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
+use blake3::{Hash, Hasher};
+use chacha20poly1305::{
+    aead::{Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace, NewAead as ChaChaNewAead},
+    ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
+};
 use doomstack::{here, Doom, ResultExt, Top};
-
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::convert::TryInto;
 
 const NONCE_LENGTH: usize = 12;

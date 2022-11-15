@@ -11,11 +11,8 @@ use crate::crypto::{
     },
     Identity, KeyChain, Statement,
 };
-
 use doomstack::Top;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     hash::{Hash, Hasher},

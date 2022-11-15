@@ -1,7 +1,5 @@
 use crate::crypto::primitives::hash::{Hash, HASH_LENGTH};
-
 use serde::{Deserialize, Serialize};
-
 use std::{
     fmt,
     fmt::{Debug, Formatter},

@@ -1,5 +1,3 @@
-use atomic_counter::AtomicCounter;
-
 use crate::{
     net::{
         datagram_dispatcher::{DatagramDispatcherSettings, Statistics},
@@ -7,9 +5,8 @@ use crate::{
     },
     sync::fuse::Fuse,
 };
-
+use atomic_counter::AtomicCounter;
 use std::{net::SocketAddr, sync::Arc, time::Instant};
-
 use tokio::time;
 
 type MessageInlet<M> = flume::Sender<(SocketAddr, M)>;

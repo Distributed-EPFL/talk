@@ -3,11 +3,8 @@ use crate::{
     net::{PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::Serialize;
-
 use tokio::io::WriteHalf;
 
 pub struct PlainSender {

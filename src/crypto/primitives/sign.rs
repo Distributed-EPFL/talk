@@ -1,14 +1,10 @@
 use doomstack::{here, Doom, ResultExt, Top};
-
 use ed25519_dalek::{
     Keypair as EdKeyPair, PublicKey as EdPublicKey, Signature as EdSignature, Signer as EdSigner,
     Verifier as EdVerifier,
 };
-
 use rand::{rngs::OsRng, CryptoRng, RngCore};
-
 use serde::{Deserialize, Serialize};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     convert::TryInto,

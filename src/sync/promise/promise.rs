@@ -1,5 +1,4 @@
 use crate::sync::promise::Solver;
-
 use tokio::sync::oneshot::{self, Receiver as OneShotReceiver};
 
 pub struct Promise<T> {

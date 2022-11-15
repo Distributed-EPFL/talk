@@ -1,5 +1,4 @@
 use blst::BLST_ERROR;
-
 use std::{
     error::Error,
     fmt,

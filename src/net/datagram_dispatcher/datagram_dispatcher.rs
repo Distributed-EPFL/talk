@@ -1,6 +1,3 @@
-use atomic_counter::{AtomicCounter, RelaxedCounter};
-use socket2::Domain;
-
 use crate::{
     net::{
         datagram_dispatcher::{
@@ -11,9 +8,9 @@ use crate::{
     },
     sync::fuse::{Fuse, Relay},
 };
-
+use atomic_counter::{AtomicCounter, RelaxedCounter};
 use doomstack::{here, Doom, ResultExt, Top};
-
+use socket2::Domain;
 use std::{
     cmp,
     collections::VecDeque,
@@ -21,7 +18,6 @@ use std::{
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
     sync::{Arc, Mutex},
 };
-
 use tokio::{
     task, time,
     time::{Duration, Instant},
@@ -29,7 +25,6 @@ use tokio::{
 
 #[cfg(target_os = "linux")]
 use flume::TryRecvError;
-
 use flume::TrySendError;
 
 #[cfg(target_os = "linux")]

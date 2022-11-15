@@ -2,7 +2,6 @@ use crate::{
     net::{plex::Payload, SecureConnection, SecureReceiver, SecureSender},
     sync::fuse::Fuse,
 };
-
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type PayloadInlet = MpscSender<Payload>;

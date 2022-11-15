@@ -1,7 +1,5 @@
 use crate::net::{SecureConnection, SecureConnectionError};
-
 use doomstack::Top;
-
 use serde::{de::DeserializeOwned, Serialize};
 
 pub struct ConnectionPair {

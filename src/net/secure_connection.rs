@@ -9,11 +9,8 @@ use crate::{
     },
     net::{ConnectionSettings, PlainConnection, SecureReceiver, SecureSender},
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::{de::DeserializeOwned, Serialize};
-
 use std::io;
 
 pub struct SecureConnection {

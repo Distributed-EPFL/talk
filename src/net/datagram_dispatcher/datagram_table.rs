@@ -1,5 +1,4 @@
 use crate::net::datagram_dispatcher::Message;
-
 use std::{collections::VecDeque, net::SocketAddr};
 
 pub(in crate::net::datagram_dispatcher) struct DatagramTable {

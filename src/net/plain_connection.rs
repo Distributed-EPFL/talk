@@ -1,11 +1,8 @@
 use crate::net::{
     ConnectionSettings, PlainReceiver, PlainSender, SecureConnection, SecureConnectionError, Socket,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::{de::DeserializeOwned, Serialize};
-
 use tokio::io;
 
 pub struct PlainConnection {

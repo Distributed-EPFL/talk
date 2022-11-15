@@ -1,7 +1,5 @@
 use crate::net::Socket;
-
 use std::mem;
-
 use tokio::{
     io,
     io::{AsyncWriteExt, WriteHalf},

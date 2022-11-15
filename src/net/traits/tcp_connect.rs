@@ -1,9 +1,6 @@
-use async_trait::async_trait;
-
 use crate::net::PlainConnection;
-
+use async_trait::async_trait;
 use std::io::Result;
-
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 #[async_trait]

@@ -5,13 +5,9 @@ use crate::crypto::{
     },
     KeyCard, Statement,
 };
-
 use doomstack::Top;
-
 use rand::{CryptoRng, RngCore};
-
 use serde::{Deserialize, Serialize};
-
 use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]

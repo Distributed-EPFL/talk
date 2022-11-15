@@ -5,11 +5,8 @@ use crate::{
     sync::fuse::{Fuse, Relay},
     unicast::Sender,
 };
-
 use futures::stream::{FuturesUnordered, Stream, StreamExt};
-
 use std::pin::Pin;
-
 use tokio::task::JoinHandle;
 
 pub struct BestEffort {

@@ -3,9 +3,7 @@ use crate::{
     net::{SecureConnectionError, SenderSettings, UnitSender},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::Serialize;
 
 pub struct SecureSender {

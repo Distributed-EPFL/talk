@@ -1,9 +1,6 @@
 use blake3::{Hash as BlakeHash, Hasher as BlakeHasher};
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::{Deserialize, Serialize};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     fmt,

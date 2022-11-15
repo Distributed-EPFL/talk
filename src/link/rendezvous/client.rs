@@ -3,9 +3,7 @@ use crate::{
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
     net::traits::TcpConnect,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use std::{io, net::SocketAddr, vec::Vec};
 
 pub struct Client {

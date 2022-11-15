@@ -1,5 +1,4 @@
 use crate::net::{ReceiverSettings, SenderSettings};
-
 use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,

@@ -1,16 +1,11 @@
+use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
 use blst::min_pk::{
     AggregateSignature as BlstAggregateSignature, PublicKey as BlstPublicKey,
     SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
-
-use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use rand::{rngs::OsRng, CryptoRng, RngCore};
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     fmt,

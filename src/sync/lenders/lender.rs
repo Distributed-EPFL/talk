@@ -1,5 +1,4 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use std::{
     borrow::{Borrow, BorrowMut},
     mem,

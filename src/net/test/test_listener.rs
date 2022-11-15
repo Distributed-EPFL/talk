@@ -1,15 +1,11 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::{Identity, KeyChain},
     net::{Listener, PlainConnection, SecureConnection},
     sync::fuse::Fuse,
 };
-
+use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack, Top};
-
 use std::net::{Ipv4Addr, SocketAddr};
-
 use tokio::{
     net::TcpListener,
     sync::{

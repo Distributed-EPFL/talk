@@ -1,10 +1,8 @@
 use crate::sync::fuse::Fuse;
-
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
 };
-
 use tokio::{
     io,
     io::{AsyncReadExt, AsyncWriteExt},
