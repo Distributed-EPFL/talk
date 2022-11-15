@@ -52,7 +52,7 @@ impl PlainReceiver {
 
     pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<PlainConnectionError>> {
         self.receive_unit().await?;
-        
+
         Ok(self.unit_receiver.as_vec().clone())
     }
 

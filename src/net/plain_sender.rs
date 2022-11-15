@@ -64,7 +64,7 @@ impl PlainSender {
             .map_err(PlainConnectionError::write_failed)
             .map_err(Doom::into_top)
             .spot(here!())
-    } 
+    }
 
     pub(in crate::net) fn secure(self, channel_sender: ChannelSender) -> SecureSender {
         SecureSender::new(self.unit_sender, channel_sender, self.settings)
