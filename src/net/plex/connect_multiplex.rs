@@ -1,18 +1,18 @@
 use crate::{
-    net::{plex::Command, SecureConnection},
+    net::{plex::Payload, SecureConnection},
     sync::fuse::Fuse,
 };
 
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
-type CommandInlet = MpscSender<Command>;
-type CommandOutlet = MpscReceiver<Command>;
+type PayloadInlet = MpscSender<Payload>;
+type PayloadOutlet = MpscReceiver<Payload>;
 
 // TODO: Refactor following constants into settings
 const RUN_CHANNEL_CAPACITY: usize = 128;
 
 pub(in crate::net::plex) struct ConnectMultiplex {
-    run_inlet: CommandInlet,
+    run_inlet: PayloadInlet,
     _fuse: Fuse,
 }
 
@@ -29,5 +29,5 @@ impl ConnectMultiplex {
         }
     }
 
-    async fn run(connection: SecureConnection, run_outlet: CommandOutlet) {}
+    async fn run(connection: SecureConnection, run_outlet: PayloadOutlet) {}
 }
