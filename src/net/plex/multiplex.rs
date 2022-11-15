@@ -1,6 +1,6 @@
 use crate::{
     net::{
-        plex::{Event, Header, Payload, Role, Security},
+        plex::{Event, Header, Message, Payload, Role, Security},
         SecureConnection, SecureReceiver, SecureSender,
     },
     sync::fuse::Fuse,
@@ -91,11 +91,7 @@ impl Multiplex {
                         return;
                     }
                 }
-                Event::Message {
-                    plex,
-                    security,
-                    message,
-                } => todo!(),
+                Event::Message { plex, message } => todo!(),
                 Event::DropPlex { plex } => todo!(),
             }
         }
@@ -119,24 +115,22 @@ impl Multiplex {
                 .pot(RouteOutError::ConnectionError, here!())?;
 
             match payload {
-                Payload::Message {
-                    message, security, ..
-                } => match security {
+                Payload::Message { message, .. } => match message.security {
                     Security::Secure => {
                         sender
-                            .send_bytes(message.as_slice())
+                            .send_bytes(message.message.as_slice())
                             .await
                             .pot(RouteOutError::ConnectionError, here!())?;
                     }
                     Security::Plain => {
                         sender
-                            .send_plain_bytes(message.as_slice())
+                            .send_plain_bytes(message.message.as_slice())
                             .await
                             .pot(RouteOutError::ConnectionError, here!())?;
                     }
                     Security::Raw => {
                         sender
-                            .send_raw_bytes(message.as_slice())
+                            .send_raw_bytes(message.message.as_slice())
                             .await
                             .pot(RouteOutError::ConnectionError, here!())?;
                     }
@@ -174,11 +168,9 @@ impl Multiplex {
                             .pot(RouteInError::ConnectionError, here!())?,
                     };
 
-                    Payload::Message {
-                        plex,
-                        security,
-                        message,
-                    }
+                    let message = Message { security, message };
+
+                    Payload::Message { plex, message }
                 }
                 Header::DropPlex { plex } => Payload::DropPlex { plex },
             };

@@ -3,12 +3,11 @@ use doomstack::{here, Doom, ResultExt, Top};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
 
+type EventInlet = MpscSender<Event>;
 type EventOutlet = MpscReceiver<Event>;
 
 type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
-
-type EventInlet = MpscSender<Event>;
 
 type MessageOutlet = MpscReceiver<Message>;
 
@@ -20,9 +19,9 @@ pub enum PlexError {
     #[doom(description("Failed to deserialize: {:?}", source))]
     #[doom(wrap(deserialize_failed))]
     DeserializeFailed { source: bincode::Error },
-    #[doom(description("Multiplex dropped"))]
+    #[doom(description("`Multiplex` dropped"))]
     MultiplexDropped,
-    #[doom(description("Unexpected security level"))]
+    #[doom(description("Unexpected `Security` level"))]
     UnexpectedSecurity,
 }
 
@@ -54,11 +53,12 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_security(message, Security::Secure).await
+        self.send_with_security(Security::Secure, message).await
     }
 
     pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_security(message.to_vec(), Security::Secure).await
+        self.send_with_security(Security::Secure, message.to_vec())
+            .await
     }
 
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<PlexError>>
@@ -70,11 +70,12 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_security(message, Security::Plain).await
+        self.send_with_security(Security::Plain, message).await
     }
 
     pub async fn send_plain_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_security(message.to_vec(), Security::Plain).await
+        self.send_with_security(Security::Plain, message.to_vec())
+            .await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<PlexError>>
@@ -86,21 +87,23 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_security(message, Security::Raw).await
+        self.send_with_security(Security::Raw, message).await
     }
 
     pub async fn send_raw_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_security(message.to_vec(), Security::Raw).await
+        self.send_with_security(Security::Raw, message.to_vec())
+            .await
     }
 
-    async fn send_security(
+    async fn send_with_security(
         &mut self,
-        message: Vec<u8>,
         security: Security,
+        message: Vec<u8>,
     ) -> Result<(), Top<PlexError>> {
+        let message = Message { security, message };
+
         let event = Event::Message {
             plex: self.index,
-            security,
             message,
         };
 

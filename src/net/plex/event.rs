@@ -10,8 +10,7 @@ pub(in crate::net::plex) enum Event {
     },
     Message {
         plex: u32,
-        security: Security,
-        message: Vec<u8>,
+        message: Message,
     },
     DropPlex {
         plex: u32,
