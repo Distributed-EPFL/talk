@@ -41,7 +41,6 @@ impl Drop for Fuse {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use tokio::sync::oneshot;
 
     #[tokio::test]

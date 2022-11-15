@@ -127,9 +127,7 @@ impl From<Box<dyn Socket>> for PlainConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::net::SocketAddr;
-
     use tokio::net::{TcpListener, TcpStream};
 
     async fn new_listener() -> (TcpListener, SocketAddr) {

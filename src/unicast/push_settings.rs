@@ -53,7 +53,6 @@ impl Default for PartialPushSettings {
 #[cfg(test)]
 mod test {
     use super::*;
-
     use crate::time::sleep_schedules::Constant;
 
     impl PushSettings {

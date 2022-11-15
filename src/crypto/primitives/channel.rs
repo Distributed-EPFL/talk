@@ -286,7 +286,6 @@ pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::crypto::primitives::exchange::KeyPair;
 
     fn setup() -> ((Sender, Receiver), (Sender, Receiver)) {

@@ -94,7 +94,6 @@ impl System {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::time::test::join;
 
     #[tokio::test]

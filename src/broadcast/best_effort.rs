@@ -112,9 +112,7 @@ impl BestEffort {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{time::test::join, unicast::test::UnicastSystem};
-
     use futures::stream::{FuturesUnordered, StreamExt};
 
     #[tokio::test]

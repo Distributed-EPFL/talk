@@ -54,7 +54,6 @@ impl DatagramTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::net::datagram_dispatcher::MAXIMUM_TRANSMISSION_UNIT;
 
     #[test]

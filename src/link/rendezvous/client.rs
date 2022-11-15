@@ -141,14 +141,11 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{
         crypto::KeyChain,
         link::rendezvous::{Server, ServerSettings},
     };
-
     use std::time::Duration;
-
     use tokio::time;
 
     async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {

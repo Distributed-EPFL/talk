@@ -125,7 +125,6 @@ impl NetConnector for Connector {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{
         link::rendezvous::{Listener, Server},
         net::Listener as NetListener,

@@ -200,9 +200,7 @@ impl SessionConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::net::{test::System, SessionListener};
-
     use futures::stream::{FuturesUnordered, StreamExt};
 
     #[tokio::test]

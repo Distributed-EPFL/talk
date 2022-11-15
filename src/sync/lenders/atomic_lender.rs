@@ -70,7 +70,6 @@ impl<Inner> AtomicLender<Inner> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::{thread, thread::JoinHandle, time::Duration};
 
     #[test]
