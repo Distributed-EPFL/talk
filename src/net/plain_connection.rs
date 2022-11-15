@@ -4,7 +4,7 @@ use crate::net::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
 use tokio::io;
 
@@ -94,7 +94,7 @@ impl PlainConnection {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive::<M>().await
     }

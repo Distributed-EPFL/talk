@@ -5,7 +5,7 @@ use crate::{
 
 use doomstack::Top;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
@@ -72,21 +72,21 @@ impl Session {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive().await
     }
 
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive_plain().await
     }
 
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive_raw().await
     }

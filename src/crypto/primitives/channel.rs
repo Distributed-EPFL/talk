@@ -10,7 +10,7 @@ use crate::crypto::primitives::{
     hash::HASH_LENGTH,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use doomstack::{here, Doom, ResultExt, Top};
 
@@ -151,7 +151,7 @@ impl Sender {
 impl Receiver {
     pub fn decrypt<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         let message = self.decrypt_bytes(ciphertext)?; // Decrypt `ciphertext` to obtain `message`
 
@@ -173,7 +173,7 @@ impl Receiver {
 
     pub fn decrypt_in_place<M>(&mut self, ciphertext: &mut Vec<u8>) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.decrypt_bytes_in_place(ciphertext)?;
         let plaintext = ciphertext; // `ciphertext` is now `plaintext`
@@ -203,7 +203,7 @@ impl Receiver {
 
     pub fn authenticate<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         let message = self.authenticate_bytes(ciphertext)?;
 

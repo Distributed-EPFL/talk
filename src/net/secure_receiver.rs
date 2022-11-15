@@ -6,7 +6,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 pub struct SecureReceiver {
     unit_receiver: UnitReceiver,
@@ -37,14 +37,9 @@ impl SecureReceiver {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
-        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
-            .await
-            .pot(SecureConnectionError::ReceiveTimeout, here!())?
-            .map_err(SecureConnectionError::read_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        self.receive_unit().await?;
 
         self.channel_receiver
             .decrypt_in_place(self.unit_receiver.as_vec())
@@ -53,30 +48,31 @@ impl SecureReceiver {
 
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
-        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
-            .await
-            .pot(SecureConnectionError::ReceiveTimeout, here!())?
-            .map_err(SecureConnectionError::read_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        self.receive_unit().await?;
 
         self.channel_receiver
             .authenticate(self.unit_receiver.as_vec())
             .pot(SecureConnectionError::MacVerifyFailed, here!())
     }
 
+    pub async fn receive_plain_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receive_unit().await?;
+
+        let message = self
+            .channel_receiver
+            .authenticate_bytes(self.unit_receiver.as_vec().as_slice())
+            .pot(SecureConnectionError::MacVerifyFailed, here!())?;
+
+        Ok(message.to_vec())
+    }
+
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
-        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
-            .await
-            .pot(SecureConnectionError::ReceiveTimeout, here!())?
-            .map_err(SecureConnectionError::read_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        self.receive_unit().await?;
 
         bincode::deserialize(self.unit_receiver.as_slice())
             .map_err(SecureConnectionError::deserialize_failed)
@@ -85,13 +81,17 @@ impl SecureReceiver {
     }
 
     pub async fn receive_raw_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receive_unit().await?;
+
+        Ok(self.unit_receiver.as_vec().clone())
+    }
+
+    async fn receive_unit(&mut self) -> Result<(), Top<SecureConnectionError>> {
         time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
             .await
             .pot(SecureConnectionError::ReceiveTimeout, here!())?
             .map_err(SecureConnectionError::read_failed)
             .map_err(Doom::into_top)
-            .spot(here!())?;
-
-        Ok(self.unit_receiver.as_vec().clone())
+            .spot(here!())
     }
 }

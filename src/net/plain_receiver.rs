@@ -6,7 +6,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 use tokio::io::ReadHalf;
 
@@ -40,7 +40,7 @@ impl PlainReceiver {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receive_unit().await?;
 

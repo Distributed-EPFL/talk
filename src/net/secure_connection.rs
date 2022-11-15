@@ -12,7 +12,7 @@ use crate::{
 
 use doomstack::{here, Doom, ResultExt, Top};
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
 use std::io;
 
@@ -180,21 +180,21 @@ impl SecureConnection {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive().await
     }
 
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive_plain().await
     }
 
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive_raw().await
     }
