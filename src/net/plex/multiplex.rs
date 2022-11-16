@@ -1,6 +1,6 @@
 use crate::{
     net::{
-        plex::{Cursor, Event, Header, Message, Payload, Role, Security},
+        plex::{Cursor, Event, Header, Message, Payload, Plex, Role, Security},
         SecureConnection, SecureReceiver, SecureSender,
     },
     sync::fuse::Fuse,
@@ -52,6 +52,13 @@ impl Multiplex {
             run_plex_inlet,
             _fuse: fuse,
         }
+    }
+
+    pub async fn new_plex(&mut self) -> Plex {
+        let index = self.cursor.next();
+        let run_plex_inlet = self.run_plex_inlet.clone();
+
+        Plex::new(index, run_plex_inlet).await
     }
 
     async fn run(connection: SecureConnection, mut run_plex_outlet: EventOutlet) {
