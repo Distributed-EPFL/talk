@@ -1,6 +1,6 @@
 use crate::{
     net::{
-        plex::{Event, Header, Message, Payload, Role, Security},
+        plex::{Cursor, Event, Header, Message, Payload, Role, Security},
         SecureConnection, SecureReceiver, SecureSender,
     },
     sync::fuse::Fuse,
@@ -24,11 +24,6 @@ pub(in crate::net::plex) struct Multiplex {
     cursor: Cursor,
     run_send_inlet: EventInlet,
     _fuse: Fuse,
-}
-
-struct Cursor {
-    role: Role,
-    cursor: u32,
 }
 
 #[derive(Doom)]
@@ -177,35 +172,5 @@ impl Multiplex {
 
             let _ = run_route_in_inlet.send(payload).await;
         }
-    }
-}
-
-impl Cursor {
-    fn new(role: Role) -> Self {
-        match role {
-            Role::Connector => Cursor {
-                role: Role::Connector,
-                cursor: 0,
-            },
-            Role::Listener => Cursor {
-                role: Role::Listener,
-                cursor: u32::MAX,
-            },
-        }
-    }
-
-    fn next(&mut self) -> u32 {
-        let next = self.cursor;
-
-        match self.role {
-            Role::Connector => {
-                self.cursor += 1;
-            }
-            Role::Listener => {
-                self.cursor -= 1;
-            }
-        }
-
-        next
     }
 }

@@ -1,3 +1,4 @@
+mod cursor;
 mod event;
 mod header;
 mod message;
@@ -7,6 +8,7 @@ mod plex;
 mod role;
 mod security;
 
+use cursor::Cursor;
 use event::Event;
 use header::Header;
 use message::Message;
