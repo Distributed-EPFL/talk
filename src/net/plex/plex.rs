@@ -4,6 +4,7 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use serde::{de::DeserializeOwned, Serialize};
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type EventInlet = MpscSender<Event>;
@@ -12,6 +13,7 @@ type EventOutlet = MpscReceiver<Event>;
 type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
+type MessageInlet = MpscSender<Message>;
 type MessageOutlet = MpscReceiver<Message>;
 
 // TODO: Refactor following constants into settings
@@ -35,23 +37,45 @@ pub enum PlexError {
 
 pub struct Plex {
     index: u32,
+
     run_plex_inlet: EventInlet,
+    receive_outlet: MessageOutlet,
+
+    plex_relay: Relay,
+    _run_fuse: Arc<Fuse>,
+}
+
+pub(in crate::net::plex) struct ProtoPlex {
+    index: u32,
     receive_outlet: MessageOutlet,
     relay: Relay,
 }
 
+pub(in crate::net::plex) struct PlexHandle {
+    pub receive_inlet: MessageInlet,
+    pub _fuse: Fuse,
+}
+
 impl Plex {
-    pub(in crate::net::plex) async fn new(index: u32, run_plex_inlet: EventInlet) -> Self {
+    pub(in crate::net::plex) async fn new(
+        index: u32,
+        run_plex_inlet: EventInlet,
+        run_fuse: Arc<Fuse>,
+    ) -> Self {
         let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
 
         let fuse = Fuse::new();
         let relay = fuse.relay();
 
+        let handle = PlexHandle {
+            receive_inlet,
+            _fuse: fuse,
+        };
+
         let _ = run_plex_inlet
             .send(Event::NewPlex {
                 plex: index,
-                receive_inlet,
-                fuse,
+                handle,
             })
             .await;
 
@@ -59,7 +83,8 @@ impl Plex {
             index,
             run_plex_inlet,
             receive_outlet,
-            relay,
+            plex_relay: relay,
+            _run_fuse: run_fuse,
         }
     }
 
@@ -136,7 +161,7 @@ impl Plex {
     }
 
     async fn send_message(&mut self, message: Message) -> Result<(), Top<PlexError>> {
-        if self.relay.is_on() {
+        if self.plex_relay.is_on() {
             let event = Event::Message {
                 plex: self.index,
                 message,
@@ -213,6 +238,38 @@ impl Plex {
             Ok(message)
         } else {
             PlexError::UnexpectedSecurity.fail().spot(here!())
+        }
+    }
+}
+
+impl ProtoPlex {
+    pub fn new(index: u32) -> (ProtoPlex, PlexHandle) {
+        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
+
+        let fuse = Fuse::new();
+        let relay = fuse.relay();
+
+        let protoplex = ProtoPlex {
+            index,
+            receive_outlet,
+            relay,
+        };
+
+        let plex_handle = PlexHandle {
+            receive_inlet,
+            _fuse: fuse,
+        };
+
+        (protoplex, plex_handle)
+    }
+
+    pub fn into_plex(self, run_plex_inlet: EventInlet, run_fuse: Arc<Fuse>) -> Plex {
+        Plex {
+            index: self.index,
+            run_plex_inlet,
+            receive_outlet: self.receive_outlet,
+            plex_relay: self.relay,
+            _run_fuse: run_fuse,
         }
     }
 }

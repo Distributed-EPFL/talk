@@ -14,6 +14,7 @@ use header::Header;
 use message::Message;
 use multiplex::Multiplex;
 use payload::Payload;
+use plex::{PlexHandle, ProtoPlex};
 use role::Role;
 use security::Security;
 

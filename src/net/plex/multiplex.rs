@@ -1,12 +1,12 @@
 use crate::{
     net::{
-        plex::{Cursor, Event, Header, Message, Payload, Plex, Role, Security},
+        plex::{Cursor, Event, Header, Message, Payload, Plex, ProtoPlex, Role, Security},
         SecureConnection, SecureReceiver, SecureSender,
     },
     sync::fuse::Fuse,
 };
 use doomstack::{here, Doom, ResultExt, Top};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type EventInlet = MpscSender<Event>;
@@ -15,22 +15,38 @@ type EventOutlet = MpscReceiver<Event>;
 type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
+type ProtoPlexInlet = MpscSender<ProtoPlex>;
+type ProtoPlexOutlet = MpscReceiver<ProtoPlex>;
+
 type MessageInlet = MpscSender<Message>;
 
 // TODO: Refactor following constants into settings
 const RUN_PLEX_CHANNEL_CAPACITY: usize = 128;
 const RUN_ROUTE_IN_CHANNEL_CAPACITY: usize = 128;
 const ROUTE_OUT_CHANNEL_CAPACITY: usize = 128;
+const LISTEN_PLEX_CHANNEL_CAPACITY: usize = 128;
 
 pub(in crate::net::plex) struct Multiplex {
-    cursor: Cursor,
-    run_plex_inlet: EventInlet,
-    _fuse: Fuse,
+    connect_multiplex: ConnectMultiplex,
+    listen_multiplex: ListenMultiplex,
 }
 
-struct PlexHandle {
-    receive_inlet: MessageInlet,
-    _fuse: Fuse,
+pub(in crate::net::plex) struct ConnectMultiplex {
+    cursor: Cursor,
+    run_plex_inlet: EventInlet,
+    fuse: Arc<Fuse>,
+}
+
+pub(in crate::net::plex) struct ListenMultiplex {
+    accept_outlet: ProtoPlexOutlet,
+    run_plex_inlet: EventInlet,
+    fuse: Arc<Fuse>,
+}
+
+#[derive(Doom)]
+pub(in crate::net::plex) enum ListenMultiplexError {
+    #[doom(description("`Multiplex` dropped"))]
+    MultiplexDropped,
 }
 
 #[derive(Doom)]
@@ -58,27 +74,42 @@ impl Multiplex {
         let cursor = Cursor::new(role);
 
         let (run_plex_inlet, run_plex_outlet) = mpsc::channel(RUN_PLEX_CHANNEL_CAPACITY);
-        let fuse = Fuse::new();
+        let (accept_inlet, accept_outlet) = mpsc::channel(LISTEN_PLEX_CHANNEL_CAPACITY);
 
-        fuse.spawn(Multiplex::run(connection, run_plex_outlet));
+        let fuse = Arc::new(Fuse::new());
+
+        fuse.spawn(Multiplex::run(connection, run_plex_outlet, accept_inlet));
+
+        let connect_multiplex = ConnectMultiplex {
+            cursor,
+            run_plex_inlet: run_plex_inlet.clone(),
+            fuse: fuse.clone(),
+        };
+
+        let listen_multiplex = ListenMultiplex {
+            accept_outlet,
+            run_plex_inlet,
+            fuse,
+        };
 
         Multiplex {
-            cursor,
-            run_plex_inlet,
-            _fuse: fuse,
+            connect_multiplex,
+            listen_multiplex,
         }
     }
 
-    pub async fn new_plex(&mut self) -> Plex {
-        let index = self.cursor.next();
-        let run_plex_inlet = self.run_plex_inlet.clone();
+    pub async fn connect(&mut self) -> Plex {
+        self.connect_multiplex.connect().await
+    }
 
-        Plex::new(index, run_plex_inlet).await
+    pub async fn accept(&mut self) -> Result<Plex, Top<ListenMultiplexError>> {
+        self.listen_multiplex.accept().await
     }
 
     async fn run(
         connection: SecureConnection,
         mut run_plex_outlet: EventOutlet,
+        accept_inlet: ProtoPlexInlet,
     ) -> Result<(), Top<RunError>> {
         let (sender, receiver) = connection.split();
 
@@ -107,16 +138,9 @@ impl Multiplex {
                     let payload = match event {
                         Event::NewPlex {
                             plex,
-                            receive_inlet,
-                            fuse,
+                            handle: plex_handle
                         } => {
-                            let handle = PlexHandle {
-                                receive_inlet,
-                                _fuse: fuse,
-                            };
-
-                            plex_handles.insert(plex, handle);
-
+                            plex_handles.insert(plex, plex_handle);
                             Some(Payload::NewPlex { plex })
                         }
                         Event::Message { plex, message } => {
@@ -140,6 +164,7 @@ impl Multiplex {
                             .spot(here!())?;
                     }
                 }
+
                 payload = run_route_in_outlet.recv() => {
                     let payload = if let Some(payload) = payload {
                         payload
@@ -148,9 +173,14 @@ impl Multiplex {
                     };
 
                     match payload {
-                        Payload::NewPlex { .. } => todo!(),
+                        Payload::NewPlex { plex } => {
+                            let (protoplex, plex_handle) = ProtoPlex::new(plex);
+                            plex_handles.insert(plex, plex_handle);
+
+                            let _ = accept_inlet.send(protoplex).await;
+                        },
                         Payload::Message { plex, message } => {
-                            if let Some(handle) = plex_handles.get_mut(&plex) {
+                            if let Some(handle) = plex_handles.get(&plex) {
                                 let _ = handle.receive_inlet.send(message);
                             }
                         },
@@ -221,5 +251,28 @@ impl Multiplex {
                 _ => (),
             }
         }
+    }
+}
+
+impl ConnectMultiplex {
+    pub async fn connect(&mut self) -> Plex {
+        Plex::new(
+            self.cursor.next(),
+            self.run_plex_inlet.clone(),
+            self.fuse.clone(),
+        )
+        .await
+    }
+}
+
+impl ListenMultiplex {
+    pub async fn accept(&mut self) -> Result<Plex, Top<ListenMultiplexError>> {
+        let protoplex = if let Some(protoplex) = self.accept_outlet.recv().await {
+            protoplex
+        } else {
+            return ListenMultiplexError::MultiplexDropped.fail().spot(here!());
+        };
+
+        Ok(protoplex.into_plex(self.run_plex_inlet.clone(), self.fuse.clone()))
     }
 }
