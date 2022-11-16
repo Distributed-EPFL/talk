@@ -41,7 +41,10 @@ pub use message::Message;
 pub use plain_connection::{PlainConnection, PlainConnectionError};
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
-pub use plex::{MultiplexSettings, Plex, PlexConnector, PlexConnectorSettings, PlexListener};
+pub use plex::{
+    MultiplexSettings, Plex, PlexConnector, PlexConnectorSettings, PlexListener,
+    PlexListenerSettings,
+};
 pub use receiver_settings::ReceiverSettings;
 pub use secure_connection::{SecureConnection, SecureConnectionError};
 pub use secure_receiver::SecureReceiver;
