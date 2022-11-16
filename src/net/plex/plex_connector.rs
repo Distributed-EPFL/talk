@@ -8,7 +8,7 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use parking_lot::Mutex;
-use std::{collections::HashMap, mem, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tokio::time;
 
 pub struct PlexConnector {
@@ -55,13 +55,9 @@ impl PlexConnector {
         let mut pool = self.pool.lock();
 
         let multiplexes = pool.multiplexes.entry(remote).or_default();
+        PlexConnector::prune(multiplexes);
 
-        if multiplexes
-            .iter()
-            .filter(|multiplex| multiplex.is_alive())
-            .count()
-            < self.settings.connections_per_remote
-        {
+        if multiplexes.len() < self.settings.connections_per_remote {
             let connection = self
                 .connector
                 .connect(remote)
@@ -70,22 +66,21 @@ impl PlexConnector {
 
             let multiplex_settings = self.settings.multiplex_settings.clone();
 
-            let (mut connect_multiplex, _) =
+            let (mut multiplex, _) =
                 Multiplex::new(Role::Connector, connection, multiplex_settings).split();
 
-            let plex = connect_multiplex.connect().await;
+            let plex = multiplex.connect().await;
 
-            multiplexes.push(connect_multiplex);
+            multiplexes.push(multiplex);
 
             Ok(plex)
         } else {
-            let connect_multiplex = multiplexes
+            let multiplex = multiplexes
                 .iter_mut()
-                .filter(|multiplex| multiplex.is_alive())
                 .min_by_key(|multiplex| multiplex.plex_count())
                 .unwrap();
 
-            let plex = connect_multiplex.connect().await;
+            let plex = multiplex.connect().await;
 
             Ok(plex)
         }
@@ -97,17 +92,19 @@ impl PlexConnector {
                 let mut pool = pool.lock();
 
                 for multiplexes in pool.multiplexes.values_mut() {
-                    let mut swap = Vec::with_capacity(multiplexes.len());
-                    mem::swap(multiplexes, &mut swap);
+                    PlexConnector::prune(multiplexes);
 
-                    multiplexes.extend(swap.into_iter().filter(|multiplex| {
+                    for multiplex in multiplexes.iter() {
                         multiplex.ping();
-                        multiplex.is_alive()
-                    }));
+                    }
                 }
             }
 
             time::sleep(settings.keep_alive_interval).await;
         }
+    }
+
+    fn prune(multiplexes: &mut Vec<ConnectMultiplex>) {
+        multiplexes.retain(|multiplex| multiplex.is_alive());
     }
 }
