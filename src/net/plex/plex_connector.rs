@@ -35,9 +35,11 @@ impl PlexConnector {
     {
         let connector = Arc::new(connector);
 
-        let pool = Arc::new(Mutex::new(Pool {
+        let pool = Pool {
             multiplexes: HashMap::new(),
-        }));
+        };
+
+        let pool = Arc::new(Mutex::new(pool));
 
         let fuse = Fuse::new();
 
@@ -53,11 +55,11 @@ impl PlexConnector {
 
     pub async fn connect(&self, remote: Identity) -> Result<Plex, Top<PlexConnectorError>> {
         let mut pool = self.pool.lock();
-
         let multiplexes = pool.multiplexes.entry(remote).or_default();
+
         PlexConnector::prune(multiplexes);
 
-        if multiplexes.len() < self.settings.connections_per_remote {
+        let multiplex = if multiplexes.len() < self.settings.connections_per_remote {
             let connection = self
                 .connector
                 .connect(remote)
@@ -65,25 +67,20 @@ impl PlexConnector {
                 .pot(PlexConnectorError::ConnectFailed, here!())?;
 
             let multiplex_settings = self.settings.multiplex_settings.clone();
+            let multiplex = Multiplex::new(Role::Connector, connection, multiplex_settings);
 
-            let (mut multiplex, _) =
-                Multiplex::new(Role::Connector, connection, multiplex_settings).split();
-
-            let plex = multiplex.connect().await;
+            let (multiplex, _) = multiplex.split();
 
             multiplexes.push(multiplex);
-
-            Ok(plex)
+            multiplexes.last_mut().unwrap()
         } else {
-            let multiplex = multiplexes
+            multiplexes
                 .iter_mut()
                 .min_by_key(|multiplex| multiplex.plex_count())
-                .unwrap();
+                .unwrap()
+        };
 
-            let plex = multiplex.connect().await;
-
-            Ok(plex)
-        }
+        Ok(multiplex.connect().await)
     }
 
     async fn keep_alive(pool: Arc<Mutex<Pool>>, settings: PlexConnectorSettings) {
