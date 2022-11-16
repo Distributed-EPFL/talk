@@ -195,3 +195,14 @@ impl Plex {
         }
     }
 }
+
+impl Drop for Plex {
+    fn drop(&mut self) {
+        let run_send_inlet = self.run_send_inlet.clone();
+        let plex = self.index;
+
+        tokio::spawn(async move {
+            let _ = run_send_inlet.send(Event::DropPlex { plex }).await;
+        });
+    }
+}
