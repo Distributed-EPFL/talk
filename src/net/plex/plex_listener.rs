@@ -34,6 +34,8 @@ impl PlexListener {
     }
 
     pub async fn accept(&mut self) -> (Identity, Plex) {
+        // `accept_inlet` is held by `listen`, whose `Fuse` is
+        // held by `self`: the following `recv()` cannot fail
         self.accept_outlet.recv().await.unwrap()
     }
 
@@ -61,10 +63,10 @@ impl PlexListener {
         accept_inlet: PlexInlet,
         multiplex_settings: MultiplexSettings,
     ) {
-        let (_, mut plex_listener) =
-            Multiplex::new(Role::Listener, connection, multiplex_settings).split();
+        let multiplex = Multiplex::new(Role::Listener, connection, multiplex_settings);
+        let (_, mut listen_multiplex) = multiplex.split();
 
-        while let Ok(plex) = plex_listener.accept().await {
+        while let Ok(plex) = listen_multiplex.accept().await {
             let _ = accept_inlet.send((remote, plex)).await;
         }
     }
