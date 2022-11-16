@@ -1,11 +1,16 @@
+use std::time::Duration;
+
+#[derive(Debug, Clone)]
 pub struct PlexConnectorSettings {
-    pub max_connections_per_identity: usize,
+    pub connections_per_remote: usize,
+    pub keep_alive_interval: Duration,
 }
 
 impl Default for PlexConnectorSettings {
     fn default() -> Self {
         PlexConnectorSettings {
-            max_connections_per_identity: 10,
+            connections_per_remote: 10,
+            keep_alive_interval: Duration::from_secs(20),
         }
     }
 }

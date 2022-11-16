@@ -8,11 +8,8 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use parking_lot::Mutex;
-use std::{collections::HashMap, mem, sync::Arc, time::Duration};
+use std::{collections::HashMap, mem, sync::Arc};
 use tokio::time;
-
-// TODO: Refactor following constants into settings
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(20);
 
 pub struct PlexConnector {
     connector: Arc<dyn NetConnector>,
@@ -44,7 +41,7 @@ impl PlexConnector {
 
         let fuse = Fuse::new();
 
-        fuse.spawn(PlexConnector::keep_alive(pool.clone()));
+        fuse.spawn(PlexConnector::keep_alive(pool.clone(), settings.clone()));
 
         PlexConnector {
             connector,
@@ -63,7 +60,7 @@ impl PlexConnector {
             .iter()
             .filter(|multiplex| multiplex.is_alive())
             .count()
-            < self.settings.max_connections_per_identity
+            < self.settings.connections_per_remote
         {
             let connection = self
                 .connector
@@ -91,7 +88,7 @@ impl PlexConnector {
         }
     }
 
-    async fn keep_alive(pool: Arc<Mutex<Pool>>) {
+    async fn keep_alive(pool: Arc<Mutex<Pool>>, settings: PlexConnectorSettings) {
         loop {
             {
                 let mut pool = pool.lock();
@@ -107,7 +104,7 @@ impl PlexConnector {
                 }
             }
 
-            time::sleep(KEEP_ALIVE_INTERVAL).await;
+            time::sleep(settings.keep_alive_interval).await;
         }
     }
 }
