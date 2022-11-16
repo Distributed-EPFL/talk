@@ -53,12 +53,19 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_with_security(Security::Secure, message).await
+        self.send_message(Message {
+            security: Security::Secure,
+            message,
+        })
+        .await
     }
 
     pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_with_security(Security::Secure, message.to_vec())
-            .await
+        self.send_message(Message {
+            security: Security::Secure,
+            message: message.to_vec(),
+        })
+        .await
     }
 
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<PlexError>>
@@ -70,12 +77,19 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_with_security(Security::Plain, message).await
+        self.send_message(Message {
+            security: Security::Plain,
+            message,
+        })
+        .await
     }
 
     pub async fn send_plain_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_with_security(Security::Plain, message.to_vec())
-            .await
+        self.send_message(Message {
+            security: Security::Plain,
+            message: message.to_vec(),
+        })
+        .await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<PlexError>>
@@ -87,21 +101,22 @@ impl Plex {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        self.send_with_security(Security::Raw, message).await
+        self.send_message(Message {
+            security: Security::Raw,
+            message,
+        })
+        .await
     }
 
     pub async fn send_raw_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlexError>> {
-        self.send_with_security(Security::Raw, message.to_vec())
-            .await
+        self.send_message(Message {
+            security: Security::Raw,
+            message: message.to_vec(),
+        })
+        .await
     }
 
-    async fn send_with_security(
-        &mut self,
-        security: Security,
-        message: Vec<u8>,
-    ) -> Result<(), Top<PlexError>> {
-        let message = Message { security, message };
-
+    async fn send_message(&mut self, message: Message) -> Result<(), Top<PlexError>> {
         let event = Event::Message {
             plex: self.index,
             message,
@@ -128,7 +143,8 @@ impl Plex {
     }
 
     pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<PlexError>> {
-        self.receive_bytes_security(Security::Secure).await
+        let message = self.receive_message(Security::Secure).await?;
+        Ok(message.message)
     }
 
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<PlexError>>
@@ -144,7 +160,8 @@ impl Plex {
     }
 
     pub async fn receive_plain_bytes(&mut self) -> Result<Vec<u8>, Top<PlexError>> {
-        self.receive_bytes_security(Security::Plain).await
+        let message = self.receive_message(Security::Plain).await?;
+        Ok(message.message)
     }
 
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<PlexError>>
@@ -160,20 +177,18 @@ impl Plex {
     }
 
     pub async fn receive_raw_bytes(&mut self) -> Result<Vec<u8>, Top<PlexError>> {
-        self.receive_bytes_security(Security::Raw).await
+        let message = self.receive_message(Security::Raw).await?;
+        Ok(message.message)
     }
 
-    async fn receive_bytes_security(
-        &mut self,
-        expected_security: Security,
-    ) -> Result<Vec<u8>, Top<PlexError>> {
-        let Message { security, message } = self
+    async fn receive_message(&mut self, security: Security) -> Result<Message, Top<PlexError>> {
+        let message = self
             .receive_outlet
             .recv()
             .await
             .ok_or_else(|| PlexError::MultiplexDropped.into_top())?;
 
-        if expected_security == security {
+        if message.security == security {
             Ok(message)
         } else {
             PlexError::UnexpectedSecurity.fail().spot(here!())

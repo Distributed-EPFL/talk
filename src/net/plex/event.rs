@@ -1,4 +1,4 @@
-use crate::net::plex::{Message, Security};
+use crate::net::plex::Message;
 use tokio::sync::mpsc::Sender as MpscSender;
 
 type MessageInlet = MpscSender<Message>;

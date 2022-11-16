@@ -1,4 +1,4 @@
-use crate::net::plex::{Header, Message, Security};
+use crate::net::plex::{Header, Message};
 
 pub(in crate::net::plex) enum Payload {
     NewPlex { plex: u32 },
