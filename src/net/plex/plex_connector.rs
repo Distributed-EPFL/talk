@@ -68,7 +68,10 @@ impl PlexConnector {
                 .await
                 .pot(PlexConnectorError::ConnectFailed, here!())?;
 
-            let (mut connect_multiplex, _) = Multiplex::new(Role::Connector, connection).split();
+            let multiplex_settings = self.settings.multiplex_settings.clone();
+
+            let (mut connect_multiplex, _) =
+                Multiplex::new(Role::Connector, connection, multiplex_settings).split();
 
             let plex = connect_multiplex.connect().await;
 

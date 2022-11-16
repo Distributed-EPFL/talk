@@ -58,7 +58,8 @@ impl PlexListener {
     }
 
     async fn serve(remote: Identity, connection: SecureConnection, accept_inlet: PlexInlet) {
-        let (_, mut plex_listener) = Multiplex::new(Role::Listener, connection).split();
+        let (_, mut plex_listener) =
+            Multiplex::new(Role::Listener, connection, Default::default()).split(); // TODO: Replace `Default::default()`
 
         while let Ok(plex) = plex_listener.accept().await {
             let _ = accept_inlet.send((remote, plex)).await;

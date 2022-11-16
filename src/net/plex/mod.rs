@@ -3,6 +3,7 @@ mod event;
 mod header;
 mod message;
 mod multiplex;
+mod multiplex_settings;
 mod payload;
 mod plex;
 mod plex_connector;
@@ -21,6 +22,7 @@ use plex::{PlexHandle, ProtoPlex};
 use role::Role;
 use security::Security;
 
+pub use multiplex_settings::MultiplexSettings;
 pub use plex::Plex;
 pub use plex_connector::PlexConnector;
 pub use plex_connector_settings::PlexConnectorSettings;

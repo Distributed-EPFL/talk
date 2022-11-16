@@ -1,6 +1,9 @@
 use crate::{
     net::{
-        plex::{Cursor, Event, Header, Message, Payload, Plex, ProtoPlex, Role, Security},
+        plex::{
+            Cursor, Event, Header, Message, MultiplexSettings, Payload, Plex, ProtoPlex, Role,
+            Security,
+        },
         SecureConnection, SecureReceiver, SecureSender,
     },
     sync::fuse::Fuse,
@@ -23,12 +26,6 @@ type PayloadOutlet = MpscReceiver<Payload>;
 
 type ProtoPlexInlet = MpscSender<ProtoPlex>;
 type ProtoPlexOutlet = MpscReceiver<ProtoPlex>;
-
-// TODO: Refactor following constants into settings
-const RUN_PLEX_CHANNEL_CAPACITY: usize = 128;
-const RUN_ROUTE_IN_CHANNEL_CAPACITY: usize = 128;
-const ROUTE_OUT_CHANNEL_CAPACITY: usize = 128;
-const LISTEN_PLEX_CHANNEL_CAPACITY: usize = 128;
 
 pub(in crate::net::plex) struct Multiplex {
     connect_multiplex: ConnectMultiplex,
@@ -80,11 +77,11 @@ enum RouteInError {
 }
 
 impl Multiplex {
-    pub fn new(role: Role, connection: SecureConnection) -> Self {
+    pub fn new(role: Role, connection: SecureConnection, settings: MultiplexSettings) -> Self {
         let cursor = Cursor::new(role);
 
-        let (run_plex_inlet, run_plex_outlet) = mpsc::channel(RUN_PLEX_CHANNEL_CAPACITY);
-        let (accept_inlet, accept_outlet) = mpsc::channel(LISTEN_PLEX_CHANNEL_CAPACITY);
+        let (run_plex_inlet, run_plex_outlet) = mpsc::channel(settings.run_plex_channel_capacity);
+        let (accept_inlet, accept_outlet) = mpsc::channel(settings.accept_channel_capacity);
 
         let info = Info {
             is_alive: AtomicBool::new(true),
@@ -99,8 +96,14 @@ impl Multiplex {
             let info = info.clone();
 
             fuse.spawn(async move {
-                let _ =
-                    Multiplex::run(connection, run_plex_outlet, accept_inlet, info.as_ref()).await;
+                let _ = Multiplex::run(
+                    connection,
+                    run_plex_outlet,
+                    accept_inlet,
+                    info.as_ref(),
+                    settings,
+                )
+                .await;
 
                 info.is_alive.store(false, Ordering::Relaxed);
             });
@@ -134,13 +137,15 @@ impl Multiplex {
         mut run_plex_outlet: EventOutlet,
         accept_inlet: ProtoPlexInlet,
         info: &Info,
+        settings: MultiplexSettings,
     ) -> Result<(), Top<RunError>> {
         let (sender, receiver) = connection.split();
 
         let (run_route_in_inlet, mut run_route_in_outlet) =
-            mpsc::channel(RUN_ROUTE_IN_CHANNEL_CAPACITY);
+            mpsc::channel(settings.run_route_in_channel_capacity);
 
-        let (route_out_inlet, route_out_outlet) = mpsc::channel(ROUTE_OUT_CHANNEL_CAPACITY);
+        let (route_out_inlet, route_out_outlet) =
+            mpsc::channel(settings.route_out_channel_capacity);
 
         let fuse = Fuse::new();
 
