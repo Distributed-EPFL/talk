@@ -10,6 +10,7 @@ mod plex_connector;
 mod plex_connector_settings;
 mod plex_listener;
 mod plex_listener_settings;
+mod plex_settings;
 mod role;
 mod security;
 
@@ -29,3 +30,4 @@ pub use plex_connector::PlexConnector;
 pub use plex_connector_settings::PlexConnectorSettings;
 pub use plex_listener::PlexListener;
 pub use plex_listener_settings::PlexListenerSettings;
+pub use plex_settings::PlexSettings;

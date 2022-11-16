@@ -36,6 +36,7 @@ pub(in crate::net::plex) struct ConnectMultiplex {
     cursor: Cursor,
     run_plex_inlet: EventInlet,
     info: Arc<Info>,
+    settings: MultiplexSettings,
     _fuse: Arc<Fuse>,
 }
 
@@ -94,6 +95,7 @@ impl Multiplex {
 
         {
             let info = info.clone();
+            let settings = settings.clone();
 
             fuse.spawn(async move {
                 let _ = Multiplex::run(
@@ -113,6 +115,7 @@ impl Multiplex {
             cursor,
             run_plex_inlet: run_plex_inlet.clone(),
             info: info.clone(),
+            settings,
             _fuse: fuse.clone(),
         };
 
@@ -204,7 +207,7 @@ impl Multiplex {
 
                     let response = match payload {
                         Payload::NewPlex { plex } => {
-                            let (protoplex, plex_handle) = ProtoPlex::new(plex);
+                            let (protoplex, plex_handle) = ProtoPlex::new(plex, settings.plex_settings.clone());
                             plex_handles.insert(plex, plex_handle);
 
                             let _ = accept_inlet.send(protoplex).await;
@@ -318,6 +321,7 @@ impl ConnectMultiplex {
             self.cursor.next(),
             self.run_plex_inlet.clone(),
             self._fuse.clone(),
+            self.settings.plex_settings.clone(),
         )
         .await
     }

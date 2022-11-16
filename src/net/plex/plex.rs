@@ -1,5 +1,5 @@
 use crate::{
-    net::plex::{Event, Message, Security},
+    net::plex::{Event, Message, PlexSettings, Security},
     sync::fuse::{Fuse, Relay},
 };
 use doomstack::{here, Doom, ResultExt, Top};
@@ -11,9 +11,6 @@ type EventInlet = MpscSender<Event>;
 
 type MessageInlet = MpscSender<Message>;
 type MessageOutlet = MpscReceiver<Message>;
-
-// TODO: Refactor following constants into settings
-const RECEIVE_CHANNEL_CAPACITY: usize = 32;
 
 #[derive(Doom)]
 pub enum PlexError {
@@ -57,8 +54,9 @@ impl Plex {
         index: u32,
         run_plex_inlet: EventInlet,
         run_fuse: Arc<Fuse>,
+        settings: PlexSettings,
     ) -> Self {
-        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
+        let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
 
         let fuse = Fuse::new();
         let relay = fuse.relay();
@@ -239,8 +237,8 @@ impl Plex {
 }
 
 impl ProtoPlex {
-    pub fn new(index: u32) -> (ProtoPlex, PlexHandle) {
-        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
+    pub fn new(index: u32, settings: PlexSettings) -> (ProtoPlex, PlexHandle) {
+        let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
 
         let fuse = Fuse::new();
         let relay = fuse.relay();
