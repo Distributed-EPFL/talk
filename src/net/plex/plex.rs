@@ -1,4 +1,7 @@
-use crate::net::plex::{Event, Message, Payload, Security};
+use crate::{
+    net::plex::{Event, Message, Payload, Security},
+    sync::fuse::{Fuse, Relay},
+};
 use doomstack::{here, Doom, ResultExt, Top};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
@@ -26,22 +29,29 @@ pub enum PlexError {
     MultiplexDropped,
     #[doom(description("Unexpected `Security` level"))]
     UnexpectedSecurity,
+    #[doom(description("`Plex` closed"))]
+    PlexClosed,
 }
 
 pub struct Plex {
     index: u32,
     run_plex_inlet: EventInlet,
     receive_outlet: MessageOutlet,
+    relay: Relay,
 }
 
 impl Plex {
     pub(in crate::net::plex) async fn new(index: u32, run_plex_inlet: EventInlet) -> Self {
         let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
 
+        let fuse = Fuse::new();
+        let relay = fuse.relay();
+
         let _ = run_plex_inlet
             .send(Event::NewPlex {
                 plex: index,
                 receive_inlet,
+                fuse,
             })
             .await;
 
@@ -49,6 +59,7 @@ impl Plex {
             index,
             run_plex_inlet,
             receive_outlet,
+            relay,
         }
     }
 
@@ -125,17 +136,19 @@ impl Plex {
     }
 
     async fn send_message(&mut self, message: Message) -> Result<(), Top<PlexError>> {
-        let event = Event::Message {
-            plex: self.index,
-            message,
-        };
+        if self.relay.is_on() {
+            let event = Event::Message {
+                plex: self.index,
+                message,
+            };
 
-        self.run_plex_inlet
-            .send(event)
-            .await
-            .map_err(|_| PlexError::MultiplexDropped.into_top())?;
-
-        Ok(())
+            self.run_plex_inlet
+                .send(event)
+                .await
+                .map_err(|_| PlexError::MultiplexDropped.into_top())
+        } else {
+            PlexError::PlexClosed.fail().spot(here!())
+        }
     }
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlexError>>

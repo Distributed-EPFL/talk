@@ -15,6 +15,8 @@ type EventOutlet = MpscReceiver<Event>;
 type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
+type MessageInlet = MpscSender<Message>;
+
 // TODO: Refactor following constants into settings
 const RUN_PLEX_CHANNEL_CAPACITY: usize = 128;
 const RUN_ROUTE_IN_CHANNEL_CAPACITY: usize = 128;
@@ -26,14 +28,27 @@ pub(in crate::net::plex) struct Multiplex {
     _fuse: Fuse,
 }
 
+struct PlexHandle {
+    receive_inlet: MessageInlet,
+    _fuse: Fuse,
+}
+
 #[derive(Doom)]
-pub enum RouteOutError {
+enum RunError {
+    #[doom(description("`route_out` crashed"))]
+    RouteOutError,
+    #[doom(description("`route_in` crashed"))]
+    RouteInError,
+}
+
+#[derive(Doom)]
+enum RouteOutError {
     #[doom(description("Connection error"))]
     ConnectionError,
 }
 
 #[derive(Doom)]
-pub enum RouteInError {
+enum RouteInError {
     #[doom(description("Connection error"))]
     ConnectionError,
 }
@@ -61,41 +76,121 @@ impl Multiplex {
         Plex::new(index, run_plex_inlet).await
     }
 
-    async fn run(connection: SecureConnection, mut run_plex_outlet: EventOutlet) {
+    async fn run(
+        connection: SecureConnection,
+        mut run_plex_outlet: EventOutlet,
+    ) -> Result<(), Top<RunError>> {
         let (sender, receiver) = connection.split();
 
-        let (route_out_inlet, route_out_outlet) = mpsc::channel(ROUTE_OUT_CHANNEL_CAPACITY);
-
-        let (run_route_in_inlet, run_route_in_outlet) =
+        let (run_route_in_inlet, mut run_route_in_outlet) =
             mpsc::channel(RUN_ROUTE_IN_CHANNEL_CAPACITY);
+
+        let (route_out_inlet, route_out_outlet) = mpsc::channel(ROUTE_OUT_CHANNEL_CAPACITY);
 
         let fuse = Fuse::new();
 
         fuse.spawn(Multiplex::route_in(receiver, run_route_in_inlet));
         fuse.spawn(Multiplex::route_out(sender, route_out_outlet));
 
-        let mut receive_inlets = HashMap::new();
+        let mut plex_handles = HashMap::new();
 
         loop {
-            let event = if let Some(event) = run_plex_outlet.recv().await {
-                event
-            } else {
-                // `ConnectMultiplex` has dropped, shutdown
-                return;
-            };
+            tokio::select! {
+                event = run_plex_outlet.recv() => {
+                    let event = if let Some(event) = event {
+                        event
+                    } else {
+                        // `ConnectMultiplex` has dropped, shutdown
+                        return Ok(());
+                    };
 
-            match event {
-                Event::NewPlex {
-                    plex,
-                    receive_inlet,
-                } => {
-                    if receive_inlets.insert(plex, receive_inlet).is_some() {
-                        return;
+                    let payload = match event {
+                        Event::NewPlex {
+                            plex,
+                            receive_inlet,
+                            fuse,
+                        } => {
+                            let handle = PlexHandle {
+                                receive_inlet,
+                                _fuse: fuse,
+                            };
+
+                            plex_handles.insert(plex, handle);
+
+                            Some(Payload::NewPlex { plex })
+                        }
+                        Event::Message { plex, message } => {
+                            if plex_handles.contains_key(&plex) {
+                                Some(Payload::Message { plex, message })
+                            } else {
+                                None
+                            }
+                        }
+                        Event::DropPlex { plex } => {
+                            plex_handles.remove(&plex);
+                            Some(Payload::DropPlex { plex })
+                        }
+                    };
+
+                    if let Some(payload) = payload {
+                        route_out_inlet
+                            .send(payload)
+                            .await
+                            .map_err(|_| RunError::RouteOutError.into_top())
+                            .spot(here!())?;
                     }
                 }
-                Event::Message { plex, message } => todo!(),
-                Event::DropPlex { plex } => todo!(),
+                payload = run_route_in_outlet.recv() => {
+                    let payload = if let Some(payload) = payload {
+                        payload
+                    } else {
+                        return RunError::RouteInError.fail().spot(here!());
+                    };
+
+                    match payload {
+                        Payload::NewPlex { .. } => todo!(),
+                        Payload::Message { plex, message } => {
+                            if let Some(handle) = plex_handles.get_mut(&plex) {
+                                let _ = handle.receive_inlet.send(message);
+                            }
+                        },
+                        Payload::DropPlex { plex } => {
+                            plex_handles.remove(&plex);
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    async fn route_in(
+        mut receiver: SecureReceiver,
+        run_route_in_inlet: PayloadInlet,
+    ) -> Result<(), Top<RouteInError>> {
+        loop {
+            let header = receiver
+                .receive::<Header>()
+                .await
+                .pot(RouteInError::ConnectionError, here!())?;
+
+            let payload = match header {
+                Header::NewPlex { plex } => Payload::NewPlex { plex },
+                Header::Message { plex, security } => {
+                    let message = match security {
+                        Security::Secure => receiver.receive_bytes().await,
+                        Security::Plain => receiver.receive_plain_bytes().await,
+                        Security::Raw => receiver.receive_raw_bytes().await,
+                    }
+                    .pot(RouteInError::ConnectionError, here!())?;
+
+                    let message = Message { security, message };
+
+                    Payload::Message { plex, message }
+                }
+                Header::DropPlex { plex } => Payload::DropPlex { plex },
+            };
+
+            let _ = run_route_in_inlet.send(payload).await;
         }
     }
 
@@ -118,66 +213,13 @@ impl Multiplex {
 
             match payload {
                 Payload::Message { message, .. } => match message.security {
-                    Security::Secure => {
-                        sender
-                            .send_bytes(message.message.as_slice())
-                            .await
-                            .pot(RouteOutError::ConnectionError, here!())?;
-                    }
-                    Security::Plain => {
-                        sender
-                            .send_plain_bytes(message.message.as_slice())
-                            .await
-                            .pot(RouteOutError::ConnectionError, here!())?;
-                    }
-                    Security::Raw => {
-                        sender
-                            .send_raw_bytes(message.message.as_slice())
-                            .await
-                            .pot(RouteOutError::ConnectionError, here!())?;
-                    }
-                },
+                    Security::Secure => sender.send_bytes(message.message.as_slice()).await,
+                    Security::Plain => sender.send_plain_bytes(message.message.as_slice()).await,
+                    Security::Raw => sender.send_raw_bytes(message.message.as_slice()).await,
+                }
+                .pot(RouteOutError::ConnectionError, here!())?,
                 _ => (),
             }
-        }
-    }
-
-    async fn route_in(
-        mut receiver: SecureReceiver,
-        run_route_in_inlet: PayloadInlet,
-    ) -> Result<(), Top<RouteInError>> {
-        loop {
-            let header = receiver
-                .receive::<Header>()
-                .await
-                .pot(RouteInError::ConnectionError, here!())?;
-
-            let payload = match header {
-                Header::NewPlex { plex } => unimplemented!(),
-                Header::Message { plex, security } => {
-                    let message = match security {
-                        Security::Secure => receiver
-                            .receive_bytes()
-                            .await
-                            .pot(RouteInError::ConnectionError, here!())?,
-                        Security::Plain => receiver
-                            .receive_plain_bytes()
-                            .await
-                            .pot(RouteInError::ConnectionError, here!())?,
-                        Security::Raw => receiver
-                            .receive_raw_bytes()
-                            .await
-                            .pot(RouteInError::ConnectionError, here!())?,
-                    };
-
-                    let message = Message { security, message };
-
-                    Payload::Message { plex, message }
-                }
-                Header::DropPlex { plex } => Payload::DropPlex { plex },
-            };
-
-            let _ = run_route_in_inlet.send(payload).await;
         }
     }
 }
