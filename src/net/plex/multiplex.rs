@@ -6,7 +6,13 @@ use crate::{
     sync::fuse::Fuse,
 };
 use doomstack::{here, Doom, ResultExt, Top};
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type EventInlet = MpscSender<Event>;
@@ -34,13 +40,15 @@ pub(in crate::net::plex) struct Multiplex {
 pub(in crate::net::plex) struct ConnectMultiplex {
     cursor: Cursor,
     run_plex_inlet: EventInlet,
-    fuse: Arc<Fuse>,
+    plex_count: Arc<AtomicUsize>,
+    _fuse: Arc<Fuse>,
 }
 
 pub(in crate::net::plex) struct ListenMultiplex {
     accept_outlet: ProtoPlexOutlet,
     run_plex_inlet: EventInlet,
-    fuse: Arc<Fuse>,
+    plex_count: Arc<AtomicUsize>,
+    _fuse: Arc<Fuse>,
 }
 
 #[derive(Doom)]
@@ -76,26 +84,38 @@ impl Multiplex {
         let (run_plex_inlet, run_plex_outlet) = mpsc::channel(RUN_PLEX_CHANNEL_CAPACITY);
         let (accept_inlet, accept_outlet) = mpsc::channel(LISTEN_PLEX_CHANNEL_CAPACITY);
 
+        let plex_count = Arc::new(AtomicUsize::new(0));
         let fuse = Arc::new(Fuse::new());
 
-        fuse.spawn(Multiplex::run(connection, run_plex_outlet, accept_inlet));
+        fuse.spawn(Multiplex::run(
+            connection,
+            run_plex_outlet,
+            accept_inlet,
+            plex_count.clone(),
+        ));
 
         let connect_multiplex = ConnectMultiplex {
             cursor,
             run_plex_inlet: run_plex_inlet.clone(),
-            fuse: fuse.clone(),
+            plex_count: plex_count.clone(),
+            _fuse: fuse.clone(),
         };
 
         let listen_multiplex = ListenMultiplex {
             accept_outlet,
             run_plex_inlet,
-            fuse,
+            plex_count,
+            _fuse: fuse,
         };
 
         Multiplex {
             connect_multiplex,
             listen_multiplex,
         }
+    }
+
+    pub fn plex_count(&self) -> usize {
+        self.connect_multiplex.plex_count()
     }
 
     pub async fn connect(&mut self) -> Plex {
@@ -106,10 +126,15 @@ impl Multiplex {
         self.listen_multiplex.accept().await
     }
 
+    pub fn split(self) -> (ConnectMultiplex, ListenMultiplex) {
+        (self.connect_multiplex, self.listen_multiplex)
+    }
+
     async fn run(
         connection: SecureConnection,
         mut run_plex_outlet: EventOutlet,
         accept_inlet: ProtoPlexInlet,
+        plex_count: Arc<AtomicUsize>,
     ) -> Result<(), Top<RunError>> {
         let (sender, receiver) = connection.split();
 
@@ -190,6 +215,8 @@ impl Multiplex {
                     }
                 }
             }
+
+            plex_count.store(plex_handles.len(), Ordering::Relaxed);
         }
     }
 
@@ -259,9 +286,13 @@ impl ConnectMultiplex {
         Plex::new(
             self.cursor.next(),
             self.run_plex_inlet.clone(),
-            self.fuse.clone(),
+            self._fuse.clone(),
         )
         .await
+    }
+
+    pub fn plex_count(&self) -> usize {
+        self.plex_count.load(Ordering::Relaxed)
     }
 }
 
@@ -273,6 +304,10 @@ impl ListenMultiplex {
             return ListenMultiplexError::MultiplexDropped.fail().spot(here!());
         };
 
-        Ok(protoplex.into_plex(self.run_plex_inlet.clone(), self.fuse.clone()))
+        Ok(protoplex.into_plex(self.run_plex_inlet.clone(), self._fuse.clone()))
+    }
+
+    pub fn plex_count(&self) -> usize {
+        self.plex_count.load(Ordering::Relaxed)
     }
 }
