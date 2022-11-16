@@ -1,7 +1,7 @@
 use crate::{
     crypto::Identity,
     net::{
-        plex::{multiplex::Multiplex, role::Role, Plex},
+        plex::{Multiplex, Plex, Role},
         Listener, SecureConnection,
     },
     sync::fuse::Fuse,
@@ -14,7 +14,7 @@ type PlexOutlet = MpscReceiver<(Identity, Plex)>;
 // TODO: Refactor following constants into settings
 const ACCEPT_PLEX_CHANNEL_CAPACITY: usize = 1024;
 
-struct PlexListener {
+pub struct PlexListener {
     accept_outlet: PlexOutlet,
     _fuse: Fuse,
 }

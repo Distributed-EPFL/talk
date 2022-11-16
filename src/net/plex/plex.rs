@@ -1,5 +1,5 @@
 use crate::{
-    net::plex::{Event, Message, Payload, Security},
+    net::plex::{Event, Message, Security},
     sync::fuse::{Fuse, Relay},
 };
 use doomstack::{here, Doom, ResultExt, Top};
@@ -8,10 +8,6 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type EventInlet = MpscSender<Event>;
-type EventOutlet = MpscReceiver<Event>;
-
-type PayloadInlet = MpscSender<Payload>;
-type PayloadOutlet = MpscReceiver<Payload>;
 
 type MessageInlet = MpscSender<Message>;
 type MessageOutlet = MpscReceiver<Message>;

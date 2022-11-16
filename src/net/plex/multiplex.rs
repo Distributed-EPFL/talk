@@ -9,7 +9,7 @@ use doomstack::{here, Doom, ResultExt, Top};
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -23,8 +23,6 @@ type PayloadOutlet = MpscReceiver<Payload>;
 
 type ProtoPlexInlet = MpscSender<ProtoPlex>;
 type ProtoPlexOutlet = MpscReceiver<ProtoPlex>;
-
-type MessageInlet = MpscSender<Message>;
 
 // TODO: Refactor following constants into settings
 const RUN_PLEX_CHANNEL_CAPACITY: usize = 128;
@@ -40,15 +38,19 @@ pub(in crate::net::plex) struct Multiplex {
 pub(in crate::net::plex) struct ConnectMultiplex {
     cursor: Cursor,
     run_plex_inlet: EventInlet,
-    plex_count: Arc<AtomicUsize>,
+    info: Arc<Info>,
     _fuse: Arc<Fuse>,
 }
 
 pub(in crate::net::plex) struct ListenMultiplex {
     accept_outlet: ProtoPlexOutlet,
     run_plex_inlet: EventInlet,
-    plex_count: Arc<AtomicUsize>,
     _fuse: Arc<Fuse>,
+}
+
+struct Info {
+    is_alive: AtomicBool,
+    plex_count: AtomicUsize,
 }
 
 #[derive(Doom)]
@@ -84,27 +86,36 @@ impl Multiplex {
         let (run_plex_inlet, run_plex_outlet) = mpsc::channel(RUN_PLEX_CHANNEL_CAPACITY);
         let (accept_inlet, accept_outlet) = mpsc::channel(LISTEN_PLEX_CHANNEL_CAPACITY);
 
-        let plex_count = Arc::new(AtomicUsize::new(0));
+        let info = Info {
+            is_alive: AtomicBool::new(true),
+            plex_count: AtomicUsize::new(0),
+        };
+
+        let info = Arc::new(info);
+
         let fuse = Arc::new(Fuse::new());
 
-        fuse.spawn(Multiplex::run(
-            connection,
-            run_plex_outlet,
-            accept_inlet,
-            plex_count.clone(),
-        ));
+        {
+            let info = info.clone();
+
+            fuse.spawn(async move {
+                let _ =
+                    Multiplex::run(connection, run_plex_outlet, accept_inlet, info.as_ref()).await;
+
+                info.is_alive.store(false, Ordering::Relaxed);
+            });
+        }
 
         let connect_multiplex = ConnectMultiplex {
             cursor,
             run_plex_inlet: run_plex_inlet.clone(),
-            plex_count: plex_count.clone(),
+            info: info.clone(),
             _fuse: fuse.clone(),
         };
 
         let listen_multiplex = ListenMultiplex {
             accept_outlet,
             run_plex_inlet,
-            plex_count,
             _fuse: fuse,
         };
 
@@ -112,18 +123,6 @@ impl Multiplex {
             connect_multiplex,
             listen_multiplex,
         }
-    }
-
-    pub fn plex_count(&self) -> usize {
-        self.connect_multiplex.plex_count()
-    }
-
-    pub async fn connect(&mut self) -> Plex {
-        self.connect_multiplex.connect().await
-    }
-
-    pub async fn accept(&mut self) -> Result<Plex, Top<ListenMultiplexError>> {
-        self.listen_multiplex.accept().await
     }
 
     pub fn split(self) -> (ConnectMultiplex, ListenMultiplex) {
@@ -134,7 +133,7 @@ impl Multiplex {
         connection: SecureConnection,
         mut run_plex_outlet: EventOutlet,
         accept_inlet: ProtoPlexInlet,
-        plex_count: Arc<AtomicUsize>,
+        info: &Info,
     ) -> Result<(), Top<RunError>> {
         let (sender, receiver) = connection.split();
 
@@ -179,6 +178,7 @@ impl Multiplex {
                             plex_handles.remove(&plex);
                             Some(Payload::DropPlex { plex })
                         }
+                        Event::Ping => Some(Payload::Ping)
                     };
 
                     if let Some(payload) = payload {
@@ -197,26 +197,42 @@ impl Multiplex {
                         return RunError::RouteInError.fail().spot(here!());
                     };
 
-                    match payload {
+                    let response = match payload {
                         Payload::NewPlex { plex } => {
                             let (protoplex, plex_handle) = ProtoPlex::new(plex);
                             plex_handles.insert(plex, plex_handle);
 
                             let _ = accept_inlet.send(protoplex).await;
+
+                            None
                         },
                         Payload::Message { plex, message } => {
                             if let Some(handle) = plex_handles.get(&plex) {
                                 let _ = handle.receive_inlet.send(message);
                             }
+
+                            None
                         },
                         Payload::DropPlex { plex } => {
                             plex_handles.remove(&plex);
+
+                            None
                         }
+                        Payload::Ping => Some(Payload::Pong),
+                        Payload::Pong => None,
+                    };
+
+                    if let Some(response) = response {
+                        route_out_inlet
+                            .send(response)
+                            .await
+                            .map_err(|_| RunError::RouteOutError.into_top())
+                            .spot(here!())?;
                     }
                 }
             }
 
-            plex_count.store(plex_handles.len(), Ordering::Relaxed);
+            info.plex_count.store(plex_handles.len(), Ordering::Relaxed);
         }
     }
 
@@ -245,6 +261,8 @@ impl Multiplex {
                     Payload::Message { plex, message }
                 }
                 Header::DropPlex { plex } => Payload::DropPlex { plex },
+                Header::Ping => Payload::Ping,
+                Header::Pong => Payload::Pong,
             };
 
             let _ = run_route_in_inlet.send(payload).await;
@@ -282,6 +300,14 @@ impl Multiplex {
 }
 
 impl ConnectMultiplex {
+    pub fn is_alive(&self) -> bool {
+        self.info.is_alive.load(Ordering::Relaxed)
+    }
+
+    pub fn plex_count(&self) -> usize {
+        self.info.plex_count.load(Ordering::Relaxed)
+    }
+
     pub async fn connect(&mut self) -> Plex {
         Plex::new(
             self.cursor.next(),
@@ -291,8 +317,8 @@ impl ConnectMultiplex {
         .await
     }
 
-    pub fn plex_count(&self) -> usize {
-        self.plex_count.load(Ordering::Relaxed)
+    pub fn ping(&self) {
+        let _ = self.run_plex_inlet.try_send(Event::Ping);
     }
 }
 
@@ -305,9 +331,5 @@ impl ListenMultiplex {
         };
 
         Ok(protoplex.into_plex(self.run_plex_inlet.clone(), self._fuse.clone()))
-    }
-
-    pub fn plex_count(&self) -> usize {
-        self.plex_count.load(Ordering::Relaxed)
     }
 }

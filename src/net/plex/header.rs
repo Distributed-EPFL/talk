@@ -6,4 +6,6 @@ pub(in crate::net::plex) enum Header {
     NewPlex { plex: u32 },
     Message { plex: u32, security: Security },
     DropPlex { plex: u32 },
+    Ping,
+    Pong,
 }

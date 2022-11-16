@@ -4,6 +4,8 @@ pub(in crate::net::plex) enum Payload {
     NewPlex { plex: u32 },
     Message { plex: u32, message: Message },
     DropPlex { plex: u32 },
+    Ping,
+    Pong,
 }
 
 impl Payload {
@@ -15,6 +17,8 @@ impl Payload {
                 security: message.security,
             },
             Payload::DropPlex { plex } => Header::DropPlex { plex: *plex },
+            Payload::Ping => Header::Ping,
+            Payload::Pong => Header::Pong,
         }
     }
 }
