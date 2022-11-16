@@ -91,13 +91,15 @@ impl PlexConnector {
             {
                 let mut pool = pool.lock();
 
-                for multiplexes in pool.multiplexes.values_mut() {
+                pool.multiplexes.retain(|_, multiplexes| {
                     PlexConnector::prune(multiplexes);
 
                     for multiplex in multiplexes.iter() {
                         multiplex.ping();
                     }
-                }
+
+                    !multiplexes.is_empty()
+                });
             }
 
             time::sleep(settings.keep_alive_interval).await;
