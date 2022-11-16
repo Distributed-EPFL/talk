@@ -16,13 +16,13 @@ type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
 // TODO: Refactor following constants into settings
-const RUN_SEND_CHANNEL_CAPACITY: usize = 128;
+const RUN_PLEX_CHANNEL_CAPACITY: usize = 128;
 const RUN_ROUTE_IN_CHANNEL_CAPACITY: usize = 128;
 const ROUTE_OUT_CHANNEL_CAPACITY: usize = 128;
 
 pub(in crate::net::plex) struct Multiplex {
     cursor: Cursor,
-    run_send_inlet: EventInlet,
+    run_plex_inlet: EventInlet,
     _fuse: Fuse,
 }
 
@@ -42,19 +42,19 @@ impl Multiplex {
     pub fn new(role: Role, connection: SecureConnection) -> Self {
         let cursor = Cursor::new(role);
 
-        let (run_send_inlet, run_send_outlet) = mpsc::channel(RUN_SEND_CHANNEL_CAPACITY);
+        let (run_plex_inlet, run_plex_outlet) = mpsc::channel(RUN_PLEX_CHANNEL_CAPACITY);
         let fuse = Fuse::new();
 
-        fuse.spawn(Multiplex::run(connection, run_send_outlet));
+        fuse.spawn(Multiplex::run(connection, run_plex_outlet));
 
         Multiplex {
             cursor,
-            run_send_inlet,
+            run_plex_inlet,
             _fuse: fuse,
         }
     }
 
-    async fn run(connection: SecureConnection, mut run_send_outlet: EventOutlet) {
+    async fn run(connection: SecureConnection, mut run_plex_outlet: EventOutlet) {
         let (sender, receiver) = connection.split();
 
         let (route_out_inlet, route_out_outlet) = mpsc::channel(ROUTE_OUT_CHANNEL_CAPACITY);
@@ -70,7 +70,7 @@ impl Multiplex {
         let mut receive_inlets = HashMap::new();
 
         loop {
-            let event = if let Some(event) = run_send_outlet.recv().await {
+            let event = if let Some(event) = run_plex_outlet.recv().await {
                 event
             } else {
                 // `ConnectMultiplex` has dropped, shutdown
@@ -80,9 +80,9 @@ impl Multiplex {
             match event {
                 Event::NewPlex {
                     plex,
-                    message_inlet,
+                    receive_inlet,
                 } => {
-                    if receive_inlets.insert(plex, message_inlet).is_some() {
+                    if receive_inlets.insert(plex, receive_inlet).is_some() {
                         return;
                     }
                 }

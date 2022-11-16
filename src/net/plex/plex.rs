@@ -1,7 +1,7 @@
 use crate::net::plex::{Event, Message, Payload, Security};
 use doomstack::{here, Doom, ResultExt, Top};
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
+use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 
 type EventInlet = MpscSender<Event>;
 type EventOutlet = MpscReceiver<Event>;
@@ -10,6 +10,9 @@ type PayloadInlet = MpscSender<Payload>;
 type PayloadOutlet = MpscReceiver<Payload>;
 
 type MessageOutlet = MpscReceiver<Message>;
+
+// TODO: Refactor following constants into settings
+const RECEIVE_CHANNEL_CAPACITY: usize = 32;
 
 #[derive(Doom)]
 pub enum PlexError {
@@ -27,19 +30,24 @@ pub enum PlexError {
 
 pub struct Plex {
     index: u32,
-    run_send_inlet: EventInlet,
+    run_plex_inlet: EventInlet,
     receive_outlet: MessageOutlet,
 }
 
 impl Plex {
-    pub(in crate::net::plex) fn new(
-        index: u32,
-        run_send_inlet: EventInlet,
-        receive_outlet: MessageOutlet,
-    ) -> Self {
+    pub(in crate::net::plex) async fn new(index: u32, run_plex_inlet: EventInlet) -> Self {
+        let (receive_inlet, receive_outlet) = mpsc::channel(RECEIVE_CHANNEL_CAPACITY);
+
+        let _ = run_plex_inlet
+            .send(Event::NewPlex {
+                plex: index,
+                receive_inlet,
+            })
+            .await;
+
         Plex {
             index,
-            run_send_inlet,
+            run_plex_inlet,
             receive_outlet,
         }
     }
@@ -122,7 +130,7 @@ impl Plex {
             message,
         };
 
-        self.run_send_inlet
+        self.run_plex_inlet
             .send(event)
             .await
             .map_err(|_| PlexError::MultiplexDropped.into_top())?;
@@ -198,11 +206,11 @@ impl Plex {
 
 impl Drop for Plex {
     fn drop(&mut self) {
-        let run_send_inlet = self.run_send_inlet.clone();
+        let run_plex_inlet = self.run_plex_inlet.clone();
         let plex = self.index;
 
         tokio::spawn(async move {
-            let _ = run_send_inlet.send(Event::DropPlex { plex }).await;
+            let _ = run_plex_inlet.send(Event::DropPlex { plex }).await;
         });
     }
 }

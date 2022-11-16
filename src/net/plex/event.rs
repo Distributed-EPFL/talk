@@ -6,7 +6,7 @@ type MessageInlet = MpscSender<Message>;
 pub(in crate::net::plex) enum Event {
     NewPlex {
         plex: u32,
-        message_inlet: MessageInlet,
+        receive_inlet: MessageInlet,
     },
     Message {
         plex: u32,
