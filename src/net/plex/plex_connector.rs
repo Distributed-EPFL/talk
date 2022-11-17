@@ -257,4 +257,60 @@ mod tests {
             handle.await.unwrap();
         }
     }
+
+    #[tokio::test]
+    async fn multiple_parallel() {
+        let System {
+            mut connectors,
+            listeners,
+            keys,
+        } = System::setup(5).await;
+
+        let connector = PlexConnector::new(
+            connectors.remove(0),
+            PlexConnectorSettings {
+                connections_per_remote: 5,
+                ..Default::default()
+            },
+        );
+
+        let listeners = listeners
+            .into_iter()
+            .skip(1)
+            .map(|listener| PlexListener::new(listener, Default::default()))
+            .collect::<Vec<_>>();
+
+        for mut listener in listeners {
+            tokio::spawn(async move {
+                loop {
+                    let (_, mut plex) = listener.accept().await;
+
+                    tokio::spawn(async move {
+                        let value = plex.receive::<u32>().await.unwrap();
+                        plex.send(&(value + 1)).await.unwrap();
+                    });
+                }
+            });
+        }
+
+        let connector = Arc::new(connector);
+
+        let handles = (0..200)
+            .map(|value| {
+                let connector = connector.clone();
+                let remote = keys[(value % 4 + 1) as usize];
+
+                tokio::spawn(async move {
+                    let mut plex = connector.connect(remote).await.unwrap();
+                    time::sleep(Duration::from_millis(500)).await;
+                    plex.send(&value).await.unwrap();
+                    assert_eq!(plex.receive::<u32>().await.unwrap(), value + 1);
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+    }
 }
