@@ -216,7 +216,7 @@ impl Multiplex {
                         },
                         Payload::Message { plex, message } => {
                             if let Some(handle) = plex_handles.get(&plex) {
-                                let _ = handle.receive_inlet.send(message);
+                                let _ = handle.receive_inlet.send(message).await;
                             }
 
                             None

@@ -7,9 +7,8 @@ use crate::{
     sync::fuse::Fuse,
 };
 use doomstack::{here, Doom, ResultExt, Top};
-use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc};
-use tokio::time;
+use tokio::{sync::Mutex, time};
 
 pub struct PlexConnector {
     connector: Box<dyn NetConnector>,
@@ -54,7 +53,7 @@ impl PlexConnector {
     }
 
     pub async fn connect(&self, remote: Identity) -> Result<Plex, Top<PlexConnectorError>> {
-        let mut pool = self.pool.lock();
+        let mut pool = self.pool.lock().await;
         let multiplexes = pool.multiplexes.entry(remote).or_default();
 
         // Prune all dead `ConnectMultiplex`es in `multiplexes`
@@ -100,7 +99,7 @@ impl PlexConnector {
     async fn keep_alive(pool: Arc<Mutex<Pool>>, settings: PlexConnectorSettings) {
         loop {
             {
-                let mut pool = pool.lock();
+                let mut pool = pool.lock().await;
 
                 pool.multiplexes.retain(|_, multiplexes| {
                     // Prune all dead `ConnectMultiplex`es in `multiplexes`
@@ -121,5 +120,33 @@ impl PlexConnector {
 
             time::sleep(settings.keep_alive_interval).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::net::{plex::PlexListener, test::System};
+
+    #[tokio::test]
+    async fn single() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = PlexConnector::new(connectors.remove(0), Default::default());
+        let mut listener = PlexListener::new(listeners.remove(1), Default::default());
+
+        tokio::spawn(async move {
+            let (_, mut plex) = listener.accept().await;
+            assert_eq!(plex.receive::<u32>().await.unwrap(), 42u32);
+            plex.send(&43u32).await.unwrap();
+        });
+
+        let mut plex = connector.connect(keys[1]).await.unwrap();
+        plex.send(&42u32).await.unwrap();
+        assert_eq!(plex.receive::<u32>().await.unwrap(), 43u32);
     }
 }
