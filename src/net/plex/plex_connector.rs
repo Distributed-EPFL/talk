@@ -7,18 +7,19 @@ use crate::{
     sync::fuse::Fuse,
 };
 use doomstack::{here, Doom, ResultExt, Top};
+use parking_lot::Mutex as ParkingMutex;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{sync::Mutex as TokioMutex, time};
 
 pub struct PlexConnector {
     connector: Box<dyn NetConnector>,
-    pool: Arc<TokioMutex<Pool>>,
+    pool: Arc<ParkingMutex<Pool>>,
     settings: PlexConnectorSettings,
     _fuse: Fuse,
 }
 
 struct Pool {
-    multiplexes: HashMap<Identity, Vec<ConnectMultiplex>>,
+    multiplexes: HashMap<Identity, Arc<TokioMutex<Vec<ConnectMultiplex>>>>,
 }
 
 #[derive(Doom)]
@@ -33,12 +34,7 @@ impl PlexConnector {
         C: NetConnector,
     {
         let connector = Box::new(connector);
-
-        let pool = Pool {
-            multiplexes: HashMap::new(),
-        };
-
-        let pool = Arc::new(TokioMutex::new(pool));
+        let pool = Arc::new(ParkingMutex::new(Pool::new()));
 
         let fuse = Fuse::new();
 
@@ -53,8 +49,8 @@ impl PlexConnector {
     }
 
     pub async fn connect(&self, remote: Identity) -> Result<Plex, Top<PlexConnectorError>> {
-        let mut pool = self.pool.lock().await;
-        let multiplexes = pool.multiplexes.entry(remote).or_default();
+        let multiplexes = self.pool.lock().get_multiplexes(remote);
+        let mut multiplexes = multiplexes.lock().await;
 
         // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
@@ -96,12 +92,14 @@ impl PlexConnector {
         Ok(multiplex.connect().await)
     }
 
-    async fn keep_alive(pool: Arc<TokioMutex<Pool>>, settings: PlexConnectorSettings) {
+    async fn keep_alive(pool: Arc<ParkingMutex<Pool>>, settings: PlexConnectorSettings) {
         loop {
             {
-                let mut pool = pool.lock().await;
+                let all_multiplexes = pool.lock().all_multiplexes();
 
-                pool.multiplexes.retain(|_, multiplexes| {
+                for multiplexes in all_multiplexes {
+                    let mut multiplexes = multiplexes.lock().await;
+
                     // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
                     multiplexes.retain(|multiplex| multiplex.is_alive());
@@ -111,15 +109,41 @@ impl PlexConnector {
                     for multiplex in multiplexes.iter() {
                         multiplex.ping();
                     }
+                }
 
-                    // If `multiplexes` is empty, drop key and value from `pool.multiplexes`
+                // Drop all remotes with no `ConnectMultiplex`ex
 
-                    !multiplexes.is_empty()
-                });
+                pool.lock().prune();
             }
 
             time::sleep(settings.keep_alive_interval).await;
         }
+    }
+}
+
+impl Pool {
+    fn new() -> Self {
+        Pool {
+            multiplexes: HashMap::new(),
+        }
+    }
+
+    fn get_multiplexes(&mut self, remote: Identity) -> Arc<TokioMutex<Vec<ConnectMultiplex>>> {
+        self.multiplexes.entry(remote).or_default().clone()
+    }
+
+    fn all_multiplexes(&mut self) -> Vec<Arc<TokioMutex<Vec<ConnectMultiplex>>>> {
+        self.multiplexes.values().cloned().collect()
+    }
+
+    fn prune(&mut self) {
+        self.multiplexes.retain(|_, multiplexes| {
+            if let Ok(multiplexes) = multiplexes.try_lock() {
+                !multiplexes.is_empty()
+            } else {
+                true
+            }
+        });
     }
 }
 
