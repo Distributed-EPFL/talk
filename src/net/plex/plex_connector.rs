@@ -151,6 +151,7 @@ impl Pool {
 mod tests {
     use super::*;
     use crate::net::{plex::PlexListener, test::System};
+    use std::time::Duration;
 
     #[tokio::test]
     async fn single() {
@@ -189,10 +190,11 @@ mod tests {
                 ..Default::default()
             },
         );
+
         let mut listener = PlexListener::new(listeners.remove(1), Default::default());
 
         tokio::spawn(async move {
-            for _ in 0..50 {
+            loop {
                 let (_, mut plex) = listener.accept().await;
                 assert_eq!(plex.receive::<u32>().await.unwrap(), 42u32);
                 plex.send(&43u32).await.unwrap();
@@ -203,6 +205,56 @@ mod tests {
             let mut plex = connector.connect(keys[1]).await.unwrap();
             plex.send(&42u32).await.unwrap();
             assert_eq!(plex.receive::<u32>().await.unwrap(), 43u32);
+        }
+    }
+
+    #[tokio::test]
+    async fn parallel() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = PlexConnector::new(
+            connectors.remove(0),
+            PlexConnectorSettings {
+                connections_per_remote: 5,
+                ..Default::default()
+            },
+        );
+
+        let mut listener = PlexListener::new(listeners.remove(1), Default::default());
+
+        tokio::spawn(async move {
+            loop {
+                let (_, mut plex) = listener.accept().await;
+
+                tokio::spawn(async move {
+                    let value = plex.receive::<u32>().await.unwrap();
+                    plex.send(&(value + 1)).await.unwrap();
+                });
+            }
+        });
+
+        let connector = Arc::new(connector);
+
+        let handles = (0..50)
+            .map(|value| {
+                let connector = connector.clone();
+                let remote = keys[1];
+
+                tokio::spawn(async move {
+                    let mut plex = connector.connect(remote).await.unwrap();
+                    time::sleep(Duration::from_millis(500)).await;
+                    plex.send(&value).await.unwrap();
+                    assert_eq!(plex.receive::<u32>().await.unwrap(), value + 1);
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for handle in handles {
+            handle.await.unwrap();
         }
     }
 }
