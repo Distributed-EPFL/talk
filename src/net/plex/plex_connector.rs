@@ -8,11 +8,11 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use std::{collections::HashMap, sync::Arc};
-use tokio::{sync::Mutex, time};
+use tokio::{sync::Mutex as TokioMutex, time};
 
 pub struct PlexConnector {
     connector: Box<dyn NetConnector>,
-    pool: Arc<Mutex<Pool>>,
+    pool: Arc<TokioMutex<Pool>>,
     settings: PlexConnectorSettings,
     _fuse: Fuse,
 }
@@ -38,7 +38,7 @@ impl PlexConnector {
             multiplexes: HashMap::new(),
         };
 
-        let pool = Arc::new(Mutex::new(pool));
+        let pool = Arc::new(TokioMutex::new(pool));
 
         let fuse = Fuse::new();
 
@@ -96,7 +96,7 @@ impl PlexConnector {
         Ok(multiplex.connect().await)
     }
 
-    async fn keep_alive(pool: Arc<Mutex<Pool>>, settings: PlexConnectorSettings) {
+    async fn keep_alive(pool: Arc<TokioMutex<Pool>>, settings: PlexConnectorSettings) {
         loop {
             {
                 let mut pool = pool.lock().await;
