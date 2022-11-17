@@ -173,4 +173,36 @@ mod tests {
         plex.send(&42u32).await.unwrap();
         assert_eq!(plex.receive::<u32>().await.unwrap(), 43u32);
     }
+
+    #[tokio::test]
+    async fn sequence() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = PlexConnector::new(
+            connectors.remove(0),
+            PlexConnectorSettings {
+                connections_per_remote: 5,
+                ..Default::default()
+            },
+        );
+        let mut listener = PlexListener::new(listeners.remove(1), Default::default());
+
+        tokio::spawn(async move {
+            for _ in 0..50 {
+                let (_, mut plex) = listener.accept().await;
+                assert_eq!(plex.receive::<u32>().await.unwrap(), 42u32);
+                plex.send(&43u32).await.unwrap();
+            }
+        });
+
+        for _ in 0..50 {
+            let mut plex = connector.connect(keys[1]).await.unwrap();
+            plex.send(&42u32).await.unwrap();
+            assert_eq!(plex.receive::<u32>().await.unwrap(), 43u32);
+        }
+    }
 }
