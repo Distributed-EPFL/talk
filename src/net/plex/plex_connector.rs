@@ -12,7 +12,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::time;
 
 pub struct PlexConnector {
-    connector: Arc<dyn NetConnector>,
+    connector: Box<dyn NetConnector>,
     pool: Arc<Mutex<Pool>>,
     settings: PlexConnectorSettings,
     _fuse: Fuse,
@@ -33,7 +33,7 @@ impl PlexConnector {
     where
         C: NetConnector,
     {
-        let connector = Arc::new(connector);
+        let connector = Box::new(connector);
 
         let pool = Pool {
             multiplexes: HashMap::new(),
@@ -57,23 +57,37 @@ impl PlexConnector {
         let mut pool = self.pool.lock();
         let multiplexes = pool.multiplexes.entry(remote).or_default();
 
-        PlexConnector::prune(multiplexes);
+        // Prune all dead `ConnectMultiplex`es in `multiplexes`
+
+        multiplexes.retain(|multiplex| multiplex.is_alive());
+
+        // Select a `ConnectMultiplex` to `connect` on
 
         let multiplex = if multiplexes.len() < self.settings.connections_per_remote {
+            // More `SecureConnection`s can still be established to `remote`: add
+            // a new `ConnectMultiplex` to `multiplexes` and return its reference
+
             let connection = self
                 .connector
                 .connect(remote)
                 .await
                 .pot(PlexConnectorError::ConnectFailed, here!())?;
 
-            let multiplex_settings = self.settings.multiplex_settings.clone();
-            let multiplex = Multiplex::new(Role::Connector, connection, multiplex_settings);
+            let multiplex = Multiplex::new(
+                Role::Connector,
+                connection,
+                self.settings.multiplex_settings.clone(),
+            );
 
             let (multiplex, _) = multiplex.split();
 
             multiplexes.push(multiplex);
             multiplexes.last_mut().unwrap()
         } else {
+            // The target number of `SecureConnection`s has been reached for `remote`:
+            // return a reference to the least-loaded `ConnectMultiplex` in `multiplexes`
+            // (i.e., the `ConnectMultiplex` managing the least `Plex`es)
+
             multiplexes
                 .iter_mut()
                 .min_by_key(|multiplex| multiplex.plex_count())
@@ -89,11 +103,17 @@ impl PlexConnector {
                 let mut pool = pool.lock();
 
                 pool.multiplexes.retain(|_, multiplexes| {
-                    PlexConnector::prune(multiplexes);
+                    // Prune all dead `ConnectMultiplex`es in `multiplexes`
+
+                    multiplexes.retain(|multiplex| multiplex.is_alive());
+
+                    // `ping()` all remaining `ConnectMultiplex`es in `multiplexes`
 
                     for multiplex in multiplexes.iter() {
                         multiplex.ping();
                     }
+
+                    // If `multiplexes` is empty, drop key and value from `pool.multiplexes`
 
                     !multiplexes.is_empty()
                 });
@@ -101,9 +121,5 @@ impl PlexConnector {
 
             time::sleep(settings.keep_alive_interval).await;
         }
-    }
-
-    fn prune(multiplexes: &mut Vec<ConnectMultiplex>) {
-        multiplexes.retain(|multiplex| multiplex.is_alive());
     }
 }
