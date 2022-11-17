@@ -316,7 +316,7 @@ impl ConnectMultiplex {
         self.info.plex_count.load(Ordering::Relaxed)
     }
 
-    pub async fn connect(&mut self) -> Plex {
+    pub async fn connect(&self) -> Plex {
         Plex::new(
             self.cursor.next(),
             self.run_plex_inlet.clone(),
