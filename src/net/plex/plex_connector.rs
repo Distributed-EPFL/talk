@@ -313,4 +313,47 @@ mod tests {
             handle.await.unwrap();
         }
     }
+
+    #[tokio::test]
+    async fn receive_drop() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = PlexConnector::new(connectors.remove(0), Default::default());
+        let mut listener = PlexListener::new(listeners.remove(1), Default::default());
+
+        let handle = tokio::spawn(async move {
+            let (_, mut plex) = listener.accept().await;
+            plex.receive::<u32>().await.unwrap_err();
+        });
+
+        connector.connect(keys[1]).await.unwrap();
+
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn receive_send() {
+        let System {
+            mut connectors,
+            mut listeners,
+            keys,
+        } = System::setup(2).await;
+
+        let connector = PlexConnector::new(connectors.remove(0), Default::default());
+        let mut listener = PlexListener::new(listeners.remove(1), Default::default());
+
+        tokio::spawn(async move {
+            listener.accept().await;
+        });
+
+        let mut plex = connector.connect(keys[1]).await.unwrap();
+
+        while plex.send(&42u32).await.is_ok() {
+            time::sleep(Duration::from_millis(10)).await;
+        }
+    }
 }
