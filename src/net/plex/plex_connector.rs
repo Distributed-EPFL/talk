@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn multiple_parallel() {
+    async fn multiple_listeners_parallel() {
         let System {
             mut connectors,
             listeners,
@@ -432,6 +432,66 @@ mod tests {
                 })
             })
             .collect::<Vec<_>>();
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn multiple_connectors_parallel() {
+        let System {
+            connectors,
+            mut listeners,
+            keys,
+        } = System::setup(5).await;
+
+        let connectors = connectors
+            .into_iter()
+            .map(|connector| {
+                PlexConnector::new(
+                    connector,
+                    PlexConnectorSettings {
+                        connections_per_remote: 5,
+                        ..Default::default()
+                    },
+                )
+            })
+            .take(4)
+            .collect::<Vec<_>>();
+
+        let mut listener = PlexListener::new(listeners.remove(4), Default::default());
+
+        tokio::spawn(async move {
+            loop {
+                let (_, mut plex) = listener.accept().await;
+
+                tokio::spawn(async move {
+                    let value = plex.receive::<u32>().await.unwrap();
+                    plex.send(&(value + 1)).await.unwrap();
+                });
+            }
+        });
+
+        let mut handles = Vec::new();
+
+        for connector in connectors {
+            let connector = Arc::new(connector);
+
+            let connector_handles = (0..200).map(|value| {
+                let connector = connector.clone();
+                let remote = keys[4];
+
+                tokio::spawn(async move {
+                    let mut plex = connector.connect(remote).await.unwrap();
+                    time::sleep(Duration::from_millis(500)).await;
+                    plex.send(&value).await.unwrap();
+                    assert_eq!(plex.receive::<u32>().await.unwrap(), value + 1);
+                })
+            });
+
+            handles.extend(connector_handles);
+        }
 
         for handle in handles {
             handle.await.unwrap();
