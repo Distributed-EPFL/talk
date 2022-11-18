@@ -8,18 +8,26 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use parking_lot::Mutex as ParkingMutex;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::{sync::Mutex as TokioMutex, time};
 
 pub struct PlexConnector {
     connector: Arc<dyn NetConnector>,
     pool: Arc<ParkingMutex<Pool>>,
+    cursor: AtomicUsize,
     settings: PlexConnectorSettings,
     _fuse: Fuse,
 }
 
 struct Pool {
-    multiplexes: HashMap<Identity, Arc<TokioMutex<Vec<ConnectMultiplex>>>>,
+    multiplexes: HashMap<Identity, Arc<TokioMutex<HashMap<usize, ConnectMultiplex>>>>,
 }
 
 #[derive(Doom)]
@@ -35,6 +43,7 @@ impl PlexConnector {
     {
         let connector = Arc::new(connector);
         let pool = Arc::new(ParkingMutex::new(Pool::new()));
+        let cursor = AtomicUsize::new(0);
 
         let fuse = Fuse::new();
 
@@ -43,6 +52,7 @@ impl PlexConnector {
         PlexConnector {
             connector,
             pool,
+            cursor,
             settings,
             _fuse: fuse,
         }
@@ -107,8 +117,9 @@ impl PlexConnector {
                         );
 
                         let (multiplex, _) = multiplex.split();
+                        let id = self.cursor.fetch_add(1, Ordering::Relaxed);
 
-                        multiplex
+                        (id, multiplex)
                     })
                     .take(missing),
             );
@@ -121,7 +132,7 @@ impl PlexConnector {
 
         // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
-        multiplexes.retain(|multiplex| multiplex.is_alive());
+        multiplexes.retain(|_, multiplex| multiplex.is_alive());
 
         // Select a `ConnectMultiplex` to `connect` on
 
@@ -142,18 +153,21 @@ impl PlexConnector {
             );
 
             let (multiplex, _) = multiplex.split();
+            let id = self.cursor.fetch_add(1, Ordering::Relaxed);
 
-            multiplexes.push(multiplex);
-            multiplexes.last_mut().unwrap()
+            multiplexes.insert(id, multiplex);
+            multiplexes.get_mut(&id).unwrap()
         } else {
             // The target number of `SecureConnection`s has been reached for `remote`:
             // return a reference to the least-loaded `ConnectMultiplex` in `multiplexes`
             // (i.e., the `ConnectMultiplex` managing the least `Plex`es)
 
-            multiplexes
+            let (_, multiplex) = multiplexes
                 .iter_mut()
-                .min_by_key(|multiplex| multiplex.plex_count())
-                .unwrap()
+                .min_by_key(|(_, multiplex)| multiplex.plex_count())
+                .unwrap();
+
+            multiplex
         };
 
         Ok(multiplex.connect().await)
@@ -169,11 +183,11 @@ impl PlexConnector {
 
                     // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
-                    multiplexes.retain(|multiplex| multiplex.is_alive());
+                    multiplexes.retain(|_, multiplex| multiplex.is_alive());
 
                     // `ping()` all remaining `ConnectMultiplex`es in `multiplexes`
 
-                    for multiplex in multiplexes.iter() {
+                    for (_, multiplex) in multiplexes.iter() {
                         multiplex.ping();
                     }
                 }
@@ -195,11 +209,14 @@ impl Pool {
         }
     }
 
-    fn get_multiplexes(&mut self, remote: Identity) -> Arc<TokioMutex<Vec<ConnectMultiplex>>> {
+    fn get_multiplexes(
+        &mut self,
+        remote: Identity,
+    ) -> Arc<TokioMutex<HashMap<usize, ConnectMultiplex>>> {
         self.multiplexes.entry(remote).or_default().clone()
     }
 
-    fn all_multiplexes(&mut self) -> Vec<Arc<TokioMutex<Vec<ConnectMultiplex>>>> {
+    fn all_multiplexes(&mut self) -> Vec<Arc<TokioMutex<HashMap<usize, ConnectMultiplex>>>> {
         self.multiplexes.values().cloned().collect()
     }
 
