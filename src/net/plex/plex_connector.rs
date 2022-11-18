@@ -8,11 +8,11 @@ use crate::{
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use parking_lot::Mutex as ParkingMutex;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{sync::Mutex as TokioMutex, time};
 
 pub struct PlexConnector {
-    connector: Box<dyn NetConnector>,
+    connector: Arc<dyn NetConnector>,
     pool: Arc<ParkingMutex<Pool>>,
     settings: PlexConnectorSettings,
     _fuse: Fuse,
@@ -33,7 +33,7 @@ impl PlexConnector {
     where
         C: NetConnector,
     {
-        let connector = Box::new(connector);
+        let connector = Arc::new(connector);
         let pool = Arc::new(ParkingMutex::new(Pool::new()));
 
         let fuse = Fuse::new();
@@ -45,6 +45,73 @@ impl PlexConnector {
             pool,
             settings,
             _fuse: fuse,
+        }
+    }
+
+    pub async fn fill<R>(&self, remotes: R, interval: Duration)
+    where
+        R: IntoIterator<Item = Identity>,
+    {
+        let fuse = Fuse::new();
+
+        let remote_handles = remotes
+            .into_iter()
+            .map(|remote| {
+                let connector = self.connector.clone();
+                let connections_per_remote = self.settings.connections_per_remote;
+
+                fuse.spawn(async move {
+                    let fuse = Fuse::new();
+
+                    let mut connect_handles = Vec::new();
+
+                    for _ in 0..connections_per_remote {
+                        let connector = connector.clone();
+
+                        let connect_handle =
+                            fuse.spawn(async move { connector.connect(remote).await });
+
+                        connect_handles.push(connect_handle);
+                        time::sleep(interval).await;
+                    }
+
+                    let mut connections = Vec::new();
+
+                    for connect_handle in connect_handles {
+                        if let Ok(connection) = connect_handle.await.unwrap().unwrap() {
+                            connections.push(connection)
+                        }
+                    }
+
+                    (remote, connections)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for remote_handle in remote_handles {
+            let (remote, connections) = remote_handle.await.unwrap().unwrap();
+
+            let multiplexes = self.pool.lock().get_multiplexes(remote);
+            let mut multiplexes = multiplexes.lock().await;
+
+            let missing = self.settings.connections_per_remote - multiplexes.len();
+
+            multiplexes.extend(
+                connections
+                    .into_iter()
+                    .map(|connection| {
+                        let multiplex = Multiplex::new(
+                            Role::Connector,
+                            connection,
+                            self.settings.multiplex_settings.clone(),
+                        );
+
+                        let (multiplex, _) = multiplex.split();
+
+                        multiplex
+                    })
+                    .take(missing),
+            );
         }
     }
 
