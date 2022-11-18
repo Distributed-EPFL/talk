@@ -152,8 +152,17 @@ impl Multiplex {
 
         let fuse = Fuse::new();
 
-        fuse.spawn(Multiplex::route_in(receiver, run_route_in_inlet));
-        fuse.spawn(Multiplex::route_out(sender, route_out_outlet));
+        fuse.spawn(async move {
+            if let Err(error) = Multiplex::route_in(receiver, run_route_in_inlet).await {
+                println!("ROUTE_IN ERROR: {error:?}");
+            }
+        });
+
+        fuse.spawn(async move {
+            if let Err(error) = Multiplex::route_out(sender, route_out_outlet).await {
+                println!("ROUTE_OUT ERROR: {error:?}");
+            }
+        });
 
         let mut plex_handles = HashMap::new();
 

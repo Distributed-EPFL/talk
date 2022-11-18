@@ -164,7 +164,16 @@ impl PlexConnector {
 
         // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
+        let before = multiplexes.len();
         multiplexes.retain(|_, multiplex| multiplex.is_alive());
+        let after = multiplexes.len();
+
+        if after < before {
+            println!(
+                "WARNING: {} multiplexes were lost in battle!",
+                before - after
+            );
+        }
 
         // If `multiplex_id` is `Some`, try connecting on `multiplex_id`
 
@@ -223,7 +232,16 @@ impl PlexConnector {
 
                     // Prune all dead `ConnectMultiplex`es in `multiplexes`
 
+                    let before = multiplexes.len();
                     multiplexes.retain(|_, multiplex| multiplex.is_alive());
+                    let after = multiplexes.len();
+
+                    if after < before {
+                        println!(
+                            "WARNING: {} multiplexes were lost in battle!",
+                            before - after
+                        );
+                    }
 
                     // `ping()` all remaining `ConnectMultiplex`es in `multiplexes`
 
