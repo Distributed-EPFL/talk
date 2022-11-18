@@ -141,6 +141,24 @@ impl PlexConnector {
     }
 
     pub async fn connect(&self, remote: Identity) -> Result<Plex, Top<PlexConnectorError>> {
+        let (_, plex) = self.connect_with_option_affinity(remote, None).await?;
+        Ok(plex)
+    }
+
+    pub async fn connect_with_affinity(
+        &self,
+        remote: Identity,
+        multiplex_id: MultiplexId,
+    ) -> Result<(MultiplexId, Plex), Top<PlexConnectorError>> {
+        self.connect_with_option_affinity(remote, Some(multiplex_id))
+            .await
+    }
+
+    async fn connect_with_option_affinity(
+        &self,
+        remote: Identity,
+        multiplex_id: Option<MultiplexId>,
+    ) -> Result<(MultiplexId, Plex), Top<PlexConnectorError>> {
         let multiplexes = self.pool.lock().get_multiplexes(remote);
         let mut multiplexes = multiplexes.lock().await;
 
@@ -148,9 +166,17 @@ impl PlexConnector {
 
         multiplexes.retain(|_, multiplex| multiplex.is_alive());
 
-        // Select a `ConnectMultiplex` to `connect` on
+        // If `multiplex_id` is `Some`, try connecting on `multiplex_id`
 
-        let multiplex = if multiplexes.len() < self.settings.connections_per_remote {
+        if let Some(multiplex_id) = multiplex_id {
+            if let Some(multiplex) = multiplexes.get(&multiplex_id.0) {
+                return Ok((multiplex_id, multiplex.connect().await));
+            }
+        }
+
+        // Establish a new `SecureConnection`, or connect on the least busy `ConnectMultiplex`
+
+        let (id, multiplex) = if multiplexes.len() < self.settings.connections_per_remote {
             // More `SecureConnection`s can still be established to `remote`: add
             // a new `ConnectMultiplex` to `multiplexes` and return its reference
 
@@ -170,21 +196,21 @@ impl PlexConnector {
             let id = self.cursor.fetch_add(1, Ordering::Relaxed);
 
             multiplexes.insert(id, multiplex);
-            multiplexes.get_mut(&id).unwrap()
+            (id, multiplexes.get_mut(&id).unwrap())
         } else {
             // The target number of `SecureConnection`s has been reached for `remote`:
             // return a reference to the least-loaded `ConnectMultiplex` in `multiplexes`
             // (i.e., the `ConnectMultiplex` managing the least `Plex`es)
 
-            let (_, multiplex) = multiplexes
+            let (id, multiplex) = multiplexes
                 .iter_mut()
                 .min_by_key(|(_, multiplex)| multiplex.plex_count())
                 .unwrap();
 
-            multiplex
+            (*id, multiplex)
         };
 
-        Ok(multiplex.connect().await)
+        Ok((MultiplexId(id), multiplex.connect().await))
     }
 
     async fn keep_alive(pool: Arc<ParkingMutex<Pool>>, settings: PlexConnectorSettings) {
