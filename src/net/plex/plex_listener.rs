@@ -46,13 +46,19 @@ impl PlexListener {
         let fuse = Fuse::new();
 
         loop {
-            if let Ok((remote, connection)) = listener.accept().await {
+            let connection = listener.accept().await;
+
+            if let Ok((remote, connection)) = connection {
                 fuse.spawn(PlexListener::serve(
                     remote,
                     connection,
                     accept_inlet.clone(),
                     settings.multiplex_settings.clone(),
                 ));
+            } else {
+                if let Err(e) = connection {
+                    println!("Error listening! {:?}", e);
+                }
             }
         }
     }
