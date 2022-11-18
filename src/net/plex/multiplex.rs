@@ -98,7 +98,7 @@ impl Multiplex {
             let settings = settings.clone();
 
             fuse.spawn(async move {
-                let _ = Multiplex::run(
+                let result = Multiplex::run(
                     connection,
                     run_plex_outlet,
                     accept_inlet,
@@ -106,6 +106,8 @@ impl Multiplex {
                     settings,
                 )
                 .await;
+
+                println!("RUN RETURNED WITH {result:?}");
 
                 info.is_alive.store(false, Ordering::Relaxed);
             });
