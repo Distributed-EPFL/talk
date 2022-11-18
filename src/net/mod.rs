@@ -42,7 +42,7 @@ pub use plain_connection::{PlainConnection, PlainConnectionError};
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
 pub use plex::{
-    MultiplexSettings, Plex, PlexConnector, PlexConnectorSettings, PlexListener,
+    MultiplexId, MultiplexSettings, Plex, PlexConnector, PlexConnectorSettings, PlexListener,
     PlexListenerSettings, PlexSettings,
 };
 pub use receiver_settings::ReceiverSettings;

@@ -1,7 +1,7 @@
 use crate::{
     crypto::Identity,
     net::{
-        plex::{ConnectMultiplex, Multiplex, Plex, PlexConnectorSettings, Role},
+        plex::{ConnectMultiplex, Multiplex, MultiplexId, Plex, PlexConnectorSettings, Role},
         Connector as NetConnector,
     },
     sync::fuse::Fuse,
@@ -55,6 +55,20 @@ impl PlexConnector {
             cursor,
             settings,
             _fuse: fuse,
+        }
+    }
+
+    pub async fn multiplexes_to(&self, remote: Identity) -> Vec<MultiplexId> {
+        if let Some(multiplexes) = self.pool.lock().multiplexes.get(&remote) {
+            let multiplexes = multiplexes.lock().await;
+
+            multiplexes
+                .keys()
+                .copied()
+                .map(MultiplexId)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
         }
     }
 
