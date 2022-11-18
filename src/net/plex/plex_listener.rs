@@ -69,5 +69,7 @@ impl PlexListener {
         while let Ok(plex) = listen_multiplex.accept().await {
             let _ = accept_inlet.send((remote, plex)).await;
         }
+
+        println!("RETURNING FROM SERVE");
     }
 }
