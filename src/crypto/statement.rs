@@ -1,5 +1,4 @@
 use crate::crypto::Scope;
-
 use serde::Serialize;
 
 pub trait Statement: Serialize {

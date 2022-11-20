@@ -2,11 +2,8 @@ use crate::{
     crypto::Identity,
     net::{ConnectionSettings, SecureConnection, SecureConnectionError},
 };
-
 use doomstack::Top;
-
-use serde::{Deserialize, Serialize};
-
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::mpsc::Sender;
 
 type ConnectionInlet = Sender<(Identity, SecureConnection)>;
@@ -34,6 +31,14 @@ impl Session {
         self.connection.configure(settings)
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.connection.free_send_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.connection.free_receive_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
@@ -41,11 +46,22 @@ impl Session {
         self.connection.send(message).await
     }
 
+    pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<SecureConnectionError>> {
+        self.connection.send_bytes(message).await
+    }
+
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.connection.send_plain(message).await
+    }
+
+    pub async fn send_plain_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
+        self.connection.send_plain_bytes(message).await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
@@ -64,21 +80,29 @@ impl Session {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive().await
     }
 
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.connection.receive_bytes().await
+    }
+
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive_plain().await
     }
 
+    pub async fn receive_plain_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.connection.receive_plain_bytes().await
+    }
+
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.connection.receive_raw().await
     }

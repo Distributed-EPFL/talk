@@ -3,9 +3,7 @@ use crate::{
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
     net::traits::{Connect, ConnectSettings},
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use std::{io, net::SocketAddr, vec::Vec};
 
 pub struct Client {
@@ -147,16 +145,12 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{
         crypto::KeyChain,
         link::rendezvous::{Server, ServerSettings},
     };
-
     use std::time::Duration;
-
-    use tokio::net::lookup_host;
-    use tokio::time;
+    use tokio::{net::lookup_host, time};
 
     async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {
         let addr = lookup_host(address).await.unwrap().next().unwrap();

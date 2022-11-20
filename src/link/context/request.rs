@@ -1,5 +1,4 @@
 use crate::link::context::ContextId;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

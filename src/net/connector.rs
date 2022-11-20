@@ -1,7 +1,5 @@
-use async_trait::async_trait;
-
 use crate::{crypto::Identity, net::SecureConnection};
-
+use async_trait::async_trait;
 use doomstack::Stack;
 
 #[async_trait]

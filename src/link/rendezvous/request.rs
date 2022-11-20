@@ -2,7 +2,6 @@ use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::ShardId,
 };
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

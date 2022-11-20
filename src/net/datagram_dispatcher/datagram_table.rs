@@ -1,5 +1,4 @@
 use crate::net::datagram_dispatcher::Message;
-
 use std::{collections::VecDeque, net::SocketAddr};
 
 pub(in crate::net::datagram_dispatcher) struct DatagramTable {
@@ -23,8 +22,7 @@ impl DatagramTable {
         if index >= self.offset {
             self.datagrams
                 .get(index - self.offset)
-                .map(Option::as_ref)
-                .flatten()
+                .and_then(Option::as_ref)
         } else {
             None
         }
@@ -35,8 +33,7 @@ impl DatagramTable {
             let datagram = self
                 .datagrams
                 .get_mut(index - self.offset)
-                .map(Option::take)
-                .flatten();
+                .and_then(Option::take);
 
             while let Some(None) = self.datagrams.front() {
                 self.datagrams.pop_front();
@@ -48,12 +45,15 @@ impl DatagramTable {
             None
         }
     }
+
+    pub fn cursor(&self) -> usize {
+        self.offset + self.datagrams.len()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::net::datagram_dispatcher::MAXIMUM_TRANSMISSION_UNIT;
 
     #[test]

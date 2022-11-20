@@ -1,9 +1,6 @@
 use doomstack::{Doom, Top};
-
 use futures::stream::{FuturesUnordered, StreamExt};
-
 use std::time::Duration;
-
 use tokio::{task::JoinHandle, time};
 
 const TIMEOUT: Duration = Duration::from_secs(5);

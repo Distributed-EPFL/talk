@@ -2,7 +2,6 @@ use crate::{
     time::{sleep_schedules::CappedExponential, SleepSchedule},
     unicast::Acknowledgement,
 };
-
 use std::{sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
@@ -54,7 +53,6 @@ impl Default for PartialPushSettings {
 #[cfg(test)]
 mod test {
     use super::*;
-
     use crate::time::sleep_schedules::Constant;
 
     impl PushSettings {

@@ -7,17 +7,13 @@ use crate::{
         Request, SenderSettings,
     },
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use parking_lot::Mutex;
-
 use std::{
     collections::{hash_map::Entry, HashMap},
     sync::Arc,
     time::Instant,
 };
-
 use tokio::{sync::oneshot::Receiver, task::JoinHandle, time};
 
 type AcknowledgementOutlet = Receiver<Result<Acknowledgement, Top<CasterError>>>;

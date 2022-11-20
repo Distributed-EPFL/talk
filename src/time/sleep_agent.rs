@@ -1,7 +1,5 @@
 use crate::time::SleepSchedule;
-
 use std::time::Duration;
-
 use tokio::time;
 
 pub struct SleepAgent<'a> {

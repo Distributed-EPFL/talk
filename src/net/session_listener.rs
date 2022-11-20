@@ -3,11 +3,8 @@ use crate::{
     net::{session_control::SessionControl, Listener, SecureConnection, Session},
     sync::fuse::Fuse,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use std::time::{Duration, Instant};
-
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 type ConnectionInlet = Sender<(Identity, SecureConnection)>;

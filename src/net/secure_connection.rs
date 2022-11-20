@@ -9,11 +9,8 @@ use crate::{
     },
     net::{ConnectionSettings, PlainConnection, SecureReceiver, SecureSender},
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
-use serde::{Deserialize, Serialize};
-
+use serde::{de::DeserializeOwned, Serialize};
 use std::io;
 
 pub struct SecureConnection {
@@ -108,6 +105,14 @@ impl SecureConnection {
         self.receiver.configure(receiver_settings);
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.sender.free_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.receiver.free_buffer();
+    }
+
     pub async fn authenticate(
         &mut self,
         keychain: &KeyChain,
@@ -149,11 +154,22 @@ impl SecureConnection {
         self.sender.send(message).await
     }
 
+    pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<SecureConnectionError>> {
+        self.sender.send_bytes(message).await
+    }
+
     pub async fn send_plain<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
     where
         M: Serialize,
     {
         self.sender.send_plain(message).await
+    }
+
+    pub async fn send_plain_bytes(
+        &mut self,
+        message: &[u8],
+    ) -> Result<(), Top<SecureConnectionError>> {
+        self.sender.send_plain_bytes(message).await
     }
 
     pub async fn send_raw<M>(&mut self, message: &M) -> Result<(), Top<SecureConnectionError>>
@@ -172,21 +188,29 @@ impl SecureConnection {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive().await
     }
 
+    pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receiver.receive_bytes().await
+    }
+
     pub async fn receive_plain<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive_plain().await
     }
 
+    pub async fn receive_plain_bytes(&mut self) -> Result<Vec<u8>, Top<SecureConnectionError>> {
+        self.receiver.receive_plain_bytes().await
+    }
+
     pub async fn receive_raw<M>(&mut self) -> Result<M, Top<SecureConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive_raw().await
     }
@@ -209,9 +233,7 @@ impl Statement for IdentityChallenge {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::net::SocketAddr;
-
     use tokio::net::{TcpListener, TcpStream};
 
     async fn new_listener() -> (TcpListener, SocketAddr) {

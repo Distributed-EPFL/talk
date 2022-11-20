@@ -1,15 +1,11 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ConnectorSettings},
     net::{traits::Connect, Connector as NetConnector, SecureConnection},
 };
-
+use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack, Top};
-
 use parking_lot::Mutex;
-
 use std::{collections::HashMap, io, net::SocketAddr, sync::Arc};
 
 pub struct Connector {
@@ -129,7 +125,6 @@ impl NetConnector for Connector {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{
         link::rendezvous::{Listener, Server},
         net::Listener as NetListener,

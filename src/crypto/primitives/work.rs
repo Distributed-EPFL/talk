@@ -1,9 +1,6 @@
 use crate::crypto::{primitives::hash, Statement};
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::{Deserialize, Serialize};
-
 use std::convert::TryInto;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

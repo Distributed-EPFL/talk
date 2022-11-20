@@ -3,17 +3,13 @@ use crate::{
     net::{Connector as NetConnector, SecureConnection, Session, SessionControl},
     sync::{fuse::Fuse, lenders::AtomicLender},
 };
-
 use doomstack::{here, Doom, ResultExt, Stack, Top};
-
 use parking_lot::Mutex;
-
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
-
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     time,
@@ -204,9 +200,7 @@ impl SessionConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::net::{test::System, SessionListener};
-
     use futures::stream::{FuturesUnordered, StreamExt};
 
     #[tokio::test]

@@ -1,16 +1,18 @@
 use crate::crypto::{
     primitives::{
         hash,
-        multi::{MultiError, PublicKey as MultiPublicKey, Signature as MultiSignature},
-        sign::{PublicKey as SignPublicKey, SignError, Signature as SignSignature},
+        multi::{
+            MultiError, PublicKey as MultiPublicKey, Signature as MultiSignature,
+            Signer as MultiSigner,
+        },
+        sign::{
+            PublicKey as SignPublicKey, SignError, Signature as SignSignature, Signer as SignSigner,
+        },
     },
     Identity, KeyChain, Statement,
 };
-
 use doomstack::Top;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     hash::{Hash, Hasher},
@@ -30,16 +32,16 @@ struct PublicKeys {
 
 impl KeyCard {
     pub fn from_keychain(keychain: &KeyChain) -> Self {
-        let keys = PublicKeys {
-            sign: keychain.keypairs.sign.public(),
-            multi: keychain.keypairs.multi.public(),
-        };
-
-        KeyCard::from_keys(keys)
+        KeyCard::from_public_keys(
+            keychain.keypairs.sign.public(),
+            keychain.keypairs.multi.public(),
+        )
     }
 
-    fn from_keys(keys: PublicKeys) -> Self {
+    pub fn from_public_keys(sign: SignPublicKey, multi: MultiPublicKey) -> Self {
+        let keys = PublicKeys { sign, multi };
         let identity = Identity::from_hash(hash::hash(&keys).unwrap());
+
         KeyCard { identity, keys }
     }
 
@@ -49,27 +51,30 @@ impl KeyCard {
 }
 
 impl SignSignature {
-    pub fn verify<S>(&self, keycard: &KeyCard, message: &S) -> Result<(), Top<SignError>>
+    pub fn verify<R, S>(&self, signer: &R, message: &S) -> Result<(), Top<SignError>>
     where
+        R: SignSigner,
         S: Statement,
     {
-        self.verify_raw(keycard.keys.sign, &(S::SCOPE, S::HEADER, message))
+        self.verify_raw(signer.public_key(), &(S::SCOPE, S::HEADER, message))
     }
 
-    pub fn batch_verify<'a, KI, MI, M, SI>(
-        keycards: KI,
+    pub fn batch_verify<'a, RI, R, MI, M, SI>(
+        signers: RI,
         messages: MI,
         signatures: SI,
     ) -> Result<(), Top<SignError>>
     where
-        KI: IntoIterator<Item = &'a KeyCard>,
+        RI: IntoIterator<Item = &'a R>,
+        R: 'a + SignSigner,
         MI: IntoIterator<Item = &'a M>,
         M: 'a + Statement,
         SI: IntoIterator<Item = &'a SignSignature>,
     {
-        let public_keys = keycards
+        let public_keys = signers
             .into_iter()
-            .map(|keycard| keycard.keys.sign)
+            .map(SignSigner::public_key)
+            .copied()
             .collect::<Vec<_>>();
 
         let messages = messages
@@ -86,15 +91,28 @@ impl SignSignature {
 }
 
 impl MultiSignature {
-    pub fn verify<'c, C, S>(&self, cards: C, message: &S) -> Result<(), Top<MultiError>>
+    pub fn verify<'c, RI, R, S>(&self, signers: RI, message: &S) -> Result<(), Top<MultiError>>
     where
-        C: IntoIterator<Item = &'c KeyCard>,
+        RI: IntoIterator<Item = &'c R>,
+        R: 'c + MultiSigner,
         S: Statement,
     {
         self.verify_raw(
-            cards.into_iter().map(|card| &card.keys.multi),
+            signers.into_iter().map(|signer| signer.public_key()),
             &(S::SCOPE, S::HEADER, message),
         )
+    }
+}
+
+impl SignSigner for KeyCard {
+    fn public_key(&self) -> &SignPublicKey {
+        &self.keys.sign
+    }
+}
+
+impl MultiSigner for KeyCard {
+    fn public_key(&self) -> &MultiPublicKey {
+        &self.keys.multi
     }
 }
 
@@ -142,6 +160,6 @@ impl<'de> Deserialize<'de> for KeyCard {
         D: Deserializer<'de>,
     {
         let keys = PublicKeys::deserialize(deserializer)?;
-        Ok(KeyCard::from_keys(keys))
+        Ok(KeyCard::from_public_keys(keys.sign, keys.multi))
     }
 }

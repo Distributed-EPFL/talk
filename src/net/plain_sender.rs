@@ -3,11 +3,8 @@ use crate::{
     net::{PlainConnectionError, SecureSender, SenderSettings, Socket, UnitSender},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use serde::Serialize;
-
 use tokio::io::WriteHalf;
 
 pub struct PlainSender {
@@ -34,6 +31,10 @@ impl PlainSender {
         self.unit_sender.write_half()
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_sender.free_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
@@ -43,18 +44,17 @@ impl PlainSender {
             .map_err(Doom::into_top)
             .spot(here!())?;
 
-        time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
-            .await
-            .pot(PlainConnectionError::SendTimeout, here!())?
-            .map_err(PlainConnectionError::write_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())
+        self.send_unit().await
     }
 
     pub async fn send_bytes(&mut self, message: &[u8]) -> Result<(), Top<PlainConnectionError>> {
         self.unit_sender.as_vec().clear();
         self.unit_sender.as_vec().extend_from_slice(message);
 
+        self.send_unit().await
+    }
+
+    async fn send_unit(&mut self) -> Result<(), Top<PlainConnectionError>> {
         time::optional_timeout(self.settings.send_timeout, self.unit_sender.flush())
             .await
             .pot(PlainConnectionError::SendTimeout, here!())?

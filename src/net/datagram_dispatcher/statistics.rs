@@ -1,6 +1,7 @@
 use atomic_counter::RelaxedCounter;
 
-pub(in crate::net::datagram_dispatcher) struct Statistics {
+#[derive(Debug)]
+pub struct Statistics {
     pub packets_sent: RelaxedCounter,
     pub packets_received: RelaxedCounter,
     pub message_packets_processed: RelaxedCounter,

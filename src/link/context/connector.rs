@@ -1,15 +1,11 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::Identity,
     link::context::{connect_dispatcher::Database, ContextId, Request, Response},
     net::{Connector as NetConnector, SecureConnection},
 };
-
+use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack};
-
 use parking_lot::Mutex;
-
 use std::sync::Arc;
 
 pub struct Connector {

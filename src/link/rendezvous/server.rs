@@ -1,21 +1,16 @@
 use crate::{
     crypto::{Identity, KeyCard},
-    link::rendezvous::listener::RawListener,
-    link::rendezvous::{Request, Response, ServerSettings, ShardId},
+    link::rendezvous::{listener::RawListener, Request, Response, ServerSettings, ShardId},
     net::{traits::TransportProtocol, PlainConnection},
     sync::fuse::Fuse,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use parking_lot::Mutex;
-
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::Arc,
 };
-
 use tokio::{io, net::TcpListener};
 use tokio_udt::UdtListener;
 

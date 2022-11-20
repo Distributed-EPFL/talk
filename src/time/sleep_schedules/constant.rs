@@ -1,5 +1,4 @@
 use crate::time::SleepSchedule;
-
 use std::time::Duration;
 
 #[derive(Debug)]

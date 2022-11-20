@@ -3,11 +3,8 @@ use crate::{
     net::{PlainConnectionError, ReceiverSettings, SecureReceiver, Socket, UnitReceiver},
     time,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
-use serde::Deserialize;
-
+use serde::de::DeserializeOwned;
 use tokio::io::ReadHalf;
 
 pub struct PlainReceiver {
@@ -34,16 +31,15 @@ impl PlainReceiver {
         self.unit_receiver.read_half()
     }
 
+    pub fn free_buffer(&mut self) {
+        self.unit_receiver.free_buffer();
+    }
+
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
-        time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
-            .await
-            .pot(PlainConnectionError::ReceiveTimeout, here!())?
-            .map_err(PlainConnectionError::read_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        self.receive_unit().await?;
 
         bincode::deserialize(self.unit_receiver.as_slice())
             .map_err(PlainConnectionError::deserialize_failed)
@@ -52,14 +48,18 @@ impl PlainReceiver {
     }
 
     pub async fn receive_bytes(&mut self) -> Result<Vec<u8>, Top<PlainConnectionError>> {
+        self.receive_unit().await?;
+
+        Ok(self.unit_receiver.as_vec().clone())
+    }
+
+    async fn receive_unit(&mut self) -> Result<(), Top<PlainConnectionError>> {
         time::optional_timeout(self.settings.receive_timeout, self.unit_receiver.receive())
             .await
             .pot(PlainConnectionError::ReceiveTimeout, here!())?
             .map_err(PlainConnectionError::read_failed)
             .map_err(Doom::into_top)
-            .spot(here!())?;
-
-        Ok(self.unit_receiver.as_vec().clone())
+            .spot(here!())
     }
 
     pub(in crate::net) fn secure(self, channel_receiver: ChannelReceiver) -> SecureReceiver {

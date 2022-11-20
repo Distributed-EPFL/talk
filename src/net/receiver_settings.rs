@@ -1,5 +1,4 @@
 use crate::net::ConnectionSettings;
-
 use std::time::Duration;
 
 #[derive(Debug, Clone)]

@@ -1,5 +1,4 @@
 use crate::unicast::{Acknowledgement, Response};
-
 use tokio::sync::mpsc::Sender;
 
 type ResponseInlet = Sender<Response>;

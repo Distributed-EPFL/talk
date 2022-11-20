@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ListenerSettings},
@@ -9,15 +7,15 @@ use crate::{
     },
     sync::fuse::Fuse,
 };
-
+use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack, Top};
-
 use std::net::Ipv4Addr;
-
-use tokio::net::TcpListener;
-use tokio::sync::{
-    mpsc,
-    mpsc::{Receiver, Sender},
+use tokio::{
+    net::TcpListener,
+    sync::{
+        mpsc,
+        mpsc::{Receiver, Sender},
+    },
 };
 
 use tokio_udt::UdtListener;

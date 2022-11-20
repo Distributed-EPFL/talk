@@ -1,9 +1,6 @@
 use rand::rngs::OsRng;
-
 use serde::{Deserialize, Serialize};
-
 use std::fmt::{Debug, Error as FmtError, Formatter};
-
 use x25519_dalek::{
     EphemeralSecret as XEphemeralSecret, PublicKey as XPublicKey, SharedSecret as XSharedSecret,
 };

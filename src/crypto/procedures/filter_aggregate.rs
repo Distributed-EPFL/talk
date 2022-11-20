@@ -1,8 +1,11 @@
-use crate::crypto::{primitives::multi::Signature, KeyCard, Statement};
+use crate::crypto::{
+    primitives::multi::{Signature, Signer},
+    Statement,
+};
 
-struct Entry<'a> {
+struct Entry<'a, R> {
     index: usize,
-    keycard: &'a KeyCard,
+    signer: &'a R,
     signature: &'a Signature,
 }
 
@@ -11,17 +14,18 @@ struct AggregationNode {
     children: Option<(Box<AggregationNode>, Box<AggregationNode>)>,
 }
 
-pub fn filter_aggregate<'a, S, E>(statement: &S, entries: E) -> (Option<Signature>, Vec<usize>)
+pub fn filter_aggregate<'a, S, E, R>(statement: &S, entries: E) -> (Option<Signature>, Vec<usize>)
 where
     S: Sync + Statement,
-    E: IntoIterator<Item = (&'a KeyCard, &'a Signature)>,
+    E: IntoIterator<Item = (&'a R, &'a Signature)>,
+    R: 'a + Sync + Signer,
 {
     let entries = entries
         .into_iter()
         .enumerate()
-        .map(|(index, (keycard, signature))| Entry {
+        .map(|(index, (signer, signature))| Entry {
             index,
-            keycard,
+            signer,
             signature,
         })
         .collect::<Vec<_>>();
@@ -34,7 +38,10 @@ where
     }
 }
 
-fn aggregation_tree(entries: &[Entry], chunk: usize) -> AggregationNode {
+fn aggregation_tree<'a, R>(entries: &[Entry<'a, R>], chunk: usize) -> AggregationNode
+where
+    R: 'a + Sync + Signer,
+{
     if entries.len() > chunk {
         let mid = entries.len() / 2;
         let (left_entries, right_entries) = entries.split_at(mid);
@@ -64,13 +71,14 @@ fn aggregation_tree(entries: &[Entry], chunk: usize) -> AggregationNode {
     }
 }
 
-fn filter_recursion<S>(
+fn filter_recursion<'a, S, R>(
     statement: &S,
-    entries: &[Entry],
+    entries: &[Entry<'a, R>],
     aggregation_node: Option<AggregationNode>,
 ) -> (Option<Signature>, Vec<usize>)
 where
     S: Sync + Statement,
+    R: 'a + Sync + Signer,
 {
     let (signature, children) = match aggregation_node {
         Some(aggregation_node) => (aggregation_node.signature, aggregation_node.children),
@@ -83,7 +91,7 @@ where
         }
     };
 
-    let keycards = entries.iter().map(|entry| entry.keycard);
+    let keycards = entries.iter().map(|entry| entry.signer);
     let signature = signature.filter(|signature| signature.verify(keycards, statement).is_ok());
 
     if signature.is_some() {
@@ -93,13 +101,14 @@ where
     }
 }
 
-fn filter_split<S>(
+fn filter_split<'a, S, R>(
     statement: &S,
-    entries: &[Entry],
+    entries: &[Entry<'a, R>],
     aggregation_children: Option<(Box<AggregationNode>, Box<AggregationNode>)>,
 ) -> (Option<Signature>, Vec<usize>)
 where
     S: Sync + Statement,
+    R: 'a + Sync + Signer,
 {
     if entries.len() == 1 {
         let index = entries.first().unwrap().index;
@@ -139,11 +148,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::crypto::KeyChain;
-
+    use crate::crypto::{KeyCard, KeyChain};
     use serde::Serialize;
-
     use std::iter;
 
     #[derive(Serialize)]
@@ -159,7 +165,10 @@ mod tests {
 
     #[test]
     fn empty() {
-        let (signature, exceptions) = filter_aggregate(&TestStatement::Correct, vec![]);
+        let (signature, exceptions) = filter_aggregate(
+            &TestStatement::Correct,
+            Vec::<(&KeyCard, &Signature)>::new(),
+        );
 
         assert!(signature.is_none());
         assert!(exceptions.is_empty());

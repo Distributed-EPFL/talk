@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 
-pub trait Message: 'static + Send + Sync + Serialize + for<'de> Deserialize<'de> {}
+pub trait Message: 'static + Send + Sync + Serialize + DeserializeOwned {}
 
-impl<M> Message for M where M: 'static + Send + Sync + Serialize + for<'de> Deserialize<'de> {}
+impl<M> Message for M where M: 'static + Send + Sync + Serialize + DeserializeOwned {}

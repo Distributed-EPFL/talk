@@ -2,9 +2,7 @@ use crate::{
     link::context::{Connector, ContextId},
     net::Connector as NetConnector,
 };
-
 use parking_lot::Mutex;
-
 use std::{collections::HashSet, sync::Arc};
 
 pub struct ConnectDispatcher {

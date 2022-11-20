@@ -2,7 +2,6 @@ use crate::{
     net::traits::ConnectSettings,
     time::{sleep_schedules::CappedExponential, SleepSchedule},
 };
-
 use std::{sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]

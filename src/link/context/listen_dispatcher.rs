@@ -4,16 +4,12 @@ use crate::{
     net::{Listener as NetListener, SecureConnection},
     sync::fuse::Fuse,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
 use parking_lot::Mutex;
-
 use std::{
     collections::{hash_map::Entry, HashMap},
     sync::Arc,
 };
-
 use tokio::sync::mpsc::{self, Sender};
 
 type Inlet = Sender<(Identity, SecureConnection)>;

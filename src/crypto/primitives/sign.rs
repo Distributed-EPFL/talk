@@ -1,14 +1,10 @@
 use doomstack::{here, Doom, ResultExt, Top};
-
 use ed25519_dalek::{
     Keypair as EdKeyPair, PublicKey as EdPublicKey, Signature as EdSignature, Signer as EdSigner,
     Verifier as EdVerifier,
 };
-
-use rand::rngs::OsRng;
-
+use rand::{rngs::OsRng, CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     convert::TryInto,
@@ -27,6 +23,10 @@ pub struct PublicKey(EdPublicKey);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Signature(EdSignature);
+
+pub trait Signer {
+    fn public_key(&self) -> &PublicKey;
+}
 
 #[derive(Doom)]
 pub enum SignError {
@@ -61,7 +61,14 @@ pub enum SignError {
 impl KeyPair {
     /// Generates a random `KeyPair` to be used for signing.
     pub fn random() -> Self {
-        let keypair = EdKeyPair::generate(&mut OsRng);
+        KeyPair::from_rng(&mut OsRng)
+    }
+
+    pub fn from_rng<R>(rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        let keypair = EdKeyPair::generate(rng);
         KeyPair(keypair)
     }
 
@@ -105,7 +112,7 @@ impl KeyPair {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
@@ -183,11 +190,11 @@ impl Signature {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
-    pub fn verify_raw<M>(&self, public_key: PublicKey, message: &M) -> Result<(), Top<SignError>>
+    pub fn verify_raw<M>(&self, public_key: &PublicKey, message: &M) -> Result<(), Top<SignError>>
     where
         M: Serialize,
     {
@@ -230,7 +237,7 @@ impl Signature {
     /// let alice_signature = alice.sign_raw(&message).unwrap();
     ///
     /// assert!(alice_signature.verify_raw(
-    ///     alice.public(),
+    ///     &alice.public(),
     ///     &message,
     /// ).is_ok());
     /// ```
@@ -272,6 +279,12 @@ impl Signature {
             .map_err(SignError::verify_failed)
             .map_err(Doom::into_top)
             .spot(here!())
+    }
+}
+
+impl Signer for PublicKey {
+    fn public_key(&self) -> &PublicKey {
+        self
     }
 }
 
@@ -359,7 +372,7 @@ mod tests {
         let message: u32 = 1234;
         let signature = keypair.sign_raw(&message).unwrap();
 
-        signature.verify_raw(keypair.public(), &message).unwrap();
+        signature.verify_raw(&keypair.public(), &message).unwrap();
     }
 
     #[test]
@@ -370,7 +383,7 @@ mod tests {
 
         let message: u32 = 1235;
 
-        assert!(signature.verify_raw(keypair.public(), &message).is_err());
+        assert!(signature.verify_raw(&keypair.public(), &message).is_err());
     }
 
     #[test]
@@ -383,7 +396,7 @@ mod tests {
         signature[4] = signature[4].wrapping_add(1);
         let signature: Signature = bincode::deserialize(&signature).unwrap();
 
-        assert!(signature.verify_raw(keypair.public(), &message).is_err());
+        assert!(signature.verify_raw(&keypair.public(), &message).is_err());
     }
 
     #[test]
@@ -396,6 +409,6 @@ mod tests {
 
         let message = 42u64;
         let signature = deserialized.sign_raw(&message).unwrap();
-        signature.verify_raw(original.public(), &message).unwrap();
+        signature.verify_raw(&original.public(), &message).unwrap();
     }
 }

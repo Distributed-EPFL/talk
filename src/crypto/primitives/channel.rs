@@ -1,19 +1,14 @@
-use blake3::{Hash, Hasher};
-
-use chacha20poly1305::{
-    aead::{Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace, NewAead as ChaChaNewAead},
-    ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
-};
-
 use crate::crypto::primitives::{
     exchange::{Role, SharedKey},
     hash::HASH_LENGTH,
 };
-
-use serde::{Deserialize, Serialize};
-
+use blake3::{Hash, Hasher};
+use chacha20poly1305::{
+    aead::{Aead as ChaChaAead, AeadInPlace as ChaChaAeadInPlace, NewAead as ChaChaNewAead},
+    ChaCha20Poly1305, Key as ChaChaKey, Nonce as ChaChaNonce,
+};
 use doomstack::{here, Doom, ResultExt, Top};
-
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::convert::TryInto;
 
 const NONCE_LENGTH: usize = 12;
@@ -59,6 +54,12 @@ impl Sender {
         Ok(buffer)
     }
 
+    pub fn encrypt_bytes(&mut self, message: &[u8]) -> Vec<u8> {
+        let mut buffer = Vec::new(); // Create a `buffer` to encrypt into
+        self.encrypt_bytes_into(message, &mut buffer); // Encrypt `message` into `buffer`
+        buffer
+    }
+
     pub fn encrypt_into<M>(
         &mut self,
         message: &M,
@@ -72,18 +73,23 @@ impl Sender {
             .map_err(Doom::into_top)
             .spot(here!())?; // Serialize `message` into `buffer`
 
+        self.encrypt_buffer(buffer);
+
+        Ok(())
+    }
+
+    pub fn encrypt_bytes_into(&mut self, message: &[u8], buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&message);
+        self.encrypt_buffer(buffer);
+    }
+
+    fn encrypt_buffer(&mut self, buffer: &mut Vec<u8>) {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
             .cipher
-            .encrypt_in_place(
-                &ChaChaNonce::from_slice(&nonce),
-                &[],
-                buffer as &mut Vec<u8>,
-            )
+            .encrypt_in_place(&ChaChaNonce::from_slice(&nonce), &[], buffer)
             .unwrap(); // Encrypt `buffer` in place
-
-        Ok(())
     }
 
     pub fn authenticate<M>(&mut self, message: &M) -> Result<Vec<u8>, Top<ChannelError>>
@@ -93,6 +99,12 @@ impl Sender {
         let mut buffer = Vec::new(); // Create a `buffer` to authenticate into
         self.authenticate_into(message, &mut buffer)?; // Authenticate `message` into `buffer`
         Ok(buffer)
+    }
+
+    pub fn authenticate_bytes(&mut self, message: &[u8]) -> Vec<u8> {
+        let mut buffer = Vec::new(); // Create a `buffer` to authenticate into
+        self.authenticate_bytes_into(message, &mut buffer); // Authenticate `message` into `buffer`
+        buffer
     }
 
     pub fn authenticate_into<M>(
@@ -108,6 +120,17 @@ impl Sender {
             .map_err(Doom::into_top)
             .spot(here!())?; // Serialize `message` into `buffer`
 
+        self.authenticate_buffer(buffer);
+
+        Ok(())
+    }
+
+    pub fn authenticate_bytes_into(&mut self, message: &[u8], buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&message);
+        self.authenticate_buffer(buffer);
+    }
+
+    fn authenticate_buffer(&mut self, buffer: &mut Vec<u8>) {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0.hasher.reset(); // Compute the keyed hash..
@@ -117,24 +140,15 @@ impl Sender {
         let tag = self.0.hasher.finalize(); // .. to obtain `tag`
 
         buffer.extend_from_slice(tag.as_bytes()); // Append `tag` to `buffer`
-
-        Ok(())
     }
 }
 
 impl Receiver {
     pub fn decrypt<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
-        let nonce = self.0.nonce(); // Generate a new `nonce`
-
-        let message = self
-            .0
-            .cipher
-            .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
-            .map_err(|_| ChannelError::DecryptFailed.into_top())
-            .spot(here!())?; // Decrypt `ciphertext` to obtain `message`
+        let message = self.decrypt_bytes(ciphertext)?; // Decrypt `ciphertext` to obtain `message`
 
         bincode::deserialize(&message)
             .map_err(ChannelError::deserialize_failed)
@@ -142,10 +156,33 @@ impl Receiver {
             .spot(here!()) // Deserialize `message`
     }
 
+    pub fn decrypt_bytes(&mut self, ciphertext: &[u8]) -> Result<Vec<u8>, Top<ChannelError>> {
+        let nonce = self.0.nonce(); // Generate a new `nonce`
+
+        self.0
+            .cipher
+            .decrypt(&ChaChaNonce::from_slice(&nonce), ciphertext)
+            .map_err(|_| ChannelError::DecryptFailed.into_top())
+            .spot(here!())
+    }
+
     pub fn decrypt_in_place<M>(&mut self, ciphertext: &mut Vec<u8>) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
+        self.decrypt_bytes_in_place(ciphertext)?;
+        let plaintext = ciphertext; // `ciphertext` is now `plaintext`
+
+        bincode::deserialize(plaintext)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!()) // Deserialize `plaintext`
+    }
+
+    pub fn decrypt_bytes_in_place(
+        &mut self,
+        ciphertext: &mut Vec<u8>,
+    ) -> Result<(), Top<ChannelError>> {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         self.0
@@ -156,19 +193,25 @@ impl Receiver {
                 ciphertext as &mut Vec<u8>,
             )
             .map_err(|_| ChannelError::DecryptFailed.into_top())
-            .spot(here!())?; // Decrypt `ciphertext` in place
-
-        let plaintext = ciphertext; // `ciphertext` is now `plaintext`
-        bincode::deserialize(plaintext)
-            .map_err(ChannelError::deserialize_failed)
-            .map_err(Doom::into_top)
-            .spot(here!()) // Deserialize `plaintext`
+            .spot(here!()) // Decrypt `ciphertext` in place
     }
 
     pub fn authenticate<M>(&mut self, ciphertext: &[u8]) -> Result<M, Top<ChannelError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
+        let message = self.authenticate_bytes(ciphertext)?;
+
+        bincode::deserialize(message)
+            .map_err(ChannelError::deserialize_failed)
+            .map_err(Doom::into_top)
+            .spot(here!())
+    }
+
+    pub fn authenticate_bytes<'a>(
+        &mut self,
+        ciphertext: &'a [u8],
+    ) -> Result<&'a [u8], Top<ChannelError>> {
         let nonce = self.0.nonce(); // Generate a new `nonce`
 
         if ciphertext.len() < HASH_LENGTH {
@@ -188,10 +231,7 @@ impl Receiver {
 
             // IMPORTANT: The following equality MUST be computed between `Hash`es to ensure constant-time comparison!
             if tag == digest {
-                bincode::deserialize(message)
-                    .map_err(ChannelError::deserialize_failed)
-                    .map_err(Doom::into_top)
-                    .spot(here!()) // If `tag` is correct, deserialize `message`..
+                Ok(message)
             } else {
                 ChannelError::AuthenticateFailed.fail().spot(here!()) // .. otherwise, authentication failed
             }
@@ -246,7 +286,6 @@ pub fn channel(key: SharedKey, role: Role) -> (Sender, Receiver) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::crypto::primitives::exchange::KeyPair;
 
     fn setup() -> ((Sender, Receiver), (Sender, Receiver)) {

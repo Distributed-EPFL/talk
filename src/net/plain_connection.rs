@@ -1,11 +1,8 @@
 use crate::net::{
     ConnectionSettings, PlainReceiver, PlainSender, SecureConnection, SecureConnectionError, Socket,
 };
-
 use doomstack::{here, Doom, ResultExt, Top};
-
-use serde::{Deserialize, Serialize};
-
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::io;
 
 pub struct PlainConnection {
@@ -73,6 +70,14 @@ impl PlainConnection {
         self.receiver.configure(receiver_settings);
     }
 
+    pub fn free_send_buffer(&mut self) {
+        self.sender.free_buffer();
+    }
+
+    pub fn free_receive_buffer(&mut self) {
+        self.receiver.free_buffer();
+    }
+
     pub async fn send<M>(&mut self, message: &M) -> Result<(), Top<PlainConnectionError>>
     where
         M: Serialize,
@@ -86,7 +91,7 @@ impl PlainConnection {
 
     pub async fn receive<M>(&mut self) -> Result<M, Top<PlainConnectionError>>
     where
-        M: for<'de> Deserialize<'de>,
+        M: DeserializeOwned,
     {
         self.receiver.receive::<M>().await
     }
@@ -122,9 +127,7 @@ impl From<Box<dyn Socket>> for PlainConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use std::net::SocketAddr;
-
     use tokio::net::{TcpListener, TcpStream};
 
     async fn new_listener() -> (TcpListener, SocketAddr) {

@@ -1,5 +1,3 @@
-use atomic_counter::{AtomicCounter, RelaxedCounter};
-
 use crate::{
     net::{
         datagram_dispatcher::{
@@ -10,22 +8,24 @@ use crate::{
     },
     sync::fuse::{Fuse, Relay},
 };
-
+use atomic_counter::{AtomicCounter, RelaxedCounter};
 use doomstack::{here, Doom, ResultExt, Top};
-
+use socket2::Domain;
 use std::{
     cmp,
     collections::VecDeque,
-    io,
+    io::{self, ErrorKind},
     net::{SocketAddr, ToSocketAddrs, UdpSocket},
-    sync::Arc,
+    sync::{Arc, Mutex},
+};
+use tokio::{
+    task, time,
     time::{Duration, Instant},
 };
 
-use tokio::{
-    sync::mpsc::{self, error::TrySendError, Receiver as MpscReceiver, Sender as MpscSender},
-    task, time,
-};
+#[cfg(target_os = "linux")]
+use flume::TryRecvError;
+use flume::TrySendError;
 
 #[cfg(target_os = "linux")]
 use {
@@ -34,20 +34,19 @@ use {
     std::io::{IoSlice, IoSliceMut},
     std::net::{Ipv4Addr, SocketAddrV4},
     std::os::unix::io::AsRawFd,
-    tokio::sync::mpsc::error::TryRecvError,
 };
 
-type MessageInlet<M> = MpscSender<(SocketAddr, M)>;
-type MessageOutlet<M> = MpscReceiver<(SocketAddr, M)>;
+type MessageInlet<M> = flume::Sender<(SocketAddr, M)>;
+type MessageOutlet<M> = flume::Receiver<(SocketAddr, M)>;
 
-type DatagramInlet = MpscSender<(SocketAddr, Message)>;
-type DatagramOutlet = MpscReceiver<(SocketAddr, Message)>;
+type DatagramInlet = flume::Sender<(SocketAddr, Message)>;
+type DatagramOutlet = flume::Receiver<(SocketAddr, Message)>;
 
-type AcknowledgementInlet = MpscSender<(SocketAddr, usize)>;
-type AcknowledgementOutlet = MpscReceiver<(SocketAddr, usize)>;
+type AcknowledgementInlet = flume::Sender<(SocketAddr, usize)>;
+type AcknowledgementOutlet = flume::Receiver<(SocketAddr, usize)>;
 
-type CompletionInlet = MpscSender<usize>;
-type CompletionOutlet = MpscReceiver<usize>;
+type CompletionInlet = flume::Sender<usize>;
+type CompletionOutlet = flume::Receiver<usize>;
 
 pub struct DatagramDispatcher<S: NetMessage, R: NetMessage> {
     sender: DatagramSender<S>,
@@ -88,56 +87,25 @@ where
     where
         A: ToSocketAddrs,
     {
-        let socket = UdpSocket::bind(address)
-            .map_err(DatagramDispatcherError::bind_failed)
-            .map_err(DatagramDispatcherError::into_top)
-            .spot(here!())?;
+        let (receive_inlet, receive_outlet) = flume::bounded(settings.receive_channel_capacity);
 
-        let socket = Arc::new(socket);
+        let (process_in_inlet, process_in_outlet) =
+            flume::bounded(settings.process_in_channel_capacity);
 
-        let (receive_inlet, receive_outlet) = mpsc::channel(settings.receive_channel_capacity);
-
-        let mut process_in_inlets = Vec::new();
-        let mut process_in_outlets = Vec::new();
-
-        for _ in 0..settings.process_in_tasks {
-            let (process_in_inlet, process_in_outlet) =
-                mpsc::channel(settings.process_in_channel_capacity);
-
-            process_in_inlets.push(process_in_inlet);
-            process_in_outlets.push(process_in_outlet);
-        }
-
-        let mut process_out_inlets = Vec::new();
-        let mut process_out_outlets = Vec::new();
-
-        for _ in 0..settings.process_out_tasks {
-            let (process_out_inlet, process_out_outlet) =
-                mpsc::channel(settings.process_out_channel_capacity);
-
-            process_out_inlets.push(process_out_inlet);
-            process_out_outlets.push(process_out_outlet);
-        }
+        let (process_out_inlet, process_out_outlet) =
+            flume::bounded(settings.process_out_channel_capacity);
 
         let (pace_out_datagram_inlet, pace_out_datagram_outlet) =
-            mpsc::channel(settings.pace_out_datagram_channel_capacity);
+            flume::bounded(settings.pace_out_datagram_channel_capacity);
 
         let (pace_out_acknowledgement_inlet, pace_out_acknowledgement_outlet) =
-            mpsc::channel(settings.pace_out_acknowledgement_channel_capacity);
+            flume::bounded(settings.pace_out_acknowledgement_channel_capacity);
 
         let (pace_out_completion_inlet, pace_out_completion_outlet) =
-            mpsc::channel(settings.pace_out_completion_channel_capacity);
+            flume::bounded(settings.pace_out_completion_channel_capacity);
 
-        let mut route_out_inlets = Vec::new();
-        let mut route_out_outlets = Vec::new();
-
-        for _ in 0..settings.route_out_tasks {
-            let (route_out_inlet, route_out_outlet) =
-                mpsc::channel(settings.route_out_channel_capacity);
-
-            route_out_inlets.push(route_out_inlet);
-            route_out_outlets.push(route_out_outlet);
-        }
+        let (route_out_inlet, route_out_outlet) =
+            flume::bounded(settings.route_out_channel_capacity);
 
         let statistics = Statistics {
             packets_sent: RelaxedCounter::new(0),
@@ -154,16 +122,42 @@ where
 
         let fuse = Fuse::new();
 
-        {
-            let socket = socket.clone();
+        let sockets: Vec<Arc<UdpSocket>> = (0..settings.sockets)
+            .map(|_| {
+                address
+                    .to_socket_addrs()
+                    .and_then(|mut iter| {
+                        iter.next()
+                            .ok_or_else(|| io::Error::new(ErrorKind::InvalidInput, "no addr found"))
+                    })
+                    .and_then(|bind_addr| {
+                        socket2::Socket::new(
+                            Domain::for_address(bind_addr),
+                            socket2::Type::DGRAM,
+                            None,
+                        )
+                        .and_then(|socket| {
+                            socket.set_reuse_port(true)?;
+                            socket.bind(&bind_addr.into())?;
+                            Ok(Arc::new(socket.into()))
+                        })
+                    })
+                    .map_err(DatagramDispatcherError::bind_failed)
+                    .map_err(DatagramDispatcherError::into_top)
+                    .spot(here!())
+            })
+            .collect::<Result<_, _>>()?;
+
+        for socket in sockets.iter().cloned() {
             let settings = settings.clone();
             let statistics = statistics.clone();
             let relay = fuse.relay();
+            let process_in_inlet = process_in_inlet.clone();
 
             task::spawn_blocking(move || {
                 DatagramDispatcher::<S, R>::route_in(
-                    socket,
-                    process_in_inlets,
+                    &socket,
+                    process_in_inlet,
                     settings,
                     statistics,
                     relay,
@@ -171,8 +165,9 @@ where
             });
         }
 
-        for process_in_outlet in process_in_outlets {
+        for _ in 0..settings.process_in_tasks {
             let statistics = statistics.clone();
+            let process_in_outlet = process_in_outlet.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::process_in(
                 process_in_outlet,
@@ -183,35 +178,41 @@ where
             ));
         }
 
-        for process_out_outlet in process_out_outlets {
+        for _ in 0..settings.process_out_tasks {
+            let relay = fuse.relay();
+            let process_out_outlet = process_out_outlet.clone();
             fuse.spawn(DatagramDispatcher::<S, R>::process_out(
                 process_out_outlet,
                 pace_out_datagram_inlet.clone(),
+                relay,
             ));
         }
 
-        {
+        let datagram_table = Arc::new(Mutex::new(DatagramTable::new()));
+
+        for _ in 0..settings.pace_out_tasks {
             let statistics = statistics.clone();
             let settings = settings.clone();
 
             fuse.spawn(DatagramDispatcher::<S, R>::pace_out(
-                pace_out_datagram_outlet,
-                pace_out_acknowledgement_outlet,
-                pace_out_completion_outlet,
-                route_out_inlets,
+                datagram_table.clone(),
+                pace_out_datagram_outlet.clone(),
+                pace_out_acknowledgement_outlet.clone(),
+                pace_out_completion_outlet.clone(),
+                route_out_inlet.clone(),
                 statistics,
                 settings,
             ));
         }
 
-        for route_out_outlet in route_out_outlets {
-            let socket = socket.clone();
+        for socket in sockets {
             let settings = settings.clone();
             let statistics = statistics.clone();
+            let route_out_outlet = route_out_outlet.clone();
 
             task::spawn_blocking(move || {
                 DatagramDispatcher::<S, R>::route_out(
-                    socket,
+                    &socket,
                     route_out_outlet,
                     settings,
                     statistics,
@@ -222,13 +223,13 @@ where
         let fuse = Arc::new(fuse);
 
         let sender = DatagramSender::new(
-            process_out_inlets,
-            settings.clone(),
+            process_out_inlet,
+            settings,
             statistics.clone(),
             fuse.clone(),
         );
 
-        let receiver = DatagramReceiver::new(receive_outlet, statistics.clone(), fuse);
+        let receiver = DatagramReceiver::new(receive_outlet, statistics, fuse);
 
         Ok(DatagramDispatcher { sender, receiver })
     }
@@ -286,8 +287,8 @@ where
 
     #[cfg(not(target_os = "linux"))]
     fn route_in(
-        socket: Arc<UdpSocket>,
-        process_in_inlets: Vec<DatagramInlet>,
+        socket: &UdpSocket,
+        process_in_inlet: DatagramInlet,
         _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         mut relay: Relay,
@@ -296,7 +297,7 @@ where
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap(); // TODO: Determine if this call can fail
 
-        for process_in_inlet in process_in_inlets.iter().cycle() {
+        loop {
             let mut buffer = [0u8; MAXIMUM_TRANSMISSION_UNIT];
 
             let datagram = socket.recv_from(&mut buffer);
@@ -332,8 +333,8 @@ where
 
     #[cfg(target_os = "linux")]
     fn route_in(
-        socket: Arc<UdpSocket>,
-        process_in_inlets: Vec<DatagramInlet>,
+        socket: &UdpSocket,
+        process_in_inlet: DatagramInlet,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
         mut relay: Relay,
@@ -345,7 +346,7 @@ where
         let descriptor = socket.as_raw_fd();
         let mut buffer = vec![0u8; MAXIMUM_TRANSMISSION_UNIT * settings.route_in_batch_size];
 
-        for process_in_inlet in process_in_inlets.iter().cycle() {
+        loop {
             let mut data = buffer
                 .chunks_exact_mut(MAXIMUM_TRANSMISSION_UNIT)
                 .map(|chunk| RecvMmsgData {
@@ -421,14 +422,14 @@ where
     }
 
     async fn process_in(
-        mut process_in_outlet: DatagramOutlet,
+        process_in_outlet: DatagramOutlet,
         receive_inlet: MessageInlet<R>,
         pace_out_acknowledgement_inlet: AcknowledgementInlet,
         pace_out_completion_inlet: CompletionInlet,
         statistics: Arc<Statistics>,
     ) {
         loop {
-            let (source, message) = if let Some(datagram) = process_in_outlet.recv().await {
+            let (source, message) = if let Ok(datagram) = process_in_outlet.recv_async().await {
                 datagram
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
@@ -449,8 +450,10 @@ where
                 // First footer byte is 0: MESSAGE
 
                 if let Ok(payload) = bincode::deserialize::<R>(payload) {
-                    let _ = pace_out_acknowledgement_inlet.send((source, index)).await;
-                    let _ = receive_inlet.send((source, payload)).await;
+                    let _ = pace_out_acknowledgement_inlet
+                        .send_async((source, index))
+                        .await;
+                    let _ = receive_inlet.send_async((source, payload)).await;
                     statistics.message_packets_processed.inc();
                 } else {
                     println!("Failed to deserialize...??");
@@ -458,21 +461,26 @@ where
             } else if footer[0] == 1 {
                 // First footer byte is 1: ACKNOWLEDGEMENT
 
-                let _ = pace_out_completion_inlet.send(index).await;
+                let _ = pace_out_completion_inlet.send_async(index).await;
                 statistics.acknowledgement_packets_processed.inc();
             }
         }
     }
 
     async fn process_out(
-        mut process_out_outlet: MessageOutlet<S>,
+        process_out_outlet: MessageOutlet<S>,
         pace_out_datagram_inlet: DatagramInlet,
+        mut relay: Relay,
     ) {
         loop {
-            let (destination, payload) = if let Some(message) = process_out_outlet.recv().await {
+            let (destination, payload) = if let Ok(message) = process_out_outlet.recv_async().await
+            {
                 message
             } else {
-                // `DatagramDispatcher` has dropped, shutdown
+                // The Sender has been dropped. Returning immediately would drop
+                // `pace_out_datagram_inlet` and break the `wait_pace_out_task`.
+                // Let's wait for the receiver to shutdown too.
+                relay.wait().await;
                 return;
             };
 
@@ -482,27 +490,25 @@ where
             if bincode::serialize_into(&mut write, &payload).is_ok() {
                 let size = MAXIMUM_TRANSMISSION_UNIT - write.len();
                 let message = Message { buffer, size };
-                let _ = pace_out_datagram_inlet.send((destination, message)).await;
+                let _ = pace_out_datagram_inlet
+                    .send_async((destination, message))
+                    .await;
             }
         }
     }
 
     async fn pace_out(
+        datagram_table: Arc<Mutex<DatagramTable>>,
         mut pace_out_datagram_outlet: DatagramOutlet,
         mut pace_out_acknowledgement_outlet: AcknowledgementOutlet,
         mut pace_out_completion_outlet: CompletionOutlet,
-        route_out_inlets: Vec<DatagramInlet>,
+        route_out_inlet: DatagramInlet,
         statistics: Arc<Statistics>,
         settings: DatagramDispatcherSettings,
     ) {
-        let mut cursor = 0;
-
-        let mut datagram_table = DatagramTable::new();
         let mut retransmission_queue = VecDeque::new();
 
         let mut last_tick = Instant::now();
-
-        let mut route_out_inlets = route_out_inlets.iter().cycle();
 
         loop {
             let sleep_time = settings
@@ -535,16 +541,16 @@ where
             let mut poll = task.poll();
 
             let packet_allowance = (cmp::min(window, settings.maximum_rate_window).as_secs_f64()
-                * settings.maximum_packet_rate) as usize;
+                * settings.maximum_packet_rate
+                / settings.pace_out_tasks as f64) as usize;
 
             let mut packets_sent = 0;
 
             if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
-                &mut cursor,
-                &mut datagram_table,
+                &datagram_table,
                 &mut retransmission_queue,
                 task,
-                route_out_inlets.next().unwrap(),
+                &route_out_inlet,
                 statistics.as_ref(),
                 &settings,
             ) {
@@ -568,11 +574,10 @@ where
                 poll = task.poll();
 
                 if DatagramDispatcher::<S, R>::fulfill_pace_out_task(
-                    &mut cursor,
-                    &mut datagram_table,
+                    &datagram_table,
                     &mut retransmission_queue,
                     task,
-                    route_out_inlets.next().unwrap(),
+                    &route_out_inlet,
                     statistics.as_ref(),
                     &settings,
                 ) {
@@ -602,25 +607,25 @@ where
         // polled unless `next_retransmission` is `Some`.
         let wait_until_next_retransmission = async {
             if let Some(next_retransmission) = next_retransmission {
-                time::sleep(next_retransmission.saturating_duration_since(Instant::now())).await;
+                time::sleep_until(next_retransmission).await;
             };
         };
 
         tokio::select! {
             biased;
 
-            completion = pace_out_completion_outlet.recv() => {
-                completion.map(|index| PaceOutTask::Complete(index))
+            completion = pace_out_completion_outlet.recv_async() => {
+                completion.map(PaceOutTask::Complete).ok()
             }
-            acknowledgement = pace_out_acknowledgement_outlet.recv() => {
-                acknowledgement.map(|(destination, index)| PaceOutTask::Acknowledge(destination, index))
+            acknowledgement = pace_out_acknowledgement_outlet.recv_async() => {
+                acknowledgement.map(|(destination, index)| PaceOutTask::Acknowledge(destination, index)).ok()
             },
             _ = wait_until_next_retransmission, if next_retransmission.is_some() => {
                 let (_, index) = retransmission_queue.pop_front().unwrap();
                 Some(PaceOutTask::Resend(index))
             },
-            datagram = pace_out_datagram_outlet.recv() => {
-                datagram.map(|(destination, message)| PaceOutTask::Send(destination, message))
+            datagram = pace_out_datagram_outlet.recv_async() => {
+                datagram.map(|(destination, message)| PaceOutTask::Send(destination, message)).ok()
             },
         }
     }
@@ -663,8 +668,7 @@ where
     }
 
     fn fulfill_pace_out_task(
-        cursor: &mut usize,
-        datagram_table: &mut DatagramTable,
+        datagram_table: &Mutex<DatagramTable>,
         retransmission_queue: &mut VecDeque<(Instant, usize)>,
         task: PaceOutTask,
         route_out_inlet: &DatagramInlet,
@@ -673,6 +677,7 @@ where
     ) -> bool {
         match task {
             PaceOutTask::Complete(index) => {
+                let mut datagram_table = datagram_table.lock().unwrap();
                 datagram_table.remove(index);
                 false
             }
@@ -692,9 +697,10 @@ where
                 true
             }
             PaceOutTask::Resend(index) => {
+                let datagram_table = datagram_table.lock().unwrap();
                 if let Some((destination, message)) = datagram_table.get(index) {
                     if let Err(TrySendError::Full(..)) =
-                        route_out_inlet.try_send((destination.clone(), message.clone()))
+                        route_out_inlet.try_send((*destination, message.clone()))
                     {
                         // `route_out` is too busy: just drop the packet
                         statistics.route_out_drops.inc();
@@ -710,25 +716,31 @@ where
                     false
                 }
             }
-            PaceOutTask::Send(destination, mut message) => {
-                let index = *cursor;
-                *cursor += 1;
+            PaceOutTask::Send(destination, message) => {
+                let message_with_footer = |mut message: Message, index| {
+                    message.buffer[message.size] = 0; // First footer byte is 0: MESSAGE
+                    message.buffer[(message.size + 1)..(message.size + 9)]
+                        .clone_from_slice((index as u64).to_le_bytes().as_slice());
+                    message.size += 9;
+                    message
+                };
 
-                message.buffer[message.size] = 0; // First footer byte is 0: MESSAGE
+                // The message is copied before the footer is written, to avoid holding the mutex while cloning.
+                let message2 = message.clone();
 
-                message.buffer[(message.size + 1)..(message.size + 9)]
-                    .clone_from_slice((index as u64).to_le_bytes().as_slice());
-
-                message.size += 9;
+                let index = {
+                    let mut datagram_table = datagram_table.lock().unwrap();
+                    let index = datagram_table.cursor();
+                    datagram_table.push(destination, message_with_footer(message, index));
+                    index
+                };
 
                 if let Err(TrySendError::Full(..)) =
-                    route_out_inlet.try_send((destination, message.clone()))
+                    route_out_inlet.try_send((destination, message_with_footer(message2, index)))
                 {
                     // `route_out` is too busy: just drop the packet
                     statistics.route_out_drops.inc();
                 }
-
-                datagram_table.push(destination, message);
 
                 retransmission_queue
                     .push_back((Instant::now() + settings.retransmission_delay, index));
@@ -740,13 +752,13 @@ where
 
     #[cfg(not(target_os = "linux"))]
     fn route_out(
-        socket: Arc<UdpSocket>,
-        mut route_out_outlet: DatagramOutlet,
+        socket: &UdpSocket,
+        route_out_outlet: DatagramOutlet,
         _settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
         loop {
-            let (destination, message) = if let Some(datagram) = route_out_outlet.blocking_recv() {
+            let (destination, message) = if let Ok(datagram) = route_out_outlet.recv() {
                 datagram
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
@@ -763,8 +775,8 @@ where
 
     #[cfg(target_os = "linux")]
     fn route_out(
-        socket: Arc<UdpSocket>,
-        mut route_out_outlet: DatagramOutlet,
+        socket: &UdpSocket,
+        route_out_outlet: DatagramOutlet,
         settings: DatagramDispatcherSettings,
         statistics: Arc<Statistics>,
     ) {
@@ -774,7 +786,7 @@ where
         loop {
             batch.clear();
 
-            if let Some(datagram) = route_out_outlet.blocking_recv() {
+            if let Ok(datagram) = route_out_outlet.recv() {
                 batch.push(datagram)
             } else {
                 // `DatagramDispatcher` has dropped, shutdown
@@ -853,5 +865,24 @@ mod tests {
             DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
         dispatcher.send("127.0.0.1:1260".parse().unwrap(), 42).await;
         receiver.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn acknowledge_after_sender_dropped() {
+        let receiver = tokio::spawn(async {
+            let dispatcher =
+                DatagramDispatcher::<u64, u64>::bind("127.0.0.1:1261", Default::default()).unwrap();
+            let (sender, mut receiver) = dispatcher.split();
+            drop(sender);
+            let (_, value) = receiver.receive().await;
+            assert_eq!(value, 42);
+            time::sleep(Duration::from_millis(100)).await;
+        });
+
+        let dispatcher =
+            DatagramDispatcher::<u64, u64>::bind("127.0.0.1:0", Default::default()).unwrap();
+        dispatcher.send("127.0.0.1:1261".parse().unwrap(), 42).await;
+        receiver.await.unwrap();
+        assert_eq!(dispatcher.receiver.acknowledgement_packets_processed(), 1);
     }
 }

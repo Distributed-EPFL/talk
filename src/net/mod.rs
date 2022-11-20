@@ -6,6 +6,7 @@ mod message;
 mod plain_connection;
 mod plain_receiver;
 mod plain_sender;
+mod plex;
 mod receiver_settings;
 mod secure_connection;
 mod secure_receiver;
@@ -41,6 +42,10 @@ pub use message::Message;
 pub use plain_connection::{PlainConnection, PlainConnectionError};
 pub use plain_receiver::PlainReceiver;
 pub use plain_sender::PlainSender;
+pub use plex::{
+    MultiplexId, MultiplexSettings, Plex, PlexConnector, PlexConnectorSettings, PlexListener,
+    PlexListenerSettings, PlexSettings,
+};
 pub use receiver_settings::ReceiverSettings;
 pub use secure_connection::{SecureConnection, SecureConnectionError};
 pub use secure_receiver::SecureReceiver;

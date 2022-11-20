@@ -1,18 +1,13 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::Identity,
     link::context::{listen_dispatcher::Database, ContextId},
     net::{Listener as NetListener, SecureConnection},
     sync::fuse::Fuse,
 };
-
+use async_trait::async_trait;
 use doomstack::Stack;
-
 use parking_lot::Mutex;
-
 use std::sync::Arc;
-
 use tokio::sync::mpsc::Receiver;
 
 type Outlet = Receiver<(Identity, SecureConnection)>;

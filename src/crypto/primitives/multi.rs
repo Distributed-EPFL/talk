@@ -1,16 +1,11 @@
+use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
 use blst::min_pk::{
     AggregateSignature as BlstAggregateSignature, PublicKey as BlstPublicKey,
     SecretKey as BlstSecretKey, Signature as BlstSignature,
 };
-
-use crate::crypto::primitives::adapters::{BlstError, BlstErrorAdapter};
-
 use doomstack::{here, Doom, ResultExt, Top};
-
-use rand::{rngs::OsRng, RngCore};
-
+use rand::{rngs::OsRng, CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 use std::{
     cmp::{Ord, Ordering, PartialOrd},
     fmt,
@@ -36,6 +31,10 @@ pub struct PublicKey(BlstPublicKey);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Signature(BlstSignature);
+
+pub trait Signer {
+    fn public_key(&self) -> &PublicKey;
+}
 
 #[derive(Doom)]
 pub enum MultiError {
@@ -63,8 +62,15 @@ pub enum MultiError {
 
 impl KeyPair {
     pub fn random() -> Self {
+        KeyPair::from_rng(&mut OsRng)
+    }
+
+    pub fn from_rng<R>(rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
         let mut seed = [0; 32];
-        OsRng.fill_bytes(&mut seed);
+        rng.fill_bytes(&mut seed);
 
         let secret = BlstSecretKey::key_gen(&seed, &[]).unwrap();
         let public = secret.sk_to_pk();
@@ -290,6 +296,12 @@ impl Signature {
             .map_err(MultiError::verify_failed)
             .map_err(Doom::into_top)
             .spot(here!())
+    }
+}
+
+impl Signer for PublicKey {
+    fn public_key(&self) -> &PublicKey {
+        self
     }
 }
 

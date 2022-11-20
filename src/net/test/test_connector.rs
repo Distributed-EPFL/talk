@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use crate::{
     crypto::{Identity, KeyChain},
     net::{
@@ -7,9 +5,8 @@ use crate::{
         Connector, SecureConnection,
     },
 };
-
+use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack};
-
 use std::{collections::HashMap, io, net::SocketAddr};
 
 pub struct TestConnector {
