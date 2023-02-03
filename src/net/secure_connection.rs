@@ -98,6 +98,14 @@ impl SecureConnection {
         })
     }
 
+    pub fn local_key_exchange_key(&self) -> &PublicKey {
+        &self.keys.local
+    }
+
+    pub fn remote_key_exchange_key(&self) -> &PublicKey {
+        &self.keys.remote
+    }
+
     pub fn configure(&mut self, settings: ConnectionSettings) {
         let (sender_settings, receiver_settings) = settings.split();
 
