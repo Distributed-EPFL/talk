@@ -1,7 +1,7 @@
 use crate::{
     crypto::{Identity, KeyCard},
-    link::rendezvous::{Request, Response, ServerSettings, ShardId},
-    net::PlainConnection,
+    link::rendezvous::{listener::RawListener, Request, Response, ServerSettings, ShardId},
+    net::{traits::TransportProtocol, PlainConnection},
     sync::fuse::Fuse,
 };
 use doomstack::{here, Doom, ResultExt, Top};
@@ -11,10 +11,8 @@ use std::{
     net::SocketAddr,
     sync::Arc,
 };
-use tokio::{
-    io,
-    net::{TcpListener, ToSocketAddrs},
-};
+use tokio::{io, net::TcpListener};
+use tokio_udt::UdtListener;
 
 pub struct Server {
     _fuse: Fuse,
@@ -41,10 +39,10 @@ struct Database {
 }
 
 impl Server {
-    pub async fn new<A>(address: A, settings: ServerSettings) -> Result<Self, Top<ServerError>>
-    where
-        A: ToSocketAddrs,
-    {
+    pub async fn new(
+        address: SocketAddr,
+        settings: ServerSettings,
+    ) -> Result<Self, Top<ServerError>> {
         let database = Arc::new(Mutex::new(Database {
             shards: settings
                 .shard_sizes
@@ -58,11 +56,20 @@ impl Server {
 
         let fuse = Fuse::new();
 
-        let listener = TcpListener::bind(address)
-            .await
-            .map_err(ServerError::initialize_failed)
-            .map_err(Doom::into_top)
-            .spot(here!())?;
+        let listener = {
+            let result = match settings.connect.transport {
+                TransportProtocol::TCP => TcpListener::bind(address).await.map(RawListener::Tcp),
+                TransportProtocol::UDT(ref config) => {
+                    UdtListener::bind(address, Some(config.clone()))
+                        .await
+                        .map(RawListener::Udt)
+                }
+            };
+            result
+                .map_err(ServerError::initialize_failed)
+                .map_err(Doom::into_top)
+                .spot(here!())?
+        };
 
         fuse.spawn(async move {
             let _ = Server::listen(settings, database, listener).await;
@@ -74,16 +81,28 @@ impl Server {
     async fn listen(
         settings: ServerSettings,
         database: Arc<Mutex<Database>>,
-        listener: TcpListener,
+        listener: RawListener,
     ) {
         let fuse = Fuse::new();
 
+        let accept = || async {
+            match listener {
+                RawListener::Tcp(ref tcp_listener) => tcp_listener
+                    .accept()
+                    .await
+                    .map(|(stream, address)| (stream.into(), address)),
+                RawListener::Udt(ref udt_listener) => udt_listener
+                    .accept()
+                    .await
+                    .map(|(address, stream)| (stream.into(), address)),
+            }
+        };
+
         loop {
-            if let Ok((stream, address)) = listener.accept().await {
+            if let Ok((connection, address)) = accept().await {
+                let connection: PlainConnection = connection;
                 let settings = settings.clone();
                 let database = database.clone();
-
-                let connection: PlainConnection = stream.into();
 
                 fuse.spawn(async move {
                     let _ = Server::serve(settings, database, connection, address).await;

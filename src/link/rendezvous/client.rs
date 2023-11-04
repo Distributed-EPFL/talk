@@ -1,13 +1,13 @@
 use crate::{
     crypto::{Identity, KeyCard},
     link::rendezvous::{ClientSettings, Request, Response, ShardId},
-    net::traits::TcpConnect,
+    net::traits::{Connect, ConnectSettings},
 };
 use doomstack::{here, Doom, ResultExt, Top};
 use std::{io, net::SocketAddr, vec::Vec};
 
 pub struct Client {
-    server: Box<dyn TcpConnect>,
+    server: Box<dyn Connect>,
     settings: ClientSettings,
 }
 
@@ -39,7 +39,7 @@ enum AttemptError {
 impl Client {
     pub fn new<S>(server: S, settings: ClientSettings) -> Self
     where
-        S: 'static + TcpConnect,
+        S: 'static + Connect,
     {
         Client {
             server: Box::new(server),
@@ -118,7 +118,7 @@ impl Client {
     async fn attempt(&self, request: &Request) -> Result<Response, Top<AttemptError>> {
         let mut connection = self
             .server
-            .connect()
+            .connect(&self.settings.connect)
             .await
             .map_err(AttemptError::connect_failed)
             .map_err(Doom::into_top)
@@ -136,6 +136,10 @@ impl Client {
 
         Ok(response)
     }
+
+    pub(crate) fn connect_settings(&self) -> &ConnectSettings {
+        &self.settings.connect
+    }
 }
 
 #[cfg(test)]
@@ -146,12 +150,19 @@ mod tests {
         link::rendezvous::{Server, ServerSettings},
     };
     use std::time::Duration;
-    use tokio::time;
+    use tokio::{net::lookup_host, time};
 
     async fn setup_server(address: &'static str, shard_sizes: Vec<usize>) -> Server {
-        Server::new(address, ServerSettings { shard_sizes })
-            .await
-            .unwrap()
+        let addr = lookup_host(address).await.unwrap().next().unwrap();
+        Server::new(
+            addr,
+            ServerSettings {
+                shard_sizes,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
     }
 
     async fn setup_clients(

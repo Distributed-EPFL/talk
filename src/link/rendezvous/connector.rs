@@ -1,7 +1,7 @@
 use crate::{
     crypto::{Identity, KeyChain},
     link::rendezvous::{Client, ConnectorSettings},
-    net::{traits::TcpConnect, Connector as NetConnector, SecureConnection},
+    net::{traits::Connect, Connector as NetConnector, SecureConnection},
 };
 use async_trait::async_trait;
 use doomstack::{here, Doom, ResultExt, Stack, Top};
@@ -36,7 +36,7 @@ pub enum ConnectorError {
 impl Connector {
     pub fn new<S>(server: S, keychain: KeyChain, settings: ConnectorSettings) -> Self
     where
-        S: 'static + TcpConnect,
+        S: 'static + Connect,
     {
         let client = Client::new(server, settings.client_settings);
 
@@ -58,7 +58,7 @@ impl Connector {
             .spot(here!())?;
 
         let mut connection = address
-            .connect()
+            .connect(self.client.connect_settings())
             .await
             .map_err(ConnectorError::connect_failed)
             .map_err(Doom::into_top)
@@ -135,7 +135,12 @@ mod tests {
         const SERVER: &str = "127.0.0.1:1250";
         const MESSAGE: &str = "Hello Alice, this is Bob!";
 
-        let _server = Server::new(SERVER, Default::default()).await.unwrap();
+        let server_addr = tokio::net::lookup_host(SERVER)
+            .await
+            .unwrap()
+            .next()
+            .unwrap();
+        let _server = Server::new(server_addr, Default::default()).await.unwrap();
 
         let alice_keychain = KeyChain::random();
         let bob_keychain = KeyChain::random();

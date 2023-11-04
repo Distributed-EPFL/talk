@@ -31,4 +31,5 @@ futures = { version = "0.3" }
 flume = "0.10.14"
 
 socket2 = { version = "0.4.4" }
+tokio-udt = { version = "0.1.0-alpha.7" }
 nix = { version = "0.24.2" }
