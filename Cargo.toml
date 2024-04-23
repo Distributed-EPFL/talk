@@ -30,5 +30,5 @@ async-trait = { version = "0.1.51" }
 futures = { version = "0.3" }
 flume = "0.10.14"
 
-socket2 = { version = "0.4.4" }
+socket2 = { version = "0.5.4", features = [ "all" ] }
 nix = { version = "0.24.2" }
